@@ -2841,12 +2841,37 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      await teamRow.getByRole("link",{name:"Портфель команды",exact:true}).click();
      await page.getByRole("region",{name:"Общий портфель"}).getByText(/Сделок: 0 · Открыто: 0/).waitFor();
      checkpoint("SK-07.C Deal ownership, saved owner scope, portfolio, reassignment and reload");
+     // Close with the original team as owner, archive the team, then reopen
+     // atomically with an eligible replacement instead of a second update.
+     await navigate("sales/"+encodeURIComponent(ownedDealId),"Карточка сделки");
+     await page.getByRole("button",{name:"Редактировать сделку",exact:true}).click();
+     await page.getByLabel("Ответственный за сделку",{exact:true}).selectOption("team:"+teamId);
+     await mutation(page.getByRole("button",{name:"Сохранить сделку",exact:true}),"UpdateDeal");
+     await page.getByText("Ответственный: Команда: "+teamName,{exact:true}).waitFor();
+     await page.getByRole("button",{name:"Завершить сделку",exact:true}).click();
+     await page.getByLabel("Результат сделки",{exact:true}).selectOption("3");
+     await page.getByLabel("Причина закрытия",{exact:true}).fill("qa.closed");
+     await mutation(page.locator("dialog").getByRole("button",{name:"Завершить сделку",exact:true}),"CloseDeal");
+     await page.getByText("Статус: Проиграна",{exact:true}).waitFor();
      await navigate("team","Команда и распределение работы");
      await teamRow.getByRole("button",{name:"Изменить команду",exact:true}).click();
      await teamForm.getByLabel("Активная команда",{exact:true}).uncheck();
      await mutation(teamForm.getByRole("button",{name:"Сохранить команду",exact:true}),"UpdateTeam");
      await teamRow.getByText("Архив",{exact:true}).waitFor();
      checkpoint("SK-07.C UI team roster, pool assignment, reload, reassignment and archive");
+     await navigate("sales/"+encodeURIComponent(ownedDealId),"Карточка сделки");
+     await page.getByRole("button",{name:"Открыть повторно",exact:true}).click();
+     await page.getByLabel("Причина повторного открытия",{exact:true}).fill("qa.revisit");
+     await page.locator("dialog").getByRole("button",{name:"Открыть повторно",exact:true}).click();
+     await page.getByRole("heading",{name:/SALES_REOPEN_OWNER_NOT_ELIGIBLE/}).waitFor();
+     await page.getByLabel("Ответственный при повторном открытии",{exact:true}).selectOption("actor:native-viewer@example.test");
+     await mutation(page.locator("dialog").getByRole("button",{name:"Открыть повторно",exact:true}),"ReopenDeal");
+     await reloadDocument();
+     await page.getByText("Ответственный: native-viewer@example.test",{exact:true}).waitFor();
+     await page.getByText("Статус: Открыта",{exact:true}).waitFor();
+     assert.deepEqual(await sql("SELECT version,json_extract(state,'$.owner.actor_id') AS owner,json_extract(state,'$.status') AS status FROM crm_sales_deal_records WHERE tenant=? AND id=?",tenantA,ownedDealId),
+       [{version:5,owner:"native-viewer@example.test",status:"open"}]);
+     checkpoint("SK-07.C4 archived owner blocked, atomic reopen with replacement and D1 reload");
    }
 
    await page.getByLabel("Тема",{exact:true}).selectOption("dark");

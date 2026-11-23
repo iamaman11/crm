@@ -768,9 +768,12 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
         e.preventDefault();const data=new FormData(e.currentTarget);
         void mutation.runIntent(()=>{
           const precondition={idempotencyKey:mutation.key,expectedVersion:advance.version};
-          if(editorMode==="reopen")return prepareMutation(api.deals.reopenDeal,{
-            dealId:advance.dealId,reasonCode:field(data,"reason"),precondition
-          },advance.dealId);
+          if(editorMode==="reopen"){
+            const owner=ownerWire(field(data,"reopenOwner"));
+            return prepareMutation(api.deals.reopenDeal,{
+              dealId:advance.dealId,reasonCode:field(data,"reason"),...(owner?{owner}:{}),precondition
+            },advance.dealId);
+          }
           if(editorMode==="close")return prepareMutation(api.deals.closeDeal,{
             dealId:advance.dealId,
             outcome:enumValue(field(data,"targetStatus"),
@@ -802,6 +805,11 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
       </>:editorMode==="reopen"?<>
         <p>Вернуть сделку в текущий активный этап воронки.</p>
         <TextField label="Причина повторного открытия" name="reason" required/>
+        <p>Текущий ответственный: {ownerLabel(advance.owner,ownerChoices)}. Если он больше не может получать работу, выберите нового.</p>
+        <SelectField label="Ответственный при повторном открытии" name="reopenOwner" defaultValue="">
+          <option value="">Сохранить действующего ответственного</option>
+          {ownerChoices.filter(c=>c.eligible).map(c=><option value={c.value} key={c.value}>{c.label}</option>)}
+        </SelectField>
       </>:<>
         <SelectField label="Следующий этап" name="nextStage"
           defaultValue={nextStages.some(s=>s.stageId===droppedStageId)?droppedStageId:nextStages[0]?.stageId??""} required>

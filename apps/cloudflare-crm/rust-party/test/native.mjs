@@ -5406,6 +5406,76 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    assert.equal((await salesV2("GetPipelineMetrics",viewer,{pipelineId:pId,ownerFilter:actorOwner})).body.totalDealCount,3n);
    console.log(JSON.stringify({event:"crm.native-sk07c-sales-owner",result:"PASS",typed_owner:true,tenant_ab:true,
      list_before_limit:true,exact_currency:true,forecast:true,saved_view:true,archive_guard:true,replay:true}));
+   // SK-07.C4: no last-human removal/revocation can strand an open pool.
+   const suffix=randomUUID(),lastEmail="qa-last-"+suffix+"@example.test",lastTeam="sk07-last-"+suffix;
+   const lastJwt=jwt(lastEmail);
+   assert.equal((await memberV2("ProvisionMember",admin,{email:lastEmail,role:1,
+     precondition:{idempotencyKey:"member-"+suffix}})).status,200);
+   assert.equal((await memberV2("CreateTeam",admin,{teamId:lastTeam,name:"Last member QA "+suffix,
+     roster:{memberEmails:[lastEmail]},precondition:{idempotencyKey:"team-"+suffix}})).status,200);
+   const lastOwner={owner:{case:"teamId",value:lastTeam}};
+   const lastTask="sk07-last-task-"+suffix,lastDeal="sk07-last-deal-"+suffix;
+   assert.equal((await taskV2("CreateTask",admin,{taskId:lastTask,accountId,subject:"Last member QA",priority:2,
+     owner:lastOwner,precondition:{idempotencyKey:"task-"+suffix}})).status,200);
+   const empty={teamId:lastTeam,roster:{memberEmails:[]},precondition:{expectedVersion:1n,idempotencyKey:"empty-"+suffix}};
+   const deactivate={email:lastEmail,active:false,precondition:{expectedVersion:1n,idempotencyKey:"revoke-"+suffix}};
+   assert.equal((await memberV2("UpdateTeam",admin,empty)).status,409);
+   assert.equal((await memberV2("UpdateMember",admin,deactivate)).status,409);
+   assert.equal((await salesV2("CreateDeal",admin,input(lastDeal,lastOwner,"EUR",12500n))).status,200);
+   const claim={taskId:lastTask,precondition:{expectedVersion:1n,idempotencyKey:"claim-"+suffix}};
+   const [claimed,revoked]=await Promise.all([taskV2("ClaimTask",lastJwt,claim),memberV2("UpdateMember",admin,deactivate)]);
+   assert.equal(claimed.status,200,describeProtobuf(claimed.body));
+   assert.equal(revoked.status,409,"open Deal still requires an eligible human");
+   assert.equal((await taskV2("CompleteTask",admin,{taskId:lastTask,
+     precondition:{expectedVersion:2n,idempotencyKey:"complete-"+suffix}})).status,200);
+   assert.equal((await memberV2("UpdateTeam",admin,empty)).status,409,"open Deal alone protects the roster");
+   assert.equal((await salesV2("CloseDeal",admin,{dealId:lastDeal,outcome:3,reasonCode:"qa.closed",
+     precondition:{expectedVersion:1n,idempotencyKey:"close-"+suffix}})).status,200);
+   const archiveLast={teamId:lastTeam,active:false,precondition:{expectedVersion:1n,idempotencyKey:"archive-"+suffix}};
+   assert.equal((await memberV2("UpdateTeam",admin,archiveLast)).status,200);
+   assert.equal((await memberV2("UpdateMember",admin,deactivate)).status,200);
+   assert.equal((await memberV2("GetMyMembership",lastJwt,{})).status,401);
+   const reopen={dealId:lastDeal,reasonCode:"qa.revisit",precondition:{expectedVersion:2n,idempotencyKey:"reopen-"+suffix}};
+   const before=(await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=?","tenant-a",lastDeal))[0].n;
+   assert.equal((await salesV2("ReopenDeal",admin,reopen)).status,409);
+   assert.equal((await salesV2("ReopenDeal",admin,{...reopen,owner:lastOwner})).status,409);
+   assert.equal((await salesV2("ReopenDeal",admin,{...reopen,owner:{owner:{case:"assigneeIdentity",value:lastEmail}}})).status,409);
+   assert.equal((await salesV2("ReopenDeal",viewer,{...reopen,owner:actorOwner})).status,403);
+   assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=?","tenant-a",lastDeal))[0].n,before);
+   const reopened=await salesV2("ReopenDeal",admin,{...reopen,owner:actorOwner});
+   assert.equal(reopened.status,200,describeProtobuf(reopened.body));
+   assert.equal(reopened.body.deal?.version,3n);
+   assert.equal(reopened.body.deal?.owner?.owner.value,actorOwner.owner.value);
+   assert.equal((await salesV2("ReopenDeal",admin,{...reopen,owner:actorOwner})).body.receipt?.replayed,true);
+   assert.equal((await salesV2("ReopenDeal",admin,{...reopen,owner:lastOwner})).status,409,"changed idempotent intent");
+   const events=(await salesV2("ListDealEvents",viewer,{dealId:lastDeal,page:{pageSize:10}})).body.events;
+   assert.deepEqual(events.map(e=>e.dealVersion),[3n,2n,1n]);
+   assert.equal(events[0].kind,5);
+   assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=?","tenant-a",lastDeal))[0].n,before+1);
+   assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=?","tenant-a",lastTeam))[0].n,2);
+   assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=?","tenant-a",lastEmail))[0].n,2);
+
+   // A closed team-owned deal and team archive race on the same D1 invariant.
+   const raceId="sk07-reopen-race-"+randomUUID(),raceDeal="deal-"+raceId;
+   const raceOwner={owner:{case:"teamId",value:raceId}};
+   assert.equal((await memberV2("CreateTeam",admin,{teamId:raceId,name:"Reopen race "+raceId,
+     roster:{memberEmails:["native-a@example.test"]},precondition:{idempotencyKey:"team-"+raceId}})).status,200);
+   assert.equal((await salesV2("CreateDeal",admin,input(raceDeal,raceOwner,"EUR",100n))).status,200);
+   assert.equal((await salesV2("CloseDeal",admin,{dealId:raceDeal,outcome:3,reasonCode:"qa.close",
+     precondition:{expectedVersion:1n,idempotencyKey:"close-"+raceId}})).status,200);
+   const reopenRace={dealId:raceDeal,reasonCode:"qa.reopen",precondition:{expectedVersion:2n,idempotencyKey:"reopen-"+raceId}};
+   const archiveRace={teamId:raceId,active:false,precondition:{expectedVersion:1n,idempotencyKey:"archive-"+raceId}};
+   const [rr,ar]=await Promise.all([salesV2("ReopenDeal",admin,reopenRace),memberV2("UpdateTeam",admin,archiveRace)]);
+   assert.equal(Number(rr.status===200)+Number(ar.status===200),1,"reopen and archive cannot both commit");
+   assert.equal(rr.status===200?ar.status:rr.status,409);
+   if(rr.status===200){
+     assert.equal((await salesV2("CloseDeal",admin,{dealId:raceDeal,outcome:3,reasonCode:"qa.cleanup",
+       precondition:{expectedVersion:3n,idempotencyKey:"cleanup-"+raceId}})).status,200);
+     assert.equal((await memberV2("UpdateTeam",admin,archiveRace)).status,200);
+   }
+   console.log(JSON.stringify({event:"crm.native-sk07c4-owner-lifecycle",result:"PASS",
+     last_member_guard:true,claim_deactivation_race:true,closed_owner_retained:true,typed_reopen_reassign:true,
+     reopen_archive_race:true,replay:true,one_event_receipt_audit:true}));
  }
  assert.deepEqual([...writesWithReceipt].sort(),[...mutationPaths].sort(),
    "every write method must exercise a committed response with a typed receipt");

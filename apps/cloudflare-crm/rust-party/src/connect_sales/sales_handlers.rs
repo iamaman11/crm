@@ -898,6 +898,7 @@ impl sale_wire::DealService for SalesV2Service {
             sales_deals::ReopenInput {
                 expected_version: version.unwrap_or_default(),
                 reason_code: input.reason_code,
+                owner: Self::owner_scope(input.owner.as_option())?,
             },
             &key,
             &self.d1()?,

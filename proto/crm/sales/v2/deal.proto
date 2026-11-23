@@ -121,6 +121,9 @@ message ReopenDealRequest {
   string deal_id = 1;
   string reason_code = 2;
   crm.core.v2.MutationPrecondition precondition = 3;
+  // Optional reassignment in the same reopening CAS. Absent keeps an
+  // eligible current owner; archived/inactive owners require replacement.
+  crm.core.v2.ActorOrTeamOwner owner = 4;
 }
 message ReopenDealResponse {
   Deal deal = 1;

@@ -709,6 +709,16 @@ impl Deal {
     }
 
     pub fn reopen(&mut self, command: ReopenDeal) -> Result<(), SdkError> {
+        self.reopen_with_owner(command, None)
+    }
+
+    /// Reopen and optionally reassign in one domain version, not a second
+    /// UpdateDeal mutation. The application owner validates live eligibility.
+    pub fn reopen_with_owner(
+        &mut self,
+        command: ReopenDeal,
+        owner: Option<DealOwner>,
+    ) -> Result<(), SdkError> {
         self.require_version(command.expected_version)?;
         self.require_monotonic_time(command.occurred_at_unix_nanos)?;
         if self.status == DealStatus::Open {
@@ -720,6 +730,9 @@ impl Deal {
         // ReasonCode is a validated, bounded domain identifier; the D1 event
         // persists it with the same CAS/audit/receipt mutation.
         let _reason = command.reason_code;
+        if let Some(owner) = owner {
+            self.owner = owner;
+        }
         self.status = DealStatus::Open;
         self.close_outcome = None;
         self.updated_at_unix_nanos = command.occurred_at_unix_nanos;

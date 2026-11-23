@@ -90,6 +90,8 @@ pub(super) struct CloseInput {
 pub(super) struct ReopenInput {
     pub(super) expected_version: i64,
     pub(super) reason_code: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) owner: Option<SalesOwnerScope>,
 }
 
 // HTTP only edits the original Deal's business fields, never trusted ownership.
@@ -1112,17 +1114,45 @@ pub(super) async fn reopen_typed(
         Ok(reason) => reason,
         Err(e) => return Ok(rejected(e.code, ErrorCategory::InvalidArgument)),
     };
-    if let Err(e) = deal.reopen(ReopenDeal {
-        expected_version: input.expected_version,
-        reason_code,
-        occurred_at_unix_nanos: now_nanos(),
-    }) {
+    // Keep the original owner only if still eligible. The retained
+    // signed technical creator is not an explicit human assignment.
+    let current = match deal.owner() {
+        DealOwner::Actor(id) => SalesOwnerScope::Actor(id.to_string()),
+        DealOwner::Team(id) => SalesOwnerScope::Team(id.as_str().to_owned()),
+    };
+    let target = input.owner.as_ref().unwrap_or(&current);
+    let eligible = match target {
+        SalesOwnerScope::Actor(id) if input.owner.is_none() && id.starts_with("service:") => {
+            super::access_members::valid_assignee(db, tenant, id).await?
+        }
+        _ => eligible_owner(db, tenant, target).await?,
+    };
+    if !eligible {
+        return Ok(rejected(
+            "SALES_REOPEN_OWNER_NOT_ELIGIBLE",
+            ErrorCategory::Conflict,
+        ));
+    }
+    let replacement = match input.owner.as_ref().map(SalesOwnerScope::domain_owner).transpose() {
+        Ok(owner) => owner,
+        Err(e) => return Ok(rejected_sdk(e)),
+    };
+    if let Err(e) = deal.reopen_with_owner(
+        ReopenDeal {
+            expected_version: input.expected_version,
+            reason_code,
+            occurred_at_unix_nanos: now_nanos(),
+        },
+        replacement,
+    ) {
         return Ok(rejected_sdk(e));
     }
     let state = encode(&deal)?;
-    let result = bind(db,
-        "UPDATE crm_sales_deal_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=?,last_action='sales_deals.update',last_reason_code=? WHERE tenant=? AND id=? AND version=?",
-        &[
+    let sql = format!(
+        "UPDATE crm_sales_deal_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=?,last_action='sales_deals.update',last_reason_code=? WHERE tenant=? AND id=? AND version=?{}",
+        owner_guard(Some(target))
+    );
+    let mut values = vec![
             JsValue::from_str(&state),
             JsValue::from_f64(deal.version() as f64),
             JsValue::from_str(key),
@@ -1133,8 +1163,9 @@ pub(super) async fn reopen_typed(
             JsValue::from_str(tenant),
             JsValue::from_str(id),
             JsValue::from_f64(input.expected_version as f64),
-        ],
-    )?.run().await;
+    ];
+    owner_parameters(&mut values, tenant, Some(target));
+    let result = bind(db, &sql, &values)?.run().await;
     let count = result.as_ref().ok().and_then(changes);
     if let Some(changed) = count.filter(|value| *value > 0) {
         return Ok(Ok(acknowledged(deal, trace, changed)));

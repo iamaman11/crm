@@ -123,6 +123,13 @@ fn replay(
 pub(super) const ELIGIBLE: &str = "EXISTS (SELECT 1 FROM crm_access_teams AS tm JOIN json_each(tm.state,'$.member_emails') AS m JOIN crm_users AS u ON u.email=m.value AND u.tenant_id=tm.tenant AND u.active=1 WHERE tm.tenant=? AND tm.id=? AND json_extract(tm.state,'$.active')=1 AND u.email NOT LIKE 'service:%')";
 // Same Access roster authority for ClaimTask and every explicit team assignment.
 pub(super) const MEMBER_ELIGIBLE: &str = "EXISTS (SELECT 1 FROM crm_access_teams AS tm JOIN json_each(tm.state,'$.member_emails') AS m JOIN crm_users AS u ON u.email=m.value AND u.tenant_id=tm.tenant AND u.active=1 WHERE tm.tenant=? AND tm.id=? AND json_extract(tm.state,'$.active')=1 AND u.email=? AND u.email NOT LIKE 'service:%')";
+// Only trusted SQL expressions from the two Access mutation statements are
+// passed here. Closed work never prevents retaining historical ownership.
+pub(super) fn open_work(tenant: &str, team: &str) -> String {
+    format!(
+        "(EXISTS (SELECT 1 FROM crm_activity_task_records WHERE tenant={tenant} AND json_extract(state,'$.owner.team_id')={team} AND json_extract(state,'$.status')='open') OR EXISTS (SELECT 1 FROM crm_sales_deal_records WHERE tenant={tenant} AND json_extract(state,'$.owner.team_id')={team} AND json_extract(state,'$.status')='open'))"
+    )
+}
 pub(super) async fn eligible(db: &D1Database, tenant: &str, id: &str) -> Result<bool> {
     let query = format!("SELECT 1 WHERE {ELIGIBLE}");
     Ok(bind(
@@ -232,7 +239,10 @@ pub(super) async fn mutate(
         serde_json::to_string(&team).map_err(|e| worker::Error::RustError(e.to_string()))?;
     // One statement checks actor rights, roster, duplicate name and open work.
     // Existing inactive members can remain in an unchanged historical roster.
-    let guard = " EXISTS (SELECT 1 FROM crm_users WHERE tenant_id=?1 AND email=?7 AND active=1 AND role='admin') AND NOT EXISTS (SELECT 1 FROM crm_access_teams AS t WHERE t.tenant=?1 AND t.id<>?2 AND lower(json_extract(t.state,'$.name'))=lower(json_extract(?3,'$.name'))) AND (?9=0 OR NOT EXISTS (SELECT 1 FROM json_each(?3,'$.member_emails') AS m WHERE NOT EXISTS (SELECT 1 FROM crm_users AS u WHERE u.tenant_id=?1 AND u.email=m.value AND u.active=1 AND u.email NOT LIKE 'service:%') AND NOT EXISTS (SELECT 1 FROM crm_access_teams AS old JOIN json_each(old.state,'$.member_emails') AS previous_member WHERE old.tenant=?1 AND old.id=?2 AND previous_member.value=m.value))) AND (json_extract(?3,'$.active')=1 OR (NOT EXISTS (SELECT 1 FROM crm_activity_task_records WHERE tenant=?1 AND json_extract(state,'$.owner.team_id')=?2 AND json_extract(state,'$.status')='open') AND NOT EXISTS (SELECT 1 FROM crm_sales_deal_records WHERE tenant=?1 AND json_extract(state,'$.owner.team_id')=?2 AND json_extract(state,'$.status')='open')))";
+    let work = open_work("?1", "?2");
+    let guard = format!(
+        " EXISTS (SELECT 1 FROM crm_users WHERE tenant_id=?1 AND email=?7 AND active=1 AND role='admin') AND NOT EXISTS (SELECT 1 FROM crm_access_teams AS t WHERE t.tenant=?1 AND t.id<>?2 AND lower(json_extract(t.state,'$.name'))=lower(json_extract(?3,'$.name'))) AND (?9=0 OR NOT EXISTS (SELECT 1 FROM json_each(?3,'$.member_emails') AS m WHERE NOT EXISTS (SELECT 1 FROM crm_users AS u WHERE u.tenant_id=?1 AND u.email=m.value AND u.active=1 AND u.email NOT LIKE 'service:%') AND NOT EXISTS (SELECT 1 FROM crm_access_teams AS old JOIN json_each(old.state,'$.member_emails') AS previous_member WHERE old.tenant=?1 AND old.id=?2 AND previous_member.value=m.value))) AND ((json_extract(?3,'$.active')=1 AND EXISTS (SELECT 1 FROM json_each(?3,'$.member_emails') AS m JOIN crm_users AS u ON u.tenant_id=?1 AND u.email=m.value AND u.active=1 WHERE u.email NOT LIKE 'service:%')) OR NOT {work})"
+    );
     let sql = if create {
         format!(
             "INSERT INTO crm_access_teams(tenant,id,state,version,idem_key,idem_digest,actor,request_id) SELECT ?1,?2,?3,?4,?5,?6,?7,?8 WHERE ?10=0 AND {guard} ON CONFLICT(tenant,id) DO NOTHING"
