@@ -65,7 +65,7 @@ export function AccountDetails({accountId}:{accountId:string}) {
     {card.truncated?.deals&&<p>Показаны первые {card.perCollectionLimit} сделок.</p>}
     <a href={scopeHref("sales",accountId)}>Все сделки клиента</a>
     <h3>Задачи</h3><ul>{card.tasks.map(t=><li key={t.taskId}><a href={taskHref(t.taskId,accountId)}>{t.subject}</a> · {t.status===TaskStatus.COMPLETED?"Выполнена":t.status===TaskStatus.OPEN?"Открыта"+(t.dueAt?" · срок: "+dateText(t.dueAt):""):"Неизвестный статус"}
-      <span>{" · Ответственный: "+(choices.find(c=>c.value===(t.ownerTeamId?"team:"+t.ownerTeamId:"actor:"+t.ownerActorId))?.label??(t.ownerTeamId?"Команда: "+t.ownerTeamId:t.ownerActorId??"Неизвестен"))}</span></li>)}</ul>
+      <span>{" · Ответственный: "+(choices.find(c=>c.value===(t.ownerTeamId?"team:"+t.ownerTeamId:"actor:"+t.assigneeIdentity))?.label??(t.ownerTeamId?"Команда: "+t.ownerTeamId:(t.assigneeIdentity||"Неизвестен")))}</span></li>)}</ul>
     {card.truncated?.tasks&&<p>Показаны первые {card.perCollectionLimit} задач.</p>}
     <a href={scopeHref("tasks",accountId)}>Все задачи клиента</a>
     <InteractionTimeline accountId={accountId}/>

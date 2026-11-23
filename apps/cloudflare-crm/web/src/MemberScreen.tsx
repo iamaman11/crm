@@ -79,9 +79,9 @@ export function MemberScreen(){
             <th scope="row">{m.email}{!humanMember(m.email)?" · технический агент":""}</th>
             <td>{roleName(m.role)}</td><td>{m.active?"Активен":"Деактивирован"}</td>
             <td>{humanMember(m.email)?<a href={taskAssigneeHref(m.email)}>
-              Задачи участника</a>:"Системные задания"}{humanMember(member.email)&&<><span>{" · "}</span>
-              <a href={salesPipelineHref("","","","actor:"+member.email)}>Сделки участника</a>{" · "}
-              <a href={intelligenceHref({owner:"actor:"+member.email})}>Портфель участника</a></>}</td>
+              Задачи участника</a>:"Системные задания"}{humanMember(m.email)&&<><span>{" · "}</span>
+              <a href={salesPipelineHref("","","","actor:"+m.email)}>Сделки участника</a>{" · "}
+              <a href={intelligenceHref({owner:"actor:"+m.email})}>Портфель участника</a></>}</td>
             <td>{isAdmin&&humanMember(m.email)&&m.email!==actor?
               <Button variant="secondary" disabled={pending} onClick={()=>{
                 setEditing(m);setEditRole(m.role);setEditActive(m.active);mutation.changed();
@@ -162,7 +162,8 @@ export function MemberScreen(){
               <td>{bucket.overdueOpenCount.toString()}</td>
               <td>{bucket.dueNext7DaysCount.toString()}</td>
               <td>{email&&humanMember(email)?
-                <a href={taskAssigneeHref(email)}>Открыть задачи</a>:"—"}</td>
+                <a href={taskAssigneeHref(email)}>Открыть задачи</a>:bucket.ownerTeamId?
+                <a href={taskTeamHref(bucket.ownerTeamId)}>Открыть задачи команды</a>:"—"}</td>
             </tr>;
           })}
         </tbody></table>
