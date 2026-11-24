@@ -55,6 +55,7 @@ const config=JSON.parse(readFileSync(configPath,"utf8"));
 assert.equal(config.d1_databases.length,1);
 assert.equal(config.d1_databases[0].database_id,"00000000-0000-4000-8000-000000000001");
 assert.equal(config.main,"./build/index.js");
+let directClosed=false;
 const harness=createTestHarness({
   root,
   workers:[{configPath,vars:{GIT_SHA:sha,CRM_CI_LOCAL_ONLY:"no"}}],
@@ -119,10 +120,11 @@ try{
   const pipelineId="production.artifact",dealId="production-artifact-deal";
   const pre=(key,expectedVersion)=>({idempotencyKey:"artifact-"+key,
     ...(expectedVersion===undefined?{}:{expectedVersion})});
-  const rpc=(path,encode,decode)=>async(method,identity,input,status=200)=>{
-    const response=await worker.fetch(path(method),{method:"POST",
+  const rpc=(path,encode,decode,target=worker)=>async(method,identity,input,status=200,fault)=>{
+    const response=await target.fetch(path(method),{method:"POST",
       headers:{"content-type":"application/proto","connect-protocol-version":"1",
-        ...(identity?{"cf-access-jwt-assertion":token(identity)}:{})},
+        ...(identity?{"cf-access-jwt-assertion":token(identity)}:{}),
+        ...(fault?{"x-test-d1-fault":fault}:{})},
       body:encode(method,input)});
     assert.equal(response.status,status,method);
     assert.equal(response.headers.get("x-crm-source-sha"),sha);
@@ -221,15 +223,97 @@ try{
     source_sha:sha,generated_binary:true,role_denial:true,real_receipt_read_failure:true,
     replay:true,cas:true,atomic_link:true,request_correlation:true}));
   assert.deepEqual(artifact(),before,"production bundle changed during test");
+  // Keep the ordinary production-entrypoint proof above. A separate local
+  // harness imports the very same bundle and intercepts only a committed D1
+  // acknowledgement. No product code or database implementation is replaced.
+  await harness.close();
+  directClosed=true;
+  const faultHarness=createTestHarness({
+    root,
+    workers:[{config:{
+      ...config,main:join(root,"test/d1-fault-worker.mjs"),
+      vars:{GIT_SHA:sha,CRM_CI_LOCAL_ONLY:"no"},
+      assets:{...config.assets,directory:join(root,config.assets.directory)},
+      d1_databases:config.d1_databases.map(binding=>({
+        ...binding,migrations_dir:join(root,binding.migrations_dir)
+      })),
+    }}],
+  });
+  try{
+    await faultHarness.listen();
+    const target=faultHarness.getWorker(config.name);
+    await target.applyD1Migrations("DB");
+    const faultDb=(await target.getEnv()).DB;
+    assert.ok(faultDb);
+    await faultDb.prepare("INSERT INTO crm_tenants(id,name) VALUES(?,?)")
+      .bind("artifact-proof","Artifact fault proof").run();
+    await faultDb.prepare("INSERT INTO crm_users(email,tenant_id,role,active) VALUES(?,?,?,1)")
+      .bind(admin,"artifact-proof","admin").run();
+    const faultParty=rpc(partyV3Path,binaryPartyV3,decodePartyV3,target);
+    const faultAccount=rpc(accountV2Path,binaryAccountV2,decodeAccountV2,target);
+    const faultSales=rpc(salesV2Path,binarySalesV2,decodeSalesV2,target);
+    committed(await faultParty("CreateParty",admin,{partyId,kind:2,displayName:"Fault Party",
+      precondition:pre("party")}),1n);
+    committed(await faultAccount("CreateAccount",admin,{accountId,primaryPartyId:partyId,
+      name:"Fault Account",precondition:pre("account")}),1n);
+    committed(await faultSales("CreatePipeline",admin,{pipelineId,name:"Fault Pipeline",
+      stages:[{stageId:"lead",name:"Lead",probabilityBasisPoints:1000}],
+      precondition:pre("pipeline")}),1n);
+    const exactState=async input=>{
+      const row=await faultDb.prepare("SELECT version,request_id FROM crm_sales_deal_records WHERE tenant=? AND id=?")
+        .bind("artifact-proof",input.dealId).first();
+      const receipts=await faultDb.prepare("SELECT COUNT(*) n FROM crm_sales_deal_receipts WHERE tenant=? AND key=?")
+        .bind("artifact-proof",input.precondition.idempotencyKey).first();
+      const audits=await faultDb.prepare("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=?")
+        .bind("artifact-proof",input.dealId).first();
+      assert.equal(row?.version,1);
+      assert.equal(receipts.n,1);
+      assert.equal(audits.n,1);
+      return row.request_id;
+    };
+    const lost={...create,dealId:"artifact-lost-ack",precondition:pre("lost-ack")};
+    const reconciled=await faultSales("CreateDeal",admin,lost,200,"lost-ack");
+    assert.equal(reconciled.body.receipt?.replayed,true);
+    assert.equal(reconciled.body.receipt?.resourceVersion,1n);
+    assert.equal(reconciled.body.receipt?.originalRequestId,reconciled.requestId);
+    assert.equal(await exactState(lost),reconciled.requestId);
+    const unreadable={...create,dealId:"artifact-unreadable-receipt",precondition:pre("unreadable-receipt")};
+    let uncertain;
+    try{
+      uncertain=await faultSales("CreateDeal",admin,unreadable,503,"receipt-read");
+      const detail=decodeDomainErrorDetail(uncertain.body.details.find(
+        d=>d.type==="crm.core.v2.DomainErrorDetail"));
+      assert.equal(detail.domainCode,"SALES_COMMIT_UNCONFIRMED");
+      assert.equal(detail.commitOutcome,2);
+      assert.equal(detail.requestId,uncertain.requestId);
+      assert.ok(await faultDb.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='fixture_fault_receipts'").first(),
+        "real receipt relation must have been made unavailable after commit");
+      assert.equal((await faultDb.prepare("SELECT version FROM crm_sales_deal_records WHERE tenant=? AND id=?")
+        .bind("artifact-proof",unreadable.dealId).first()).version,1);
+    }finally{
+      if(await faultDb.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='fixture_fault_receipts'").first())
+        await faultDb.prepare("ALTER TABLE fixture_fault_receipts RENAME TO crm_sales_deal_receipts").run();
+    }
+    assert.equal(await exactState(unreadable),uncertain.requestId);
+    const recovered=await faultSales("CreateDeal",admin,unreadable);
+    assert.equal(recovered.body.receipt?.replayed,true);
+    assert.equal(recovered.body.receipt?.resourceVersion,1n);
+    assert.equal(recovered.body.receipt?.originalRequestId,uncertain.requestId);
+    assert.equal(await exactState(unreadable),uncertain.requestId);
+    console.log(JSON.stringify({event:"crm.production-d1-postcommit-fault",result:"PASS",
+      source_sha:sha,real_d1:true,compiled_release:true,lost_ack_reconciled:true,
+      committed_before_read_failure:true,typed_unconfirmed:true,one_receipt_one_audit:true}));
+  }finally{await faultHarness.close();}
+  assert.deepEqual(artifact(),before,"production bundle changed during fault test");
   const evidence={event:"crm.production-access-artifact",result:"PASS",source_sha:sha,
     production_features:["native"],artifact:before,jwks_requests:jwksRequests,
     signed_admin_viewer:true,invalid_signature_denied:true,wrong_claims_denied:true,
     unknown_service_denied:true,provider_failure_denied:true,ci_endpoint_absent:true,
-    unchanged_d1:true,compiled_router_policy_parity:true,production_rpc_d1:{generated_binary:true,role_denial:true,
+    unchanged_d1:true,compiled_router_policy_parity:true,production_d1_postcommit_fault:true,production_rpc_d1:{generated_binary:true,role_denial:true,
       receipt_read_failure:true,replay:true,cas:true,atomic_link:true},
     scope:"production Access and selected RPC/D1 parity; full native-ci suite still mandatory"};
   writeFileSync(process.env.CRM_PRODUCTION_ACCESS_PROOF,JSON.stringify(evidence)+"\n");
   console.log(JSON.stringify(evidence));
 }finally{
-  try{await harness.close();}finally{mock.restoreAll();}
+  try{if(!directClosed)await harness.close();}finally{mock.restoreAll();}
 }

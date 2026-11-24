@@ -44,6 +44,7 @@ jobs:
           python scripts/check_action_pinning.py
           node --check apps/cloudflare-crm/rust-party/test/native.mjs
           node --check apps/cloudflare-crm/rust-party/test/production-access.mjs
+          node --check apps/cloudflare-crm/rust-party/test/d1-fault-worker.mjs
           node --check apps/cloudflare-crm/rust-party/test/typed-browser.mjs
           node --check apps/cloudflare-crm/rust-party/test/ui-diagnostics.mjs
           node --check apps/cloudflare-crm/e2e/live.mjs
@@ -350,6 +351,7 @@ jobs:
               "--edges",edges,"--charset","ascii"]);
             const productionAccess=JSON.parse(readFileSync("/tmp/crm-production-access.json","utf8"));
             if(productionAccess.result!=="PASS"||productionAccess.compiled_router_policy_parity!==true||
+              productionAccess.production_d1_postcommit_fault!==true||
               productionAccess.source_sha!==process.env.CRM_BUILD_SHA||
               productionAccess.artifact.wasm!==hash("rust-party/build/index_bg.wasm")||
               productionAccess.artifact.entry!==hash("rust-party/build/index.js"))
