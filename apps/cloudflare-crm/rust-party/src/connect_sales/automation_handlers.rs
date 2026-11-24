@@ -102,7 +102,7 @@ impl auto_wire::AutomationService for AutomationV2Service {
         if size > 100 {
             return Err(ConnectError::invalid_argument("page_size exceeds 100"));
         }
-        let after = req.page.page_token.as_str();
+        let after = req.page.page_token;
         if !after.is_empty() {
             automation::rule_id(after)?;
         }
