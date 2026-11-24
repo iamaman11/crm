@@ -3122,7 +3122,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      await mutation(coordinatorForm.getByRole("button",{name:"Сохранить полномочия координатора",exact:true}),"UpdateTeam");
      await coordinationRow.getByText(/Координатор очереди/).waitFor();
      const coordinationTask=await firstId("crm_activity_task_records","subject",poolName);
-     await navigate("tasks/"+encodeURIComponent(coordinationTask),"Карточка задачи");
+     const coordinationTaskRoute="tasks?"+new URLSearchParams({accountId,taskId:coordinationTask}).toString();
+     await navigate(coordinationTaskRoute,"Карточка задачи");
      await page.getByRole("button",{name:"Редактировать задачу",exact:true}).click();
      await page.getByLabel("Переназначить задачу",{exact:true}).selectOption("team:"+coordinationId);
      await mutation(page.getByRole("button",{name:"Сохранить изменения задачи",exact:true}),"UpdateTask");
@@ -3135,10 +3136,10 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      try {
        const coordinatorPage=await coordinatorContext.newPage();
        for(const [route,id,method,table,editLabel] of [
-         ["tasks",coordinationTask,"UpdateTask","crm_activity_task_records","Редактировать задачу"],
-         ["sales",ownedDealId,"UpdateDeal","crm_sales_deal_records","Редактировать сделку"]
+         [coordinationTaskRoute,coordinationTask,"UpdateTask","crm_activity_task_records","Редактировать задачу"],
+         ["sales/"+encodeURIComponent(ownedDealId),ownedDealId,"UpdateDeal","crm_sales_deal_records","Редактировать сделку"]
        ]){
-         await coordinatorPage.goto(base+"/#"+route+"/"+encodeURIComponent(id));
+         await coordinatorPage.goto(base+"/#"+route);
          const distribution=coordinatorPage.getByRole("form",{name:"Распределение из очереди команды",exact:true});
          await distribution.waitFor();
          await expect(coordinatorPage.getByRole("button",{name:editLabel,exact:true})).toHaveCount(0);
