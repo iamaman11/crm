@@ -101,10 +101,11 @@ jobs:
             ~/.cargo/git/db
             target
             apps/cloudflare-crm/rust-party/target
-          # Refresh the immutable cache when workspace profiles/manifests change,
-          # not on every source SHA. Cargo still owns all freshness checks.
-          key: ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}-${{ hashFiles('Cargo.toml', 'apps/cloudflare-crm/rust-party/Cargo.toml') }}
+          # Cache entries are immutable. Refresh when manifests or codegen inputs
+          # change; ordinary source edits still use Cargo fingerprints and sccache.
+          key: ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}-${{ hashFiles('Cargo.toml', 'apps/cloudflare-crm/rust-party/Cargo.toml', 'crates/*/Cargo.toml', 'modules/*/Cargo.toml') }}-${{ hashFiles('proto/**/*.proto', 'apps/cloudflare-crm/active-proto-versions.json', 'apps/cloudflare-crm/rust-party/build.rs', 'crates/crm-proto-contracts/build.rs') }}
           restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}-${{ hashFiles('Cargo.toml', 'apps/cloudflare-crm/rust-party/Cargo.toml', 'crates/*/Cargo.toml', 'modules/*/Cargo.toml') }}-
             ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}-
             ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}
             ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-
@@ -301,7 +302,7 @@ jobs:
             assert.equal(evidence.source_sha, process.env.GITHUB_SHA);
             assert.deepEqual(evidence.features, ["native-ci"]);
           '
-      - name: Seal exactly tested development bundle
+      - name: Seal runtime-tested source and verified production bundle
         id: seal
         shell: bash
         env:
@@ -359,6 +360,12 @@ jobs:
               },
               independent_byte_reproducibility:"NOT_TESTED"
             },null,2)+"\n");
+          '
+          # Log existing measured provenance for direct CI comparisons; no extra build.
+          node --input-type=module -e '
+            import {readFileSync} from "node:fs";
+            const {foundation_baseline:b}=JSON.parse(readFileSync(".release/provenance.json","utf8"));
+            console.log(JSON.stringify({event:"crm.release-size",bytes:b.bytes,gzip9_bytes:b.gzip9_bytes}));
           '
           # Seal the same production directory that passed the Wrangler dry-run.
           find dist rust-party/build -type f -print0 | LC_ALL=C sort -z |

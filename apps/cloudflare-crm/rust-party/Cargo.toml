@@ -18,6 +18,12 @@ wasm-opt = ["-O1"]
 [profile.dev.package.crm-native-party-worker]
 debug = false
 
+# Measured release candidate: reduce LLVM work for the generated Connect/D1
+# boundary only. Original domain dependencies retain Cargo release opt-level 3;
+# Binaryen -O1 still runs on the final WASM. Compare sealed size and live timings.
+[profile.release.package.crm-native-party-worker]
+opt-level = 2
+
 # Optimize only the host-side Connect generators and their Rust formatter.
 # These packages are absent from the normal WASM dependency graph.
 [profile.dev.package.buffa-codegen]
