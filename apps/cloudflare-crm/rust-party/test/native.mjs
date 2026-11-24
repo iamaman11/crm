@@ -2268,6 +2268,9 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id=?"
   const observerRead=(await salesV2("GetDeal",viewer,{dealId:id})).body;
   assert.equal(observerRead.capabilities.close,false);
   assert.equal(observerRead.capabilities.manageCloseCredit,false);
+  assert.equal((await salesV2("PreviewDealCloseCredit",viewer,{
+    dealId:id,expectedVersion:observer.body.deal.version,selection:{}
+  })).status,403);
   assert.equal((await salesV2("CloseDeal",viewer,closeInput(id,observer.body.deal.version,"observer"))).status,403);
   assert.equal((await salesV2("UpdateDeal",viewer,edit(id,2n,"observer"))).status,403);
 

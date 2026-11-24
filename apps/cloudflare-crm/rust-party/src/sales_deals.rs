@@ -1467,9 +1467,10 @@ async fn stage_mutation(
     // operation. An absent or empty selection preserves automatic attribution.
     if let StageMutation::Close(value) = &input
         && grant.is_some()
-        && value.credit_selection.as_ref().is_some_and(|selection| {
-            selection != &crm_sales::CloseCreditSelection::default()
-        })
+        && value
+            .credit_selection
+            .as_ref()
+            .is_some_and(|selection| selection != &crm_sales::CloseCreditSelection::default())
     {
         return Ok(rejected(
             "SALES_CLOSE_CREDIT_ADMIN_ONLY",
