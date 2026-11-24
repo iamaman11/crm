@@ -69,6 +69,8 @@
     "crates/crm-customer-360-query-adapter/src/account_overview.rs",
     "crates/crm-customer-360-query-adapter/src/lib.rs",
     "crates/crm-customer-360-query-adapter/src/postgres.rs",
+    "crates/crm-proto-contracts/build.rs",
+    "crates/crm-proto-contracts/src/lib.rs",
     "docs/ACTIVE_PACKET.md",
     "docs/DEVELOPMENT_WORKFLOW.md",
     "docs/PROJECT_STATUS.md",
