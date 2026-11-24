@@ -395,7 +395,10 @@ impl Deal {
     ) -> Result<(), SdkError> {
         self.require_version(expected_version)?;
         self.require_monotonic_time(occurred_at_unix_nanos)?;
-        if participant.as_ref().is_some_and(|member| member.email != email) {
+        if participant
+            .as_ref()
+            .is_some_and(|member| member.email != email)
+        {
             return Err(invalid(
                 "SALES_OPPORTUNITY_MEMBER_INVALID",
                 "deal.opportunity_team",
@@ -1148,9 +1151,10 @@ mod tests {
         assert!(member.role.permits(OpportunityPermission::Edit));
         assert!(!member.role.permits(OpportunityPermission::Commercial));
         assert!(!member.role.permits(OpportunityPermission::Advance));
-        assert!(deal
-            .set_opportunity_participant(2, email, Some(member.clone()), 11)
-            .is_err());
+        assert!(
+            deal.set_opportunity_participant(2, email, Some(member.clone()), 11)
+                .is_err()
+        );
         assert_eq!(deal, original);
         deal.set_opportunity_participant(1, email, Some(member.clone()), 11)
             .unwrap();
@@ -1160,9 +1164,13 @@ mod tests {
         let state = crate::encode_deal_state(&deal).unwrap();
         assert_eq!(crate::decode_deal_state(&state).unwrap(), deal);
         let granted = deal.clone();
-        assert!(deal.set_opportunity_participant(1, email, None, 12).is_err());
+        assert!(
+            deal.set_opportunity_participant(1, email, None, 12)
+                .is_err()
+        );
         assert_eq!(deal, granted);
-        deal.set_opportunity_participant(2, email, None, 12).unwrap();
+        deal.set_opportunity_participant(2, email, None, 12)
+            .unwrap();
         assert!(deal.opportunity_team().is_empty());
         assert_eq!(deal.owner(), original.owner());
         assert_eq!(deal.version(), 3);
