@@ -82,6 +82,7 @@
     "packages/client/src/cloudflare-v2-contract.test.ts",
     "packages/client/src/cloudflare.ts",
     "packages/client/src/contract_hashes.ts",
+    "packages/ui/src/DataPresentation.tsx",
     "packages/ui/src/Forms.module.css",
     "packages/ui/src/Forms.tsx",
     "packages/ui/src/css.d.ts",
