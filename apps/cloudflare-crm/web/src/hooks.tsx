@@ -180,13 +180,13 @@ export function useMutation(recovery?:RecoveryOptions) {
       // never fabricate a D1 receipt or report it as saved.
       if(result.kind==="no_change"){
         const cleared=clearPending();
-        setNotice({tone:"warning",text:"Изменений не было."+
-          (cleared?"":" Не удалось удалить отметку восстановления.")});
+        let text="Изменений не было."+(cleared?"":" Не удалось удалить отметку восстановления.");
         if(cleared)setKey(newId());
         if(intent.refresh){
           try {await intent.refresh();}
-          catch(error){setNotice({tone:"warning",text:"Изменений не было. Список устарел: "+api.describeError(error)});}
+          catch(error){text+=" Список устарел: "+api.describeError(error);}
         }
+        setNotice({tone:"warning",text});
         return;
       }
       if(!matchesWriteReceipt(intent.marker,result.receipt))
@@ -198,11 +198,16 @@ export function useMutation(recovery?:RecoveryOptions) {
         " Исходная запись: "+result.receipt.originalRequestId:"";
       const cleared=clearPending();
       const text=saved+correlation+original+(cleared?"":" Не удалось удалить отметку восстановления.");
-      setNotice({tone:cleared?"success":"warning",text});if(cleared)setKey(newId());
+      if(cleared)setKey(newId());
+      // The receipt is already final: never replay a committed write because
+      // projection refresh failed. Announce completion only after the
+      // owner has finished its readback and native route reconciliation.
+      let feedback:MutationFeedback={tone:cleared?"success":"warning",text};
       if(intent.refresh){
         try {await intent.refresh();}
-        catch(error){setNotice({tone:"warning",text:text+" Список устарел: "+api.describeError(error)});}
+        catch(error){feedback={tone:"warning",text:text+" Список устарел: "+api.describeError(error)};}
       }
+      setNotice(feedback);
     } catch(error) {
       const failure=api.decodeError(error);
       // A later rejection cannot prove the outcome of an earlier attempt.
@@ -252,9 +257,11 @@ export function useMutation(recovery?:RecoveryOptions) {
       const cleared=clearPending();
       const saved="Сохранено ранее. Подтверждение найдено. Исходная запись: "+receipt.originalRequestId+
         " Запрос проверки: "+receipt.requestId+(cleared?"":" Не удалось удалить отметку восстановления.");
-      setNotice({tone:cleared?"success":"warning",text:saved});if(cleared)setKey(newId());
+      if(cleared)setKey(newId());
+      let feedback:MutationFeedback={tone:cleared?"success":"warning",text:saved};
       try {await recovery.refresh(marker);}
-      catch(error){setNotice({tone:"warning",text:saved+" Список устарел: "+api.describeError(error)});}
+      catch(error){feedback={tone:"warning",text:saved+" Список устарел: "+api.describeError(error)};}
+      setNotice(feedback);
     }catch(error){
       setNotice({tone:"warning",text:"Результат записи не подтверждён. "+api.describeError(error)});
     }finally{inFlight.current=false;setBusy(false);}

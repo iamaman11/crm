@@ -1296,13 +1296,32 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal(updatedView.version,2);
    assert.equal(updatedView.status,"won");
    assert.equal(updatedView.name,"Browser Won View "+runId);
-   await mutation(page.getByRole("button",{name:"Архивировать представление",exact:true}),
-     "UpdateSalesView");
+   // Delay the actual projection refresh after the committed archive.
+   // A receipt must not announce UI completion while the old URL is active.
+   const viewsSection=page.getByRole("region",{name:"Сохранённые представления"});
+   const listViewsRoute="**/crm.sales.v2.DealService/ListSalesViews";
+   let releaseArchiveRead=()=>{};
+   const archiveReadGate=new Promise(resolve=>{releaseArchiveRead=resolve;});
+   const blockArchiveRead=async route=>{await archiveReadGate;await route.continue();};
+   await page.route(listViewsRoute,blockArchiveRead);
+   try {
+     const archived=page.waitForResponse(r=>responsePathEndsWith(r,"/UpdateSalesView")&&r.request().method()==="POST");
+     await viewsSection.getByRole("button",{name:"Архивировать представление",exact:true}).click();
+     await assertMutation(await archived,"UpdateSalesView");
+     await expect(viewsSection.getByRole("status")).toHaveCount(1);
+     await expect(viewsSection.getByRole("heading",{name:/^Сохранено/}),
+       "Receipt alone must not announce completed UI refresh").toHaveCount(0);
+     releaseArchiveRead();
+     await expect(viewsSection.getByRole("heading",{name:/^Сохранено/})).toBeVisible();
+     await expect(page).not.toHaveURL(/[?&]viewId=/);
+   }finally{
+     releaseArchiveRead();
+     await page.unroute(listViewsRoute,blockArchiveRead);
+   }
    const viewsAfterArchive=page.waitForResponse(r=>responsePathEndsWith(r,"/ListSalesViews")&&r.request().method()==="POST");
    await reloadDocument();
    assert.equal((await viewsAfterArchive).status(),200);
    await page.getByRole("heading",{name:"Сделки",exact:true}).waitFor();
-   const viewsSection=page.getByRole("region",{name:"Сохранённые представления"});
    await expect(viewsSection.getByRole("status")).toHaveCount(0);
    await expect(viewsSection.getByLabel("Сохранённое представление",{exact:true})
      .locator('option[value="'+viewId+'"]'),
