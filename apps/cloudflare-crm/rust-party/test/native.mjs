@@ -233,8 +233,16 @@ try{
  const compiled=await call("/api/_ci/original-domain-check",admin);
  assert.equal(compiled.status,200,JSON.stringify(compiled.body));
  assert.equal(compiled.body.result,"PASS");
- const rpc=compiled.body.rpc;
+ // The normal runtime doctor exposes the compiled inventory to admins.
+ // Local workerd has no deployed version metadata: never fabricate it.
+ const doctor=await call("/api/doctor",admin);
+ assert.equal(doctor.body.source,sourceSha);
+ assert.equal(doctor.body.database.status,"PASS");
+ assert.equal(doctor.status,doctor.body.release.source_version==="PASS"?200:503);
+ const rpc=doctor.body.rpc;
  assert.equal(rpc.compiled_policy_check,true);
+ assert.equal((await call("/api/doctor",viewer)).body.rpc,null);
+ assert.equal((await call("/api/doctor",null)).status,401);
  assert.ok(rpc.registered_methods.length>0);
  assert.equal(new Set(rpc.registered_methods).size,rpc.registered_methods.length);
  assert.equal(new Map(rpc.policies).size,rpc.policies.length,"duplicate compiled policy");

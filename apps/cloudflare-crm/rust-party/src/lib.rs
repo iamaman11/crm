@@ -1,5 +1,5 @@
 //! Sole native workers-rs CRM entrypoint, linked to the original crm-parties owner.
-//! Signed native-ci keys are isolated to CI; production verifies Cloudflare Access.
+//! Both builds verify Cloudflare Access; native-ci isolates remaining fault probes.
 use serde::Deserialize;
 use serde_json::{Value, json};
 use wasm_bindgen::JsValue;
@@ -111,7 +111,8 @@ struct SchemaCount {
 }
 
 #[cfg(feature = "native")]
-async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
+async fn native_doctor(env: Env, actor: &access::Actor, request_id: &str) -> Result<Response> {
+    let tenant = &actor.tenant;
     // A truthful live, read-only diagnostic: this probes the active Rust
     // runtime and current D1 tables. CI/browser/Logs proof remains a separate
     // protected release artifact, never an invented live health result.
@@ -251,12 +252,17 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
     }) && worker_version
         .as_deref()
         .is_some_and(|value| value.len() == 36);
-    let healthy = schema_ok && reads_ok && trace_ready && identity_ok;
+    // Inspect the actual registered Connect handlers, not another route list.
+    // The administrator can diagnose policy drift on the published binary;
+    // ordinary viewers retain the existing tenant health projection.
+    let (rpc, policy_ok) = compiled_rpc_inventory(env, actor, request_id);
+    let healthy = schema_ok && reads_ok && trace_ready && identity_ok && policy_ok;
     response(
         json!({
             "application": "crm-dev",
             "runtime": "workers-rs",
             "entrypoint": "native-workers-rs",
+            "rpc": if actor.role == "admin" {rpc} else {Value::Null},
             "source": source.unwrap_or_else(|| "NOT_AVAILABLE".into()),
             "worker_version": worker_version.unwrap_or_else(|| "NOT_AVAILABLE".into()),
             "release": { "source_version": if identity_ok {"PASS"} else {"FAIL"},
@@ -1084,6 +1090,36 @@ fn rpc_policy(path: &str) -> Option<RpcPolicy> {
         .map(|(_, rule)| *rule)
 }
 
+#[cfg(feature = "native")]
+fn compiled_rpc_inventory(env: Env, actor: &access::Actor, request_id: &str) -> (Value, bool) {
+    let mut owners = connect_sales::MethodOwners::new();
+    let router = connect_sales::router(env, actor, request_id, Some(&mut owners));
+    let mut methods: Vec<String> = router
+        .methods()
+        .map(|path| format!("/{}", path.trim_start_matches('/')))
+        .collect();
+    methods.sort();
+    let mut policy_paths = std::collections::BTreeSet::new();
+    let policy_ok = RPC_POLICIES.iter().all(|(path, rule)| {
+        policy_paths.insert(*path)
+            && router.has_method(path)
+            && rpc_policy(path).is_some_and(|found| found.permission == rule.permission)
+    }) && methods.iter().all(|path| rpc_policy(path).is_some())
+        && !methods.is_empty()
+        && owners.len() == methods.len()
+        && methods.iter().all(|path| owners.contains_key(path))
+        && rpc_policy("/crm.unregistered.v1.Service/Unknown").is_none();
+    (
+        json!({
+            "registered_methods": methods,
+            "method_owners": owners,
+            "policies": RPC_POLICIES,
+            "compiled_policy_check": policy_ok
+        }),
+        policy_ok,
+    )
+}
+
 // Classify technical paths once, for both dispatch and safe diagnostics.
 // Never emit an arbitrary caller-supplied URL path as an operation label.
 #[cfg(feature = "native")]
@@ -1151,27 +1187,11 @@ async fn dispatch(
         let db = env.d1("DB")?;
         let code = original_domain_probe::check();
         let receipt_read = sales_deals::probe_receipt_read(&db, _tenant, request_id).await;
-        let mut owners = connect_sales::MethodOwners::new();
-        let router = connect_sales::router(env, actor, request_id, Some(&mut owners));
-        let mut methods: Vec<String> = router
-            .methods()
-            .map(|path| format!("/{}", path.trim_start_matches('/')))
-            .collect();
-        methods.sort();
-        let mut policy_paths = std::collections::BTreeSet::new();
-        let policy_ok = RPC_POLICIES.iter().all(|(path, rule)| {
-            policy_paths.insert(*path)
-                && router.has_method(path)
-                && rpc_policy(path).is_some_and(|found| found.permission == rule.permission)
-        }) && methods.iter().all(|path| rpc_policy(path).is_some())
-            && rpc_policy("/crm.unregistered.v1.Service/Unknown").is_none();
-        let checked = code == 0 && policy_ok;
+        let checked = code == 0;
         return response(
             json!({
                 "result": if checked { "PASS" } else { "FAIL" },
                 "code": code,
-                "rpc": {"registered_methods": methods, "method_owners": owners, "policies": RPC_POLICIES,
-                    "compiled_policy_check": policy_ok},
                 "scope": "in-memory original owner domain contracts",
                 "owners_executed": ["crm.customer-accounts", "crm.contact-points",
                     "crm.sales", "crm.activities"],
@@ -1235,7 +1255,7 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             Ok(Some(actor))
                 if technical == Some(TechnicalRoute::Doctor) && method == Method::Get =>
             {
-                (native_doctor(&env, &actor.tenant).await, "diagnostics")
+                (native_doctor(env, &actor, &request_id).await, "diagnostics")
             }
             Ok(Some(actor)) => (
                 dispatch(req, env, &actor.tenant, &request_id, &actor, technical).await,

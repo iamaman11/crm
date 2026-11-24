@@ -90,6 +90,22 @@ try{
   await call("/api/session",token(admin,{},privateKey,{kid:"unknown"}),401);
   await call("/api/session",token("",{common_name:"unassigned-artifact.access"}),401);
   await call("/api/_ci/original-domain-check",token(admin),404);
+  await call("/api/doctor",null,401);
+  // Compare the actual release binary's registered handlers and policy to
+  // the full signed suite's already validated Buf/owner/runtime evidence.
+  const doctor=await worker.fetch("/api/doctor",{headers:{"cf-access-jwt-assertion":token(admin)}});
+  assert.equal(doctor.headers.get("x-crm-source-sha"),sha);
+  const diagnostic=await doctor.json();
+  assert.equal(diagnostic.source,sha);
+  assert.equal(diagnostic.database.status,"PASS");
+  assert.equal(doctor.status,diagnostic.release.source_version==="PASS"?200:503);
+  assert.equal(diagnostic.rpc.compiled_policy_check,true);
+  const runtime=JSON.parse(readFileSync(process.env.CRM_RPC_RUNTIME_PROOF,"utf8"));
+  assert.equal(runtime.source_sha,sha);
+  assert.equal(runtime.result,"PASS");
+  assert.deepEqual(diagnostic.rpc,runtime.rpc,"production and fully tested router/policy/owners must match");
+  const viewerDoctor=await worker.fetch("/api/doctor",{headers:{"cf-access-jwt-assertion":token(viewer)}});
+  assert.equal((await viewerDoctor.json()).rpc,null);
   providerStatus=503;
   await call("/api/session",token(admin),401);
   assert.ok(jwksRequests>=8,"production verifier must actually fetch JWKS");
@@ -209,7 +225,7 @@ try{
     production_features:["native"],artifact:before,jwks_requests:jwksRequests,
     signed_admin_viewer:true,invalid_signature_denied:true,wrong_claims_denied:true,
     unknown_service_denied:true,provider_failure_denied:true,ci_endpoint_absent:true,
-    unchanged_d1:true,production_rpc_d1:{generated_binary:true,role_denial:true,
+    unchanged_d1:true,compiled_router_policy_parity:true,production_rpc_d1:{generated_binary:true,role_denial:true,
       receipt_read_failure:true,replay:true,cas:true,atomic_link:true},
     scope:"production Access and selected RPC/D1 parity; full native-ci suite still mandatory"};
   writeFileSync(process.env.CRM_PRODUCTION_ACCESS_PROOF,JSON.stringify(evidence)+"\n");

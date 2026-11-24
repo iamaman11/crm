@@ -277,6 +277,7 @@ jobs:
         env:
           CRM_SOURCE_SHA: ${{ github.sha }}
           CRM_PRODUCTION_ACCESS_PROOF: /tmp/crm-production-access.json
+          CRM_RPC_RUNTIME_PROOF: /tmp/crm-rpc-runtime.json
         run: node rust-party/test/production-access.mjs
       - name: Enforce committed native Worker dependency lock
         run: git diff --exit-code -- apps/cloudflare-crm/rust-party/Cargo.lock
@@ -348,7 +349,8 @@ jobs:
               "rust-party/Cargo.toml","--target","wasm32-unknown-unknown","--features",features,
               "--edges",edges,"--charset","ascii"]);
             const productionAccess=JSON.parse(readFileSync("/tmp/crm-production-access.json","utf8"));
-            if(productionAccess.result!=="PASS"||productionAccess.source_sha!==process.env.CRM_BUILD_SHA||
+            if(productionAccess.result!=="PASS"||productionAccess.compiled_router_policy_parity!==true||
+              productionAccess.source_sha!==process.env.CRM_BUILD_SHA||
               productionAccess.artifact.wasm!==hash("rust-party/build/index_bg.wasm")||
               productionAccess.artifact.entry!==hash("rust-party/build/index.js"))
               throw Error("production Access proof must match the sealed artifact");
