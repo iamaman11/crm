@@ -5737,8 +5737,43 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    assert.equal(perf.grossMinorUnits,"100");assert.equal(perf.reversalMinorUnits,"100");
    assert.equal(perf.netMinorUnits,"0");assert.equal(perf.remainingMinorUnits,"1000");
    assert.equal(perf.facts.length,1);assert.ok(perf.next);
-   const page2=await call("GetSalesQuotaPerformance",viewer,{quotaId,quotaVersion:2n,asOfUnixNanos:perf.asOfUnixNanos,after:perf.next,pageSize:1});
+   const page2=await call("GetSalesQuotaPerformance",viewer,{quotaId,quotaVersion:2n,asOfUnixNanos:perf.asOfUnixNanos,eventSequence:perf.eventSequence,after:perf.next,pageSize:1});
    assert.equal(page2.netMinorUnits,perf.netMinorUnits);assert.notDeepEqual(page2.facts[0],perf.facts[0]);
+   // Disposable fixture: more than the former 2000-event limit, exact values beyond JS safe integers.
+   const scaleCount=2501,scaleAmount=9007199254740993n;
+   const scaleInsert=`WITH RECURSIVE nums(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM nums WHERE n<${scaleCount})
+     INSERT INTO crm_sales_deal_events(tenant,deal_id,deal_version,action,pipeline_id,previous_stage_id,stage_id,
+       previous_stage_ordinal,stage_ordinal,previous_status,status,reason_code,actor,request_id,occurred_at_unix_nanos,catalog_version,commercial_close_fact)
+     SELECT e.tenant,e.deal_id,10000+n,e.action,e.pipeline_id,e.previous_stage_id,e.stage_id,e.previous_stage_ordinal,e.stage_ordinal,
+       e.previous_status,e.status,e.reason_code,e.actor,e.request_id,e.occurred_at_unix_nanos,e.catalog_version,
+       json_set(e.commercial_close_fact,'$.close_version',10000+n,'$.amount.minor_units','${scaleAmount}')
+       FROM nums CROSS JOIN crm_sales_deal_events e WHERE e.tenant=? AND e.deal_id=? AND e.deal_version=3`;
+   try{
+     await sql(scaleInsert,"tenant-a",one.dealId);
+     const started=Date.now();
+     const scaled=await call("GetSalesQuotaPerformance",viewer,{quotaId,pageSize:1});
+     const elapsed=Date.now()-started;
+     assert.equal(scaled.grossMinorUnits,String(100n+BigInt(scaleCount)*scaleAmount));
+     assert.equal(scaled.reversalMinorUnits,"100");
+     assert.equal(scaled.netMinorUnits,String(BigInt(scaleCount)*scaleAmount));
+     assert.equal(scaled.wonCount,perf.wonCount+BigInt(scaleCount));
+     assert.ok(scaled.eventSequence>perf.eventSequence);
+     assert.equal(scaled.facts.length,1);
+     assert.ok(scaled.next);
+     const frozenRequest={quotaId,quotaVersion:2n,asOfUnixNanos:perf.asOfUnixNanos,eventSequence:perf.eventSequence,pageSize:1};
+     assert.deepEqual(await call("GetSalesQuotaPerformance",viewer,frozenRequest),perf);
+     assert.deepEqual(await call("GetSalesQuotaPerformance",admin,frozenRequest),perf);
+     const scaledNext=await call("GetSalesQuotaPerformance",viewer,{quotaId,quotaVersion:2n,
+       asOfUnixNanos:scaled.asOfUnixNanos,eventSequence:scaled.eventSequence,after:scaled.next,pageSize:1});
+     assert.equal(scaledNext.netMinorUnits,scaled.netMinorUnits);
+     assert.notDeepEqual(scaledNext.facts[0],scaled.facts[0]);
+     await call("GetSalesQuotaPerformance",tenantB,frozenRequest,404);
+     await call("GetSalesQuotaPerformance",viewer,{quotaId,quotaVersion:2n,asOfUnixNanos:perf.asOfUnixNanos,after:perf.next},400);
+     console.log(JSON.stringify({event:"crm.native-d3-quota-scale",result:"PASS",added_events:scaleCount,
+       elapsed_ms:elapsed,exact_i128:true,frozen_membership:true,tenant_ab:true,viewer_parity:true}));
+   }finally{
+     await sql("DELETE FROM crm_sales_deal_events WHERE tenant=? AND deal_id=? AND deal_version BETWEEN 10001 AND 12501","tenant-a",one.dealId);
+   }
    const beforeQuota=await sql("SELECT state,version FROM crm_sales_quota_records WHERE tenant=? AND id=?","tenant-a",quotaId);
    await sql("CREATE TRIGGER fixture_fail_quota_audit BEFORE INSERT ON crm_audit WHEN NEW.action='sales.quota.update' BEGIN SELECT RAISE(ABORT,'fixture quota audit rollback'); END;");
    try{

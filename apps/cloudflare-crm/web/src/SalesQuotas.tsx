@@ -51,12 +51,13 @@ export function SalesQuotaWorkspace({isAdmin,choices,ownersUnavailable,territori
   const [selected,setSelected]=useState<SalesQuota>();
   const [version,setVersion]=useState<bigint>();
   const [asOf,setAsOf]=useState<bigint>();
+  const [eventSequence,setEventSequence]=useState<bigint>();
   const [after,setAfter]=useState<SalesQuotaFactCursor>();
   const [includeArchived,setIncludeArchived]=useState(false);
   const performance=useQuery(useCallback(async(signal:AbortSignal)=>{
     if(!selected||version===undefined)return undefined;
-    return api.deals.getSalesQuotaPerformance({quotaId:selected.quotaId,quotaVersion:version,...(asOf===undefined?{}:{asOfUnixNanos:asOf}),...(after?{after}:{}),pageSize:25},{signal});
-  },[selected,version,asOf,after]));
+    return api.deals.getSalesQuotaPerformance({quotaId:selected.quotaId,quotaVersion:version,...(asOf===undefined?{}:{asOfUnixNanos:asOf}),...(eventSequence===undefined?{}:{eventSequence}),...(after?{after}:{}),pageSize:25},{signal});
+  },[selected,version,asOf,eventSequence,after]));
   const mutation=useMutation({
     storageKey:"crm.sales.quota.pending.v1",
     lookup:async({resourceId,key},signal)=>(await api.deals.getSalesQuota({quotaId:resourceId,receiptIdempotencyKey:key},{signal})).confirmedMutation,
@@ -70,7 +71,7 @@ export function SalesQuotaWorkspace({isAdmin,choices,ownersUnavailable,territori
     setScope(scopeValue(quota?.configuration?.scope));setCurrency(quota?.configuration?.target?.currencyCode??"EUR");
     setPublished(quota?.configuration?.published??false);setArchived(false);mutation.changed();
   };
-  const select=(quota:SalesQuota)=>{setSelected(quota);setVersion(quota.version);setAsOf(undefined);setAfter(undefined);};
+  const select=(quota:SalesQuota)=>{setSelected(quota);setVersion(quota.version);setAsOf(undefined);setEventSequence(undefined);setAfter(undefined);};
   const labels=[{value:"tenant",label:"Вся организация",eligible:true},...choices,...territories.map(t=>({value:"territory:"+t.territoryId,label:"Территория: "+(t.configuration?.name??t.territoryId),eligible:!t.configuration?.archived}))];
   const money=(value:string,code:string)=>catalog.data?decimalUnits(BigInt(value),code,catalog.data.currencies)+" "+code:"—";
   const report=performance.data;
@@ -125,10 +126,10 @@ export function SalesQuotaWorkspace({isAdmin,choices,ownersUnavailable,territori
     <MutationNotice state={mutation}/>
     {selected&&<section aria-label="План-факт выбранной цели">
       <h4>{selected.configuration?.name}</h4>
-      <SelectField label="Версия цели" value={version?.toString()??""} onChange={e=>{setVersion(BigInt(e.target.value));setAsOf(undefined);setAfter(undefined);}}>
+      <SelectField label="Версия цели" value={version?.toString()??""} onChange={e=>{setVersion(BigInt(e.target.value));setAsOf(undefined);setEventSequence(undefined);setAfter(undefined);}}>
         {Array.from({length:Number(selected.version)},(_,i)=>BigInt(i+1)).map(v=><option key={v.toString()} value={v.toString()}>Версия {v.toString()}</option>)}
       </SelectField>
-      <Button variant="secondary" disabled={performance.busy} onClick={()=>{setAsOf(undefined);setAfter(undefined);void performance.reload();}}>Обновить факт</Button>
+      <Button variant="secondary" disabled={performance.busy} onClick={()=>{setAsOf(undefined);setEventSequence(undefined);setAfter(undefined);void performance.reload();}}>Обновить факт</Button>
       <QueryNotice query={performance}/>
       {report&&reportCurrency&&<><p>План: {money(report.quota?.configuration?.target?.minorUnits.toString()??"0",reportCurrency)} · Выигрыши: {money(report.grossMinorUnits,reportCurrency)} · Сторно: {money(report.reversalMinorUnits,reportCurrency)}</p>
         <p>Нетто: {money(report.netMinorUnits,reportCurrency)} · Остаток плана: {money(report.remainingMinorUnits,reportCurrency)} · Выполнение: {ratio(report.attainmentBasisPoints)}</p>
@@ -136,7 +137,7 @@ export function SalesQuotaWorkspace({isAdmin,choices,ownersUnavailable,territori
         <p>Без суммы в области: {report.missingAmountCount.toString()} · исторические события без факта: {report.unknownHistoryCount.toString()} · не распределено по этому измерению: {report.unallocatedCount.toString()}</p>
         <ul>{report.facts.map(f=><li key={f.dealId+":"+f.dealVersion.toString()}><a href={dealHref(f.dealId)}>Сделка {f.dealId}</a> · v{f.dealVersion.toString()} · {f.reversal?"Сторно":"Закрытие"} · {f.signedMinorUnits===undefined?"Сумма неизвестна":money(f.signedMinorUnits,reportCurrency)}</li>)}</ul>
         {after&&<Button variant="secondary" onClick={()=>setAfter(undefined)}>Первая страница фактов</Button>}
-        {report.next&&<Button variant="secondary" onClick={()=>{setAsOf(report.asOfUnixNanos);setAfter(report.next);}}>Следующая страница фактов</Button>}
+        {report.next&&<Button variant="secondary" onClick={()=>{setAsOf(report.asOfUnixNanos);setEventSequence(report.eventSequence);setAfter(report.next);}}>Следующая страница фактов</Button>}
       </>}
     </section>}
   </section>;

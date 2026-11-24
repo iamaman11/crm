@@ -786,6 +786,8 @@ message GetSalesQuotaPerformanceRequest {
   optional int64 as_of_unix_nanos = 3;
   SalesQuotaFactCursor after = 4;
   uint32 page_size = 5;
+  // Pin committed event membership in addition to event time and quota version.
+  optional int64 event_sequence = 6;
 }
 message SalesQuotaFact {
   string deal_id = 1;
@@ -811,6 +813,7 @@ message GetSalesQuotaPerformanceResponse {
   uint64 unallocated_count = 13;
   repeated SalesQuotaFact facts = 14;
   SalesQuotaFactCursor next = 15;
+  int64 event_sequence = 16;
 }
 
 service DealService {

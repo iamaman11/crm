@@ -191,6 +191,7 @@ impl sale_wire::DealService for SalesV2Service {
             if after.deal_version <= 0
                 || input.as_of_unix_nanos.is_none()
                 || input.quota_version.is_none()
+                || input.event_sequence.is_none()
             {
                 return Err(ConnectError::invalid_argument("SALES_QUOTA_CURSOR_INVALID"));
             }
@@ -210,76 +211,213 @@ impl sale_wire::DealService for SalesV2Service {
             .period
             .bounds()
             .map_err(|_| ConnectError::internal("SALES_QUOTA_PERIOD_INVALID"))?;
-        // Bounded single D1 snapshot. Never silently return partial totals.
-        // Rust owns signed attribution and exact aggregation before pagination.
-        #[derive(serde::Deserialize)]
-        struct FactRow {
-            deal_id: String,
-            deal_version: i64,
-            action: String,
-            event_at: String,
-            commercial_close_fact: Option<String>,
-        }
+        // The append-only committed event order freezes membership independently
+        // of business event time, including events committed late with an older
+        // timestamp. Quota revisions and facts are immutable business records.
         use wasm_bindgen::JsValue;
-        let mut sql = String::from(
-            "SELECT deal_id,deal_version,action,CAST(occurred_at_unix_nanos AS TEXT) event_at,commercial_close_fact FROM crm_sales_deal_events WHERE tenant=? AND action IN ('closed','reopened') AND occurred_at_unix_nanos>=CAST(? AS INTEGER) AND occurred_at_unix_nanos<CAST(? AS INTEGER) AND occurred_at_unix_nanos<=CAST(? AS INTEGER)",
+        #[derive(serde::Deserialize)]
+        struct Watermark {
+            sequence: String,
+        }
+        let failure = || ConnectError::internal("SALES_QUOTA_FACTS_READ_FAILED");
+        let maximum = crate::bind(
+            &db,
+            "SELECT CAST(COALESCE(MAX(sequence),0) AS TEXT) sequence FROM crm_sales_commercial_event_order WHERE tenant=?",
+            &[JsValue::from_str(&self.tenant)],
+        )
+        .map_err(|_| failure())?
+        .first::<Watermark>(None)
+        .await
+        .map_err(|_| failure())?
+        .ok_or_else(failure)?
+        .sequence
+        .parse::<i64>()
+        .map_err(|_| failure())?;
+        let event_sequence = input.event_sequence.unwrap_or(maximum);
+        if event_sequence < 0
+            || event_sequence > maximum
+            || (input.event_sequence.is_some()
+                && (input.as_of_unix_nanos.is_none() || input.quota_version.is_none()))
+        {
+            return Err(ConnectError::invalid_argument("SALES_QUOTA_SNAPSHOT_INVALID"));
+        }
+        // SQL projects stored attributes, filters indexed candidate events and
+        // sums unsigned base-10^9 limbs. Each limb sum fits SQLite INTEGER for
+        // the physical D1 database capacity; all results cross JS as TEXT.
+        // The original Sales owner alone assigns scope, outcomes and signs.
+        let dimension = match &quota.scope {
+            crm_sales::SalesQuotaScope::Tenant => "NULL",
+            crm_sales::SalesQuotaScope::Owner(crm_sales::SalesOwnerScope::Actor(_)) => {
+                "json_extract(e.commercial_close_fact,'$.credited_actor')"
+            }
+            crm_sales::SalesQuotaScope::Owner(crm_sales::SalesOwnerScope::Team(_)) => {
+                "json_extract(e.commercial_close_fact,'$.credited_team.id')"
+            }
+            crm_sales::SalesQuotaScope::Territory(_) => {
+                "json_extract(e.commercial_close_fact,'$.credited_territory.id')"
+            }
+        };
+        let mut candidates = format!(
+            "WITH candidates AS (SELECT e.deal_id,e.deal_version,e.action,e.occurred_at_unix_nanos,e.commercial_close_fact,\
+             json_extract(e.commercial_close_fact,'$.outcome') outcome,\
+             json_extract(e.commercial_close_fact,'$.amount.currency_code') currency,\
+             json_extract(e.commercial_close_fact,'$.amount.minor_units') minor_units,{dimension} dimension_id \
+             FROM crm_sales_deal_events e JOIN crm_sales_commercial_event_order o \
+             ON o.tenant=e.tenant AND o.deal_id=e.deal_id AND o.deal_version=e.deal_version \
+             WHERE e.tenant=? AND e.action IN ('closed','reopened') \
+             AND e.occurred_at_unix_nanos>=CAST(? AS INTEGER) AND e.occurred_at_unix_nanos<CAST(? AS INTEGER) \
+             AND e.occurred_at_unix_nanos<=CAST(? AS INTEGER) AND o.sequence<=CAST(? AS INTEGER)"
         );
         let mut values = vec![
             JsValue::from_str(&self.tenant),
             JsValue::from_str(&start.to_string()),
             JsValue::from_str(&end.to_string()),
             JsValue::from_str(&as_of.to_string()),
+            JsValue::from_str(&event_sequence.to_string()),
         ];
         if let Some(pipeline) = &quota.pipeline_id {
-            sql.push_str(" AND pipeline_id=?");
+            candidates.push_str(" AND e.pipeline_id=?");
             values.push(JsValue::from_str(pipeline));
         }
-        sql.push_str(" ORDER BY deal_id,deal_version LIMIT 2001");
-        let rows = crate::bind(&db, &sql, &values)
-            .map_err(|_| ConnectError::internal("SALES_QUOTA_FACTS_READ_FAILED"))?
+        candidates.push(')');
+        values.push(JsValue::from_str(&quota.currency_code));
+        let mut aggregate_filter = String::from(" WHERE (currency IS NULL OR currency=?)");
+        let mut page_filter = String::from(
+            " WHERE commercial_close_fact IS NOT NULL AND (currency IS NULL OR currency=?)",
+        );
+        if let Some(id) = quota.scope.dimension_id() {
+            aggregate_filter.push_str(" AND (dimension_id IS NULL OR dimension_id=?)");
+            page_filter.push_str(" AND dimension_id=?");
+            values.push(JsValue::from_str(id));
+        }
+        #[derive(serde::Deserialize)]
+        struct GroupRow {
+            action: String,
+            outcome: Option<String>,
+            currency: Option<String>,
+            dimension_id: Option<String>,
+            fact_known: i64,
+            amount_present: i64,
+            count: String,
+            invalid_amount: i64,
+            limb0: String,
+            limb1: String,
+            limb2: String,
+            limb3: String,
+            limb4: String,
+        }
+        let limbs = (0..5)
+            .map(|i| {
+                format!(
+                    "CAST(SUM(CAST(substr('000000000000000000000000000000000000000000000'||COALESCE(minor_units,'0'),-{},9) AS INTEGER)) AS TEXT) limb{i}",
+                    (i + 1) * 9
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        let aggregate_sql = format!(
+            "{candidates} SELECT action,outcome,currency,dimension_id,commercial_close_fact IS NOT NULL fact_known,\
+             minor_units IS NOT NULL amount_present,CAST(COUNT(*) AS TEXT) count,\
+             MAX(CASE WHEN minor_units IS NULL THEN 0 WHEN typeof(minor_units)<>'text' \
+             OR length(minor_units) NOT BETWEEN 1 AND 39 OR minor_units GLOB '*[^0-9]*' \
+             OR (length(minor_units)>1 AND substr(minor_units,1,1)='0') \
+             OR (length(minor_units)=39 AND minor_units>'170141183460469231731687303715884105727') \
+             THEN 1 ELSE 0 END) invalid_amount,{limbs} FROM candidates{aggregate_filter} \
+             GROUP BY action,outcome,currency,dimension_id,fact_known,amount_present"
+        );
+        let groups = crate::bind(&db, &aggregate_sql, &values)
+            .map_err(|_| failure())?
             .all()
             .await
-            .map_err(|_| ConnectError::internal("SALES_QUOTA_FACTS_READ_FAILED"))?
-            .results::<FactRow>()
-            .map_err(|_| ConnectError::internal("SALES_QUOTA_FACTS_READ_FAILED"))?;
-        if rows.len() > 2000 {
-            return Err(ConnectError::new(
-                connectrpc::ErrorCode::ResourceExhausted,
-                "SALES_QUOTA_PERIOD_TOO_LARGE",
-            ));
-        }
+            .map_err(|_| failure())?
+            .results::<GroupRow>()
+            .map_err(|_| failure())?;
         let mut actual = crm_sales::QuotaActuals::default();
-        let mut facts = Vec::new();
-        for row in rows {
-            let fact = row
-                .commercial_close_fact
-                .as_deref()
-                .map(serde_json::from_str::<crm_sales::CommercialCloseFact>)
-                .transpose()
-                .map_err(|_| ConnectError::internal("SALES_COMMERCIAL_EVENT_INVALID"))?;
-            let reversal = row.action == "reopened";
-            let included = actual
-                .observe(quota, fact.as_ref(), reversal)
-                .map_err(|_| ConnectError::internal("SALES_QUOTA_TOTAL_INVALID"))?;
-            if let (Some(amount), Some(fact)) = (included, fact) {
-                let after = input.after.as_option().is_none_or(|cursor| {
-                    (row.deal_id.as_str(), row.deal_version)
-                        > (cursor.deal_id.as_str(), cursor.deal_version)
-                });
-                if after && facts.len() <= size as usize {
-                    facts.push(sale_wire::SalesQuotaFact {
-                        deal_id: row.deal_id,
-                        deal_version: row.deal_version,
-                        event_at_unix_nanos: row.event_at.parse().map_err(|_| {
-                            ConnectError::internal("SALES_QUOTA_EVENT_TIME_INVALID")
-                        })?,
-                        reversal,
-                        close_fact: Some(Self::commercial_fact_wire(&fact)?).into(),
-                        signed_minor_units: amount.map(|value| value.to_string()),
-                        ..Default::default()
-                    });
-                }
+        let invalid = || ConnectError::internal("SALES_COMMERCIAL_EVENT_INVALID");
+        for row in groups {
+            if row.invalid_amount != 0 || (row.amount_present == 1 && row.currency.is_none()) {
+                return Err(invalid());
             }
+            let outcome = match (row.fact_known, row.outcome.as_deref()) {
+                (0, None) => None,
+                (1, Some("won")) => Some(crm_sales::DealStatus::Won),
+                (1, Some("lost")) => Some(crm_sales::DealStatus::Lost),
+                _ => return Err(invalid()),
+            };
+            let booked = if row.amount_present == 1 && outcome == Some(crm_sales::DealStatus::Won) {
+                Some(
+                    crm_sales::quota_sum_limbs([
+                        &row.limb4, &row.limb3, &row.limb2, &row.limb1, &row.limb0,
+                    ])
+                    .map_err(|_| ConnectError::internal("SALES_QUOTA_TOTAL_OVERFLOW"))?,
+                )
+            } else {
+                None
+            };
+            actual
+                .observe_group(
+                    quota,
+                    crm_sales::QuotaFactGroup {
+                        outcome,
+                        dimension: row.dimension_id.as_deref(),
+                        currency: row.currency.as_deref(),
+                        reversal: row.action == "reopened",
+                        booked_minor_units: booked,
+                        count: row.count.parse().map_err(|_| invalid())?,
+                    },
+                )
+                .map_err(|_| ConnectError::internal("SALES_QUOTA_TOTAL_INVALID"))?;
+        }
+
+        // Independent keyset read: only the requested facts enter WASM.
+        // The same frozen membership and filters apply to the full aggregate.
+        #[derive(serde::Deserialize)]
+        struct FactRow {
+            deal_id: String,
+            deal_version: i64,
+            action: String,
+            event_at: String,
+            commercial_close_fact: String,
+        }
+        let mut page_sql = format!(
+            "{candidates} SELECT deal_id,deal_version,action,CAST(occurred_at_unix_nanos AS TEXT) event_at,commercial_close_fact FROM candidates{page_filter}"
+        );
+        if let Some(after) = input.after.as_option() {
+            page_sql.push_str(" AND (deal_id,deal_version)>(?,CAST(? AS INTEGER))");
+            values.push(JsValue::from_str(&after.deal_id));
+            values.push(JsValue::from_str(&after.deal_version.to_string()));
+        }
+        page_sql.push_str(" ORDER BY deal_id,deal_version LIMIT ?");
+        values.push(JsValue::from_f64(f64::from(size + 1)));
+        let rows = crate::bind(&db, &page_sql, &values)
+            .map_err(|_| failure())?
+            .all()
+            .await
+            .map_err(|_| failure())?
+            .results::<FactRow>()
+            .map_err(|_| failure())?;
+        let mut facts = Vec::with_capacity(rows.len());
+        let mut page_actual = crm_sales::QuotaActuals::default();
+        for row in rows {
+            let fact =
+                serde_json::from_str::<crm_sales::CommercialCloseFact>(&row.commercial_close_fact)
+                    .map_err(|_| invalid())?;
+            let reversal = row.action == "reopened";
+            let amount = page_actual
+                .observe(quota, Some(&fact), reversal)
+                .map_err(|_| invalid())?
+                .ok_or_else(invalid)?;
+            facts.push(sale_wire::SalesQuotaFact {
+                deal_id: row.deal_id,
+                deal_version: row.deal_version,
+                event_at_unix_nanos: row.event_at.parse().map_err(|_| {
+                    ConnectError::internal("SALES_QUOTA_EVENT_TIME_INVALID")
+                })?,
+                reversal,
+                close_fact: Some(Self::commercial_fact_wire(&fact)?).into(),
+                signed_minor_units: amount.map(|value| value.to_string()),
+                ..Default::default()
+            });
         }
         let next = if facts.len() > size as usize {
             facts.truncate(size as usize);
@@ -299,6 +437,7 @@ impl sale_wire::DealService for SalesV2Service {
         RpcResponse::ok(sale_wire::GetSalesQuotaPerformanceResponse {
             quota: Some(Self::quota_wire(record)?).into(),
             as_of_unix_nanos: as_of,
+            event_sequence,
             gross_minor_units: actual.gross.to_string(),
             reversal_minor_units: actual.reversals.to_string(),
             net_minor_units: net.to_string(),

@@ -125,18 +125,25 @@ pub enum SalesQuotaScope {
 }
 
 impl SalesQuotaScope {
-    fn matches(&self, fact: &CommercialCloseFact) -> bool {
+    pub fn dimension_id(&self) -> Option<&str> {
         match self {
-            Self::Tenant => true,
-            Self::Owner(SalesOwnerScope::Actor(id)) => fact.credited_actor.as_ref() == Some(id),
-            Self::Owner(SalesOwnerScope::Team(id)) => fact
-                .credited_team
-                .as_ref()
-                .is_some_and(|team| &team.id == id),
-            Self::Territory(id) => fact
+            Self::Tenant => None,
+            Self::Owner(SalesOwnerScope::Actor(id) | SalesOwnerScope::Team(id))
+            | Self::Territory(id) => Some(id),
+        }
+    }
+
+    fn credited_dimension<'a>(&self, fact: &'a CommercialCloseFact) -> Option<&'a str> {
+        match self {
+            Self::Tenant => None,
+            Self::Owner(SalesOwnerScope::Actor(_)) => fact.credited_actor.as_deref(),
+            Self::Owner(SalesOwnerScope::Team(_)) => {
+                fact.credited_team.as_ref().map(|team| team.id.as_str())
+            }
+            Self::Territory(_) => fact
                 .credited_territory
                 .as_ref()
-                .is_some_and(|territory| &territory.id == id),
+                .map(|territory| territory.id.as_str()),
         }
     }
 }
@@ -251,7 +258,35 @@ impl SalesQuota {
     }
 }
 
-#[derive(Debug, Default)]
+/// Homogeneous persisted event group. Storage supplies counts and exact
+/// nonnegative decimal components; only Sales decides attribution and signs.
+pub struct QuotaFactGroup<'a> {
+    pub outcome: Option<DealStatus>,
+    pub dimension: Option<&'a str>,
+    pub currency: Option<&'a str>,
+    pub reversal: bool,
+    pub booked_minor_units: Option<i128>,
+    pub count: u64,
+}
+
+/// Reconstruct summed base-10^9 limbs (most significant first). Each limb
+/// may include carry from many source amounts; no floating-point conversion.
+pub fn quota_sum_limbs(limbs: [&str; 5]) -> Result<i128, SdkError> {
+    limbs.into_iter().try_fold(0i128, |total, limb| {
+        let value = limb
+            .parse::<i128>()
+            .map_err(|_| invalid("SALES_QUOTA_TOTAL_INVALID"))?;
+        if value < 0 {
+            return Err(invalid("SALES_QUOTA_TOTAL_INVALID"));
+        }
+        total
+            .checked_mul(1_000_000_000)
+            .and_then(|total| total.checked_add(value))
+            .ok_or_else(|| invalid("SALES_QUOTA_TOTAL_OVERFLOW"))
+    })
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
 pub struct QuotaActuals {
     pub gross: i128,
     pub reversals: i128,
@@ -264,53 +299,62 @@ pub struct QuotaActuals {
 }
 
 impl QuotaActuals {
-    /// Return the signed contribution for drilldown, if the fact belongs to
-    /// this quota. Unknown historical facts are never attributed retroactively.
-    pub fn observe(
+    /// The same owner semantics are used for individual drilldown facts and
+    /// grouped full-period totals. Unknown legacy facts are never attributed.
+    pub fn observe_group(
         &mut self,
         quota: &SalesQuota,
-        fact: Option<&CommercialCloseFact>,
-        reversal: bool,
-    ) -> Result<Option<Option<i128>>, SdkError> {
-        let Some(fact) = fact else {
-            self.unknown_history_count += 1;
-            return Ok(None);
+        group: QuotaFactGroup<'_>,
+    ) -> Result<bool, SdkError> {
+        fn add(total: &mut u64, count: u64) -> Result<(), SdkError> {
+            *total = total
+                .checked_add(count)
+                .ok_or_else(|| invalid("SALES_QUOTA_TOTAL_OVERFLOW"))?;
+            Ok(())
+        }
+        let Some(outcome) = group.outcome else {
+            add(&mut self.unknown_history_count, group.count)?;
+            return Ok(false);
         };
-        fact.validate()?;
-        if fact
-            .amount
-            .as_ref()
-            .is_some_and(|amount| amount.currency_code != quota.currency_code)
+        if outcome == DealStatus::Open
+            || group.count == 0
+            || group.booked_minor_units.is_some_and(|amount| amount < 0)
         {
-            return Ok(None);
+            return Err(invalid("SALES_QUOTA_TOTAL_INVALID"));
         }
-        let unallocated = match &quota.scope {
-            SalesQuotaScope::Tenant => false,
-            SalesQuotaScope::Owner(SalesOwnerScope::Actor(_)) => fact.credited_actor.is_none(),
-            SalesQuotaScope::Owner(SalesOwnerScope::Team(_)) => fact.credited_team.is_none(),
-            SalesQuotaScope::Territory(_) => fact.credited_territory.is_none(),
-        };
-        if unallocated {
-            self.unallocated_count += 1;
+        if group
+            .currency
+            .is_some_and(|currency| currency != quota.currency_code)
+        {
+            return Ok(false);
         }
-        if !quota.scope.matches(fact) {
-            return Ok(None);
-        }
-        let amount = fact.booked_minor_units(reversal)?;
-        if reversal {
-            if fact.outcome == DealStatus::Won {
-                self.reversal_count += 1;
+        if let Some(dimension) = quota.scope.dimension_id() {
+            if group.dimension.is_none() {
+                add(&mut self.unallocated_count, group.count)?;
             }
-        } else if fact.outcome == DealStatus::Won {
-            self.won_count += 1;
-        } else {
-            self.lost_count += 1;
+            if group.dimension != Some(dimension) {
+                return Ok(false);
+            }
         }
+        if group.reversal {
+            if outcome == DealStatus::Won {
+                add(&mut self.reversal_count, group.count)?;
+            }
+        } else if outcome == DealStatus::Won {
+            add(&mut self.won_count, group.count)?;
+        } else {
+            add(&mut self.lost_count, group.count)?;
+        }
+        let amount = if outcome == DealStatus::Lost {
+            Some(0)
+        } else {
+            group.booked_minor_units
+        };
         match amount {
-            Some(value) if reversal => {
+            Some(value) if group.reversal => {
                 self.reversals = self
                     .reversals
-                    .checked_sub(value)
+                    .checked_add(value)
                     .ok_or_else(|| invalid("SALES_QUOTA_TOTAL_OVERFLOW"))?;
             }
             Some(value) => {
@@ -319,9 +363,37 @@ impl QuotaActuals {
                     .checked_add(value)
                     .ok_or_else(|| invalid("SALES_QUOTA_TOTAL_OVERFLOW"))?;
             }
-            None => self.missing_amount_count += 1,
+            None => add(&mut self.missing_amount_count, group.count)?,
         }
-        Ok(Some(amount))
+        Ok(true)
+    }
+
+    pub fn observe(
+        &mut self,
+        quota: &SalesQuota,
+        fact: Option<&CommercialCloseFact>,
+        reversal: bool,
+    ) -> Result<Option<Option<i128>>, SdkError> {
+        let booked = fact
+            .map(|fact| fact.booked_minor_units(false))
+            .transpose()?
+            .flatten();
+        let included = self.observe_group(
+            quota,
+            QuotaFactGroup {
+                outcome: fact.map(|fact| fact.outcome),
+                dimension: fact.and_then(|fact| quota.scope.credited_dimension(fact)),
+                currency: fact.and_then(|fact| {
+                    fact.amount
+                        .as_ref()
+                        .map(|amount| amount.currency_code.as_str())
+                }),
+                reversal,
+                booked_minor_units: booked,
+                count: 1,
+            },
+        )?;
+        Ok(included.then(|| booked.map(|value| if reversal { -value } else { value })))
     }
 
     pub fn net(&self) -> Result<i128, SdkError> {
@@ -337,6 +409,22 @@ mod tests {
 
     fn date(year: i32, month: u8, day: u8) -> QuotaDate {
         QuotaDate { year, month, day }
+    }
+
+    #[test]
+    fn grouped_decimal_limbs_preserve_carry_and_overflow() {
+        assert_eq!(
+            quota_sum_limbs(["0", "0", "0", "18014398", "509481986"]).unwrap(),
+            18_014_398_509_481_986
+        );
+        assert_eq!(
+            quota_sum_limbs(["0", "0", "0", "2", "2000000001"]).unwrap(),
+            4_000_000_001
+        );
+        assert!(
+            quota_sum_limbs(["999", "999999999", "999999999", "999999999", "999999999"]).is_err()
+        );
+        assert!(quota_sum_limbs(["0", "0", "0", "0", "-1"]).is_err());
     }
 
     #[test]
