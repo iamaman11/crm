@@ -18,6 +18,10 @@ wasm-opt = ["-O1"]
 [profile.dev.package.crm-native-party-worker]
 debug = false
 
+# Tune only the final Worker crate; dependency and Binaryen profiles stay intact.
+[profile.release.package.crm-native-party-worker]
+opt-level = 2
+
 [features]
 default = []
 # Sole deployed runtime: one native workers-rs fetch; no JS tenant delegation.
