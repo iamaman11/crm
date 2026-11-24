@@ -13,7 +13,7 @@ export function AutomationScreen() {
   const [ruleCursor,setRuleCursor]=useState("");
   const [runCursor,setRunCursor]=useState("");
   const [editing,setEditing]=useState<AutomationRule>();
-  const [draftId,setDraftId]=useState(newId);
+  const [draftId,setDraftId]=useState<string>(newId);
   const [subject,setSubject]=useState("");
   const [assignee,setAssignee]=useState("");
   const [delay,setDelay]=useState("0");
