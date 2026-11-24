@@ -1115,6 +1115,58 @@ impl SalesV2Service {
         }
     }
 
+    fn commercial_fact_wire(
+        value: &crm_sales::CommercialCloseFact,
+    ) -> std::result::Result<sale_wire::CommercialCloseFact, ConnectError> {
+        value
+            .validate()
+            .map_err(|_| ConnectError::internal("SALES_COMMERCIAL_FACT_INVALID"))?;
+        let dimension = |value: &crm_sales::CommercialDimension| sale_wire::CommercialDimension {
+            id: value.id.clone(),
+            name: value.name.clone(),
+            version: value.version,
+            ..Default::default()
+        };
+        let amount = value
+            .amount
+            .as_ref()
+            .map(|amount| {
+                let minor_units = amount
+                    .minor_units
+                    .parse::<i64>()
+                    .map_err(|_| ConnectError::internal("SALES_COMMERCIAL_AMOUNT_INVALID"))?;
+                Ok::<_, ConnectError>(core_v2::ExactMoney {
+                    minor_units,
+                    currency_code: amount.currency_code.clone(),
+                    ..Default::default()
+                })
+            })
+            .transpose()?;
+        Ok(sale_wire::CommercialCloseFact {
+            close_version: value.close_version,
+            outcome: match value.outcome {
+                DomainDealStatus::Won => sale_wire::DealStatus::DEAL_STATUS_WON,
+                DomainDealStatus::Lost => sale_wire::DealStatus::DEAL_STATUS_LOST,
+                DomainDealStatus::Open => {
+                    return Err(ConnectError::internal("SALES_COMMERCIAL_FACT_INVALID"));
+                }
+            }
+            .into(),
+            closed_at: Some(ContactPointV2Service::timestamp(value.closed_at_unix_nanos)).into(),
+            owner: Some(Self::owner_wire(&value.owner)).into(),
+            account_id: value.account_id.clone(),
+            pipeline_id: value.pipeline_id.clone(),
+            stage_id: value.stage_id.clone(),
+            amount: amount.into(),
+            credited_actor: value.credited_actor.clone(),
+            credited_team: value.credited_team.as_ref().map(dimension).into(),
+            credited_territory: value.credited_territory.as_ref().map(dimension).into(),
+            assignment_version: value.assignment_version,
+            catalog_version: value.catalog_version,
+            ..Default::default()
+        })
+    }
+
     fn convert(deal: &DomainDeal) -> std::result::Result<sale_wire::Deal, ConnectError> {
         let stage = deal.stage();
         let status = match deal.status() {
@@ -1139,6 +1191,12 @@ impl SalesV2Service {
             .transpose()?;
         Ok(sale_wire::Deal {
             deal_id: deal.deal_id().as_str().to_owned(),
+            commercial_close_fact: deal
+                .close_outcome()
+                .and_then(|outcome| outcome.commercial_fact())
+                .map(Self::commercial_fact_wire)
+                .transpose()?
+                .into(),
             initial_routing: deal
                 .initial_routing()
                 .map(Self::routing_decision_wire)

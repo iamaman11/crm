@@ -27,7 +27,7 @@ export type { Task } from "../gen/crm/activities/v2/task_pb";
 export type { Member, Team } from "../gen/crm/access/v2/member_pb";
 export type { Interaction } from "../gen/crm/activities/v2/interaction_pb";
 export type { Deal } from "../gen/crm/sales/v2/deal_pb";
-export type { DealEvent } from "../gen/crm/sales/v2/deal_pb";
+export type { CommercialCloseFact, DealEvent } from "../gen/crm/sales/v2/deal_pb";
 export type { SalesTerritory, SalesAccountAssignment } from "../gen/crm/sales/v2/deal_pb";
 export { SalesOverlayRole, SalesDispatchMode, SalesCapacityOverflow, SalesRoutingSource } from "../gen/crm/sales/v2/deal_pb";
 export type { SalesRoutingRule, SalesRoutingRuleConfiguration, SalesRoutingCriteria, SalesRoutingDecision, PreviewSalesRoutingRequest, PreviewSalesRoutingResponse } from "../gen/crm/sales/v2/deal_pb";

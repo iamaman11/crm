@@ -53,6 +53,30 @@ message Deal {
   ForecastCategory forecast_category = 16;
   crm.core.v2.ActorOrTeamOwner owner = 17;
   SalesRoutingDecision initial_routing = 18;
+  CommercialCloseFact commercial_close_fact = 19;
+}
+
+message CommercialDimension {
+  string id = 1;
+  string name = 2;
+  int64 version = 3;
+}
+
+// Immutable close-time credit; absent for historical records without evidence.
+message CommercialCloseFact {
+  int64 close_version = 1;
+  DealStatus outcome = 2;
+  google.protobuf.Timestamp closed_at = 3;
+  crm.core.v2.ActorOrTeamOwner owner = 4;
+  optional string account_id = 5;
+  string pipeline_id = 6;
+  string stage_id = 7;
+  crm.core.v2.ExactMoney amount = 8;
+  optional string credited_actor = 9;
+  CommercialDimension credited_team = 10;
+  CommercialDimension credited_territory = 11;
+  optional int64 assignment_version = 12;
+  optional int64 catalog_version = 13;
 }
 
 message CreateDealRequest {
@@ -157,6 +181,8 @@ message DealEvent {
   int64 catalog_version = 12;
   string linked_task_id = 13;
   SalesRoutingDecision initial_routing = 14;
+  // Original close fact, or the same fact being reversed by reopening.
+  CommercialCloseFact commercial_close_fact = 15;
 }
 message ListDealEventsRequest {
   string deal_id = 1;

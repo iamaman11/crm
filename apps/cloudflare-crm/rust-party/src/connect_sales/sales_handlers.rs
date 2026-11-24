@@ -1534,6 +1534,16 @@ impl sale_wire::DealService for SalesV2Service {
                     .into(),
                     catalog_version: row.catalog_version.unwrap_or_default(),
                     linked_task_id: row.linked_task_id.unwrap_or_default(),
+                    commercial_close_fact: row
+                        .commercial_close_fact
+                        .as_deref()
+                        .map(|raw| {
+                            let value: crm_sales::CommercialCloseFact = serde_json::from_str(raw)
+                                .map_err(|_| ConnectError::internal("SALES_COMMERCIAL_EVENT_INVALID"))?;
+                            Self::commercial_fact_wire(&value)
+                        })
+                        .transpose()?
+                        .into(),
                     initial_routing: row
                         .initial_routing
                         .as_deref()

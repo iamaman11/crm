@@ -140,6 +140,7 @@ pub struct DealCloseOutcome {
     status: DealStatus,
     reason_code: ReasonCode,
     closed_at_unix_nanos: i64,
+    commercial_fact: Option<crate::CommercialCloseFact>,
 }
 
 impl DealCloseOutcome {
@@ -153,6 +154,10 @@ impl DealCloseOutcome {
 
     pub const fn closed_at_unix_nanos(&self) -> i64 {
         self.closed_at_unix_nanos
+    }
+
+    pub fn commercial_fact(&self) -> Option<&crate::CommercialCloseFact> {
+        self.commercial_fact.as_ref()
     }
 }
 
@@ -201,6 +206,7 @@ pub struct DealCloseOutcomeSnapshot {
     pub status: DealStatus,
     pub reason_code: ReasonCode,
     pub closed_at_unix_nanos: i64,
+    pub commercial_fact: Option<crate::CommercialCloseFact>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -411,7 +417,21 @@ impl Deal {
                         "close time must fall between created and updated time",
                     ));
                 }
+                if let Some(fact) = &outcome.commercial_fact {
+                    fact.validate()?;
+                    if fact.outcome != outcome.status
+                        || fact.closed_at_unix_nanos != outcome.closed_at_unix_nanos
+                        || fact.close_version > snapshot.version
+                    {
+                        return Err(invalid(
+                            "SALES_COMMERCIAL_FACT_INVALID",
+                            "deal.close_outcome.commercial_fact",
+                            "commercial fact must match the recorded close",
+                        ));
+                    }
+                }
                 Some(DealCloseOutcome {
+                    commercial_fact: outcome.commercial_fact,
                     status: outcome.status,
                     reason_code: outcome.reason_code,
                     closed_at_unix_nanos: outcome.closed_at_unix_nanos,
@@ -460,6 +480,7 @@ impl Deal {
                     status: outcome.status,
                     reason_code: outcome.reason_code.clone(),
                     closed_at_unix_nanos: outcome.closed_at_unix_nanos,
+                    commercial_fact: outcome.commercial_fact.clone(),
                 }),
             created_at_unix_nanos: self.created_at_unix_nanos,
             updated_at_unix_nanos: self.updated_at_unix_nanos,
@@ -690,6 +711,7 @@ impl Deal {
                     status: command.target_status,
                     reason_code,
                     closed_at_unix_nanos: command.occurred_at_unix_nanos,
+                    commercial_fact: None,
                 })
             }
         };
@@ -717,6 +739,14 @@ impl Deal {
     }
 
     pub fn close(&mut self, command: CloseDeal) -> Result<(), SdkError> {
+        self.close_with_credit(command, crate::CloseCreditContext::default())
+    }
+
+    pub fn close_with_credit(
+        &mut self,
+        command: CloseDeal,
+        context: crate::CloseCreditContext,
+    ) -> Result<(), SdkError> {
         self.require_version(command.expected_version)?;
         self.require_monotonic_time(command.occurred_at_unix_nanos)?;
         if self.status != DealStatus::Open {
@@ -732,8 +762,15 @@ impl Deal {
                 "close outcome must be Won or Lost",
             ));
         }
+        let fact = crate::CommercialCloseFact::capture(
+            self,
+            command.outcome,
+            command.occurred_at_unix_nanos,
+            context,
+        )?;
         self.status = command.outcome;
         self.close_outcome = Some(DealCloseOutcome {
+            commercial_fact: Some(fact),
             status: command.outcome,
             reason_code: command.reason_code,
             closed_at_unix_nanos: command.occurred_at_unix_nanos,
@@ -1155,6 +1192,13 @@ mod tests {
         assert_eq!(deal.stage(), &stage);
         assert_eq!(deal.version(), 2);
         assert_eq!(deal.close_outcome().unwrap().reason_code().as_str(), "won");
+        let fact = deal.close_outcome().unwrap().commercial_fact().unwrap();
+        assert_eq!(fact.close_version, 2);
+        assert_eq!(fact.outcome, DealStatus::Won);
+        assert_eq!(
+            fact.booked_minor_units(true).unwrap(),
+            fact.booked_minor_units(false).unwrap().map(|value| -value)
+        );
         assert_eq!(
             deal.close(CloseDeal {
                 expected_version: 2,

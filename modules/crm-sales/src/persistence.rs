@@ -9,10 +9,10 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 pub const DEAL_STATE_SCHEMA_ID: &str = "crm.sales.deal.state";
-pub const DEAL_STATE_SCHEMA_VERSION: &str = "1.2.0";
+pub const DEAL_STATE_SCHEMA_VERSION: &str = "1.3.0";
 pub const DEAL_STATE_MAXIMUM_BYTES: u64 = 256 * 1024;
 pub const DEAL_STATE_RETENTION_POLICY_ID: &str = "crm.sales.business_record";
-const DEAL_STATE_DESCRIPTOR: &[u8] = b"crm.sales.deal.state/v1.2:deal_id,name,owner,account,primary_contact,stage,status,amount,expected_close_date,probability_basis_points,probability_source,forecast_category,close_outcome,created_at_unix_nanos,updated_at_unix_nanos,version,initial_routing";
+const DEAL_STATE_DESCRIPTOR: &[u8] = b"crm.sales.deal.state/v1.3:deal_id,name,owner,account,primary_contact,stage,status,amount,expected_close_date,probability_basis_points,probability_source,forecast_category,close_outcome,created_at_unix_nanos,updated_at_unix_nanos,version,initial_routing,close_outcome.commercial_fact";
 
 pub fn deal_state_descriptor_hash() -> [u8; 32] {
     Sha256::digest(DEAL_STATE_DESCRIPTOR).into()
@@ -72,6 +72,16 @@ const DEAL_DIAGNOSTIC_FIELDS: &[&str] = &[
     "close_outcome",
     "reason_code",
     "closed_at_unix_nanos",
+    "commercial_fact",
+    "close_version",
+    "outcome",
+    "credited_actor",
+    "credited_team",
+    "credited_territory",
+    "catalog_version",
+    "account_id",
+    "currency_code",
+    "id",
     "created_at_unix_nanos",
     "updated_at_unix_nanos",
     "version",
@@ -164,6 +174,8 @@ struct CloseOutcomeState {
     status: StatusState,
     reason_code: String,
     closed_at_unix_nanos: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    commercial_fact: Option<crate::CommercialCloseFact>,
 }
 
 impl From<DealSnapshot> for DealStateV1 {
@@ -357,6 +369,7 @@ impl From<DealCloseOutcomeSnapshot> for CloseOutcomeState {
             status: value.status.into(),
             reason_code: value.reason_code.as_str().to_owned(),
             closed_at_unix_nanos: value.closed_at_unix_nanos,
+            commercial_fact: value.commercial_fact,
         }
     }
 }
@@ -369,6 +382,7 @@ impl TryFrom<CloseOutcomeState> for DealCloseOutcomeSnapshot {
             status: value.status.into(),
             reason_code: ReasonCode::try_new(value.reason_code)?,
             closed_at_unix_nanos: value.closed_at_unix_nanos,
+            commercial_fact: value.commercial_fact,
         })
     }
 }

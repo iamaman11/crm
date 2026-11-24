@@ -922,6 +922,141 @@ pub(super) async fn close_typed(
     )
     .await
 }
+// SQL supplies versioned credit context only; Sales chooses attribution.
+const CREDIT_TEAMS: &str = "SELECT COALESCE(json_group_array(json_object('id',id,'name',name,'version',version)),'[]') AS snapshot FROM (SELECT t.id,json_extract(t.state,'$.name') name,t.version FROM crm_access_teams t WHERE t.tenant=? AND ((?='team' AND t.id=?) OR (?='actor' AND json_extract(t.state,'$.active')=1 AND EXISTS (SELECT 1 FROM crm_users u WHERE u.tenant_id=t.tenant AND u.email=? AND u.active=1 AND u.email NOT LIKE 'service:%') AND EXISTS (SELECT 1 FROM json_each(t.state,'$.member_emails') m WHERE m.value=?))) ORDER BY t.id)";
+
+#[derive(Deserialize)]
+struct CreditSnapshot {
+    snapshot: String,
+}
+
+struct CreditResolution {
+    context: crm_sales::CloseCreditContext,
+    teams: String,
+    owner_kind: &'static str,
+    owner_id: String,
+    account_id: Option<String>,
+    assignment_version: i64,
+    territory: Option<(String, i64)>,
+    pipeline_id: String,
+    pipeline_version: i64,
+}
+
+impl CreditResolution {
+    fn team_parameters(&self, tenant: &str) -> Vec<JsValue> {
+        vec![
+            JsValue::from_str(tenant),
+            JsValue::from_str(self.owner_kind),
+            JsValue::from_str(&self.owner_id),
+            JsValue::from_str(self.owner_kind),
+            JsValue::from_str(&self.owner_id),
+            JsValue::from_str(&self.owner_id),
+        ]
+    }
+
+    async fn load(db: &D1Database, tenant: &str, deal: &Deal) -> Result<Self> {
+        use super::sales_territories::{Kind, Record, get};
+        let (owner_kind, owner_id) = match deal.owner() {
+            DealOwner::Actor(id) => ("actor", id.as_str().to_owned()),
+            DealOwner::Team(id) => ("team", id.as_str().to_owned()),
+        };
+        let account_id = deal.account().map(|value| value.resource_id.clone());
+        let pipeline_id = deal.stage().pipeline_id().as_str().to_owned();
+        let pipeline = super::sales_pipelines::get(db, tenant, &pipeline_id).await?;
+        let pipeline_version = pipeline.as_ref().map_or(0, |value| value.version);
+        let assignment = if let Some(id) = &account_id {
+            match get(db, tenant, Kind::Assignment, id).await? {
+                Some(Record::Assignment(value)) => Some(value),
+                None => None,
+                _ => {
+                    return Err(worker::Error::RustError(
+                        "SALES_CREDIT_ASSIGNMENT_INVALID".into(),
+                    ));
+                }
+            }
+        } else {
+            None
+        };
+        let assignment_version = assignment.as_ref().map_or(0, |value| value.version);
+        let territory_id = assignment
+            .as_ref()
+            .filter(|value| !value.archived)
+            .and_then(|value| value.territory_id.as_deref());
+        let territory = if let Some(id) = territory_id {
+            match get(db, tenant, Kind::Territory, id).await? {
+                Some(Record::Territory(value)) if !value.archived => Some(value),
+                _ => {
+                    return Err(worker::Error::RustError(
+                        "SALES_CREDIT_TERRITORY_INVALID".into(),
+                    ));
+                }
+            }
+        } else {
+            None
+        };
+        let context = crm_sales::CloseCreditContext {
+            teams: Vec::new(),
+            territory: territory.as_ref().map(|value| crm_sales::CommercialDimension {
+                id: value.territory_id.clone(),
+                name: value.name.clone(),
+                version: value.version,
+            }),
+            assignment_version: assignment
+                .as_ref()
+                .filter(|value| !value.archived)
+                .map(|value| value.version),
+            catalog_version: pipeline.as_ref().map(|value| value.version),
+        };
+        let mut resolution = Self {
+            context,
+            teams: String::new(),
+            owner_kind,
+            owner_id,
+            account_id,
+            assignment_version,
+            territory: territory.map(|value| (value.territory_id, value.version)),
+            pipeline_id,
+            pipeline_version,
+        };
+        resolution.teams = bind(db, CREDIT_TEAMS, &resolution.team_parameters(tenant))?
+            .first::<CreditSnapshot>(None)
+            .await?
+            .ok_or_else(|| worker::Error::RustError("SALES_CREDIT_SNAPSHOT_MISSING".into()))?
+            .snapshot;
+        resolution.context.teams = serde_json::from_str(&resolution.teams)
+            .map_err(|error| worker::Error::RustError(error.to_string()))?;
+        Ok(resolution)
+    }
+
+    fn append_guard(&self, sql: &mut String, values: &mut Vec<JsValue>, tenant: &str) {
+        sql.push_str(&format!(" AND ({CREDIT_TEAMS})=?"));
+        values.extend(self.team_parameters(tenant));
+        values.push(JsValue::from_str(&self.teams));
+        if let Some(id) = &self.account_id {
+            sql.push_str(" AND COALESCE((SELECT version FROM crm_sales_account_assignment_records WHERE tenant=? AND id=?),0)=?");
+            values.extend([
+                JsValue::from_str(tenant),
+                JsValue::from_str(id),
+                JsValue::from_f64(self.assignment_version as f64),
+            ]);
+        }
+        if let Some((id, version)) = &self.territory {
+            sql.push_str(" AND EXISTS (SELECT 1 FROM crm_sales_territory_records WHERE tenant=? AND id=? AND version=? AND json_extract(state,'$.archived')=0)");
+            values.extend([
+                JsValue::from_str(tenant),
+                JsValue::from_str(id),
+                JsValue::from_f64(*version as f64),
+            ]);
+        }
+        sql.push_str(" AND COALESCE((SELECT version FROM crm_sales_pipeline_records WHERE tenant=? AND id=?),0)=?");
+        values.extend([
+            JsValue::from_str(tenant),
+            JsValue::from_str(&self.pipeline_id),
+            JsValue::from_f64(self.pipeline_version as f64),
+        ]);
+    }
+}
+
 async fn stage_mutation(
     input: StageMutation,
     key: &str,
@@ -954,6 +1089,11 @@ async fn stage_mutation(
         return Ok(rejected("NOT_FOUND", ErrorCategory::NotFound));
     };
     let before = deal.clone();
+    let credit = if matches!(&input, StageMutation::Close(_)) {
+        Some(CreditResolution::load(db, tenant, &deal).await?)
+    } else {
+        None
+    };
     let expected_version = match &input {
         StageMutation::Move(value) => value.expected_version,
         StageMutation::Close(value) => value.expected_version,
@@ -1016,12 +1156,18 @@ async fn stage_mutation(
                 Ok(v) => v,
                 Err(e) => return Ok(rejected_sdk(e)),
             };
-            deal.close(CloseDeal {
-                expected_version,
-                outcome: value.outcome.into(),
-                reason_code,
-                occurred_at_unix_nanos: now_nanos(),
-            })
+            deal.close_with_credit(
+                CloseDeal {
+                    expected_version,
+                    outcome: value.outcome.into(),
+                    reason_code,
+                    occurred_at_unix_nanos: now_nanos(),
+                },
+                credit.as_ref().map_or_else(
+                    crm_sales::CloseCreditContext::default,
+                    |value| value.context.clone(),
+                ),
+            )
         }
     };
     if let Err(e) = outcome {
@@ -1043,22 +1189,23 @@ async fn stage_mutation(
             return Ok(rejected_sdk(e));
         }
     };
-    let update = bind(
-        db,
-        "UPDATE crm_sales_deal_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=?,last_action=? WHERE tenant=? AND id=? AND version=?",
-        &[
-            JsValue::from_str(&saved),
-            JsValue::from_f64(deal.version() as f64),
-            JsValue::from_str(key),
-            JsValue::from_str(&digest),
-            JsValue::from_str(trace),
-            JsValue::from_str(actor),
-            JsValue::from_str("sales_deals.advance"),
-            JsValue::from_str(tenant),
-            JsValue::from_str(id),
-            JsValue::from_f64(expected_version as f64),
-        ],
-    )?;
+    let mut update_sql = String::from("UPDATE crm_sales_deal_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=?,last_action=? WHERE tenant=? AND id=? AND version=?");
+    let mut update_values = vec![
+        JsValue::from_str(&saved),
+        JsValue::from_f64(deal.version() as f64),
+        JsValue::from_str(key),
+        JsValue::from_str(&digest),
+        JsValue::from_str(trace),
+        JsValue::from_str(actor),
+        JsValue::from_str("sales_deals.advance"),
+        JsValue::from_str(tenant),
+        JsValue::from_str(id),
+        JsValue::from_f64(expected_version as f64),
+    ];
+    if let Some(credit) = &credit {
+        credit.append_guard(&mut update_sql, &mut update_values, tenant);
+    }
+    let update = bind(db, &update_sql, &update_values)?;
     let mut writes = vec![update];
     if let Some(task) = &prepared.task {
         let account_id = match deal.account() {
@@ -1276,6 +1423,7 @@ pub(super) struct DealEventRow {
     pub(super) catalog_version: Option<i64>,
     pub(super) linked_task_id: Option<String>,
     pub(super) initial_routing: Option<String>,
+    pub(super) commercial_close_fact: Option<String>,
 }
 
 /// A single tenant-scoped keyset stream backed by the D1 composite PK.
@@ -1289,7 +1437,7 @@ pub(super) async fn list_events(
     size: usize,
 ) -> Result<(Vec<DealEventRow>, Option<String>)> {
     let mut rows=bind(db,
-        "SELECT e.deal_version,e.action,e.pipeline_id,e.previous_stage_id,e.stage_id,e.previous_status,e.status,e.reason_code,e.actor,e.request_id,CAST(e.occurred_at_unix_nanos AS TEXT) AS occurred_at_unix_nanos,e.catalog_version,l.task_id AS linked_task_id,e.initial_routing FROM crm_sales_deal_events e LEFT JOIN crm_sales_link_delivery_records l ON l.tenant=e.tenant AND l.deal_id=e.deal_id AND l.deal_version=e.deal_version WHERE e.tenant=? AND e.deal_id=? AND e.deal_version<CAST(? AS INTEGER) ORDER BY e.deal_version DESC LIMIT ?",
+        "SELECT e.deal_version,e.action,e.pipeline_id,e.previous_stage_id,e.stage_id,e.previous_status,e.status,e.reason_code,e.actor,e.request_id,CAST(e.occurred_at_unix_nanos AS TEXT) AS occurred_at_unix_nanos,e.catalog_version,l.task_id AS linked_task_id,e.initial_routing,e.commercial_close_fact FROM crm_sales_deal_events e LEFT JOIN crm_sales_link_delivery_records l ON l.tenant=e.tenant AND l.deal_id=e.deal_id AND l.deal_version=e.deal_version WHERE e.tenant=? AND e.deal_id=? AND e.deal_version<CAST(? AS INTEGER) ORDER BY e.deal_version DESC LIMIT ?",
         &[
             JsValue::from_str(tenant),
             JsValue::from_str(id),

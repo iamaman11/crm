@@ -1,6 +1,6 @@
 import {useCallback,useState} from "react";
 import {Button,SelectField} from "@ultimate-crm/ui";
-import type {ContactPoint,Deal,SalesPipeline} from "@ultimate-crm/client/cloudflare";
+import type {ContactPoint,Deal,SalesPipeline,CommercialCloseFact} from "@ultimate-crm/client/cloudflare";
 import {DealEventKind} from "@ultimate-crm/client/cloudflare";
 import {ContactPointStatus,DealStatus,ForecastCategory,ProbabilitySource} from "@ultimate-crm/client/cloudflare";
 import {api,dateText} from "./api";
@@ -100,8 +100,19 @@ function eventLabel(kind:DealEventKind):string {
 // to that exact stored ID, never an invented historical name.
 // One original, owner-authorized event projection for inline/full Deal pages.
 // No reconstruction of history from mutable client-side snapshots.
-export function DealHistory({dealId,accountId,pipeline,choices=[]}:{
-  dealId:string;accountId:string;pipeline:SalesPipeline|undefined;choices?:Awaited<ReturnType<typeof allOwners>>["choices"];
+function CommercialAttribution({fact,currencies,reversal=false}:{fact:CommercialCloseFact;currencies:CurrencyCatalog;reversal?:boolean}) {
+  const booked=fact.outcome===DealStatus.WON;
+  return <section aria-label="Историческая коммерческая атрибуция">
+    <p>{reversal?"Обратная корректировка":"Факт закрытия"} · версия {fact.closeVersion.toString()} · {dateText(fact.closedAt)}</p>
+    <p>Сумма на момент закрытия: {moneyText(fact.amount,currencies)} · {booked?(reversal?"Сторно выигранной сделки":"Выигранная сделка"):"Без коммерческого начисления"}</p>
+    <p>Персональная атрибуция: {fact.creditedActor??"Не распределена"}</p>
+    <p>Команда: {fact.creditedTeam?.name??"Не распределена"} · территория: {fact.creditedTerritory?.name??"Не распределена"}</p>
+    <p>Воронка: {fact.pipelineId} · этап: {fact.stageId}</p>
+  </section>;
+}
+
+export function DealHistory({dealId,accountId,pipeline,currencies,choices=[]}:{
+  dealId:string;accountId:string;pipeline:SalesPipeline|undefined;currencies:CurrencyCatalog;choices?:Awaited<ReturnType<typeof allOwners>>["choices"];
 }){
   const [cursor,setCursor]=useState("");
   const history=useQuery(useCallback(
@@ -121,6 +132,7 @@ export function DealHistory({dealId,accountId,pipeline,choices=[]}:{
         <p>Этап: {event.previousStageId?stageLabel(pipeline,event.previousStageId)+" → ":""}{stageLabel(pipeline,event.stageId)}</p>
         {event.reasonCode&&<p>Причина: {event.reasonCode}</p>}
         {event.initialRouting&&<RoutingExplanation decision={event.initialRouting} choices={choices}/>}
+        {event.commercialCloseFact?<CommercialAttribution fact={event.commercialCloseFact} currencies={currencies} reversal={event.kind===DealEventKind.REOPENED}/>:((event.kind===DealEventKind.CLOSED||event.kind===DealEventKind.REOPENED)&&<p>Историческая коммерческая атрибуция неизвестна.</p>)}
         <p>Исполнитель: {event.actor} · запрос: {event.requestId}</p>
         {event.linkedTaskId&&<p>Связанная задача: <a href={taskHref(event.linkedTaskId,accountId)}>
           {event.linkedTaskId}</a></p>}
@@ -157,6 +169,7 @@ export function DealDetails({dealId,currencies,pipelines,onEdit,onClose,onReopen
       <h3>{deal.name}</h3>
       <p>Ответственный: {ownerLabel(deal.owner,choices)}</p>
       {deal.initialRouting&&<RoutingExplanation decision={deal.initialRouting} choices={choices}/>}
+      {deal.commercialCloseFact?<CommercialAttribution fact={deal.commercialCloseFact} currencies={currencies}/>:deal.status!==DealStatus.OPEN&&<p>Историческая коммерческая атрибуция неизвестна.</p>}
       <p>ID: {deal.dealId} · версия {deal.version.toString()}</p>
       <p>Клиент: <AccountName accountId={deal.accountId}/></p>
       <p>Основной контакт: {details.data?.contact?
@@ -178,7 +191,7 @@ export function DealDetails({dealId,currencies,pipelines,onEdit,onClose,onReopen
       </div>:onReopen?<Button variant="secondary" onClick={onReopen}>
         Открыть повторно
       </Button>:null}
-      <DealHistory key={deal.dealId} dealId={deal.dealId} accountId={deal.accountId} pipeline={pipeline} choices={choices}/>
+      <DealHistory key={deal.dealId} dealId={deal.dealId} accountId={deal.accountId} pipeline={pipeline} currencies={currencies} choices={choices}/>
       <InteractionTimeline accountId={deal.accountId} dealId={deal.dealId}/>
     </>}
   </section>;

@@ -5683,10 +5683,33 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    assert.deepEqual(reassigned.deal.initialRouting,first.deal.initialRouting);
    for(const [index,input] of [one,winner,overflow,manual].entries()){
      const version=index===0?2n:1n;
-     await call("CloseDeal",admin,{dealId:input.dealId,outcome:3,reasonCode:"qa.cleanup",precondition:pre("close-"+index,version)});
+     const request={dealId:input.dealId,outcome:index===0?2:3,reasonCode:"qa.cleanup",precondition:pre("close-"+index,version)};
+     const closed=await call("CloseDeal",admin,request);
+     const fact=closed.deal.commercialCloseFact;
+     assert.equal(fact.closeVersion,version+1n);
+     assert.equal(fact.outcome,request.outcome);
+     assert.deepEqual(fact.amount,facts.amount);
+     assert.deepEqual(fact.owner,closed.deal.owner);
+     assert.equal(fact.creditedTeam.id,team);
+     assert.deepEqual((await call("CloseDeal",admin,request)).deal.commercialCloseFact,fact);
+     assert.deepEqual((await call("GetDeal",viewer,{dealId:input.dealId})).deal.commercialCloseFact,fact);
+     assert.deepEqual((await call("ListDealEvents",viewer,{dealId:input.dealId})).events[0].commercialCloseFact,fact);
      assert.equal((await sql("SELECT COUNT(*) n FROM crm_sales_deal_events WHERE tenant=? AND deal_id=?","tenant-a",input.dealId))[0].n,Number(version)+1);
      assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=?","tenant-a",input.dealId))[0].n,Number(version)+1);
    }
+   const originalClose=(await call("GetDeal",viewer,{dealId:one.dealId})).deal.commercialCloseFact;
+   const reopened=await call("ReopenDeal",admin,{dealId:one.dealId,reasonCode:"qa.revisit",precondition:pre("credit-reopen",3n)});
+   assert.equal(reopened.deal.commercialCloseFact,undefined);
+   const reclosed=await call("CloseDeal",admin,{dealId:one.dealId,outcome:3,reasonCode:"qa.cleanup",precondition:pre("credit-reclose",4n)});
+   assert.equal(reclosed.deal.commercialCloseFact.closeVersion,5n);
+   const creditEvents=(await call("ListDealEvents",viewer,{dealId:one.dealId})).events;
+   assert.deepEqual(creditEvents[0].commercialCloseFact,reclosed.deal.commercialCloseFact);
+   assert.deepEqual(creditEvents[1].commercialCloseFact,originalClose);
+   assert.deepEqual(creditEvents[2].commercialCloseFact,originalClose);
+   assert.equal(creditEvents[1].kind,5);
+   const storedCredit=await sql("SELECT commercial_close_fact FROM crm_sales_deal_events WHERE tenant=? AND deal_id=? AND deal_version IN (3,4) ORDER BY deal_version","tenant-a",one.dealId);
+   assert.equal(storedCredit.length,2);
+   assert.deepEqual(JSON.parse(storedCredit[0].commercial_close_fact),JSON.parse(storedCredit[1].commercial_close_fact));
    await call("UpdateTerritory",admin,{territoryId,configuration:{name:"Routing territory "+suffix,defaultOwner:actor(emailB),archived:true},precondition:pre("archive-territory",1n)});
    assert.equal((await memberV2("UpdateTeam",admin,{teamId:team,active:false,precondition:pre("archive-team",1n)})).status,200);
    for(const [label,email] of [["a",emailA],["b",emailB]])assert.equal((await memberV2("UpdateMember",admin,{email,active:false,precondition:pre("deactivate-"+label,1n)})).status,200);
