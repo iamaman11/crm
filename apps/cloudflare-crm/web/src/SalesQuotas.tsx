@@ -93,12 +93,13 @@ export function SalesQuotaWorkspace({isAdmin,choices,ownersUnavailable,territori
       void mutation.runIntent(()=>{
         const currencies=catalog.data?.currencies;if(!currencies)throw Error("Нет справочника валют");
         const reason=field(data,"reason").trim(),pipeline=String(data.get("pipeline")??"");
-        const startDate=parseDate(field(data,"start")),endDate=parseDate(field(data,"end"));
+        const startDate=parseDate(String(data.get("start")??"")),endDate=parseDate(String(data.get("end")??""));
         if(!cfg?.published&&(!startDate||!endDate))throw Error("Выберите период");
         const target={currencyCode:currency,minorUnits:minorUnits(field(data,"target"),currency,currencies)};
         const period=cfg?.published?cfg.period:{startDate,endDate,timeZone:field(data,"zone").trim(),cadence:Number(field(data,"cadence"))};
+        const pipelineId=cfg?.published?cfg.pipelineId:pipeline;
         const configuration=archived&&cfg?{...cfg,archived:true,revisionReason:reason}:{
-          name:field(data,"name").trim(),scope:scopeWire(scope),...(cfg?.published?{pipelineId:cfg.pipelineId}:pipeline?{pipelineId:pipeline}:{}),
+          name:field(data,"name").trim(),scope:scopeWire(scope),...(pipelineId?{pipelineId}:{}),
           period,target,published,archived:false,revisionReason:reason
         };
         return old?prepareMutation(api.deals.updateSalesQuota,{quotaId:id,configuration,precondition:{idempotencyKey:mutation.key,expectedVersion:old.version}},id):

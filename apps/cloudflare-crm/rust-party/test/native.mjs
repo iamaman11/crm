@@ -5739,6 +5739,14 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    assert.equal(perf.facts.length,1);assert.ok(perf.next);
    const page2=await call("GetSalesQuotaPerformance",viewer,{quotaId,quotaVersion:2n,asOfUnixNanos:perf.asOfUnixNanos,after:perf.next,pageSize:1});
    assert.equal(page2.netMinorUnits,perf.netMinorUnits);assert.notDeepEqual(page2.facts[0],perf.facts[0]);
+   const beforeQuota=await sql("SELECT state,version FROM crm_sales_quota_records WHERE tenant=? AND id=?","tenant-a",quotaId);
+   await sql("CREATE TRIGGER fixture_fail_quota_audit BEFORE INSERT ON crm_audit WHEN NEW.action='sales.quota.update' BEGIN SELECT RAISE(ABORT,'fixture quota audit rollback'); END;");
+   try{
+     assertUnconfirmed(await salesV2("UpdateSalesQuota",admin,{quotaId,configuration:{...publish.configuration,revisionReason:"qa.fault"},precondition:pre("quota-fault",2n)}),"SALES_QUOTA_WRITE_UNCONFIRMED");
+     assert.deepEqual(await sql("SELECT state,version FROM crm_sales_quota_records WHERE tenant=? AND id=?","tenant-a",quotaId),beforeQuota);
+     assert.equal((await sql("SELECT COUNT(*) n FROM crm_sales_quota_revisions WHERE tenant=? AND id=?","tenant-a",quotaId))[0].n,2);
+     assert.equal((await sql("SELECT COUNT(*) n FROM crm_sales_quota_receipts WHERE tenant=? AND key=?","tenant-a",pre("quota-fault",2n).idempotencyKey))[0].n,0);
+   }finally{await sql("DROP TRIGGER fixture_fail_quota_audit");}
    const revised=await call("UpdateSalesQuota",admin,{quotaId,configuration:{...publish.configuration,target:{currencyCode:"EUR",minorUnits:2000n},revisionReason:"qa.revise"},precondition:pre("quota-revise",2n)});
    assert.equal(revised.quota.version,3n);
    const historical=await call("GetSalesQuotaPerformance",viewer,{quotaId,quotaVersion:2n,asOfUnixNanos:perf.asOfUnixNanos});

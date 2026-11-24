@@ -64,6 +64,7 @@
     "affected-scope-policy.json",
     "apps/cloudflare-crm/**",
     "buf.gen.web.yaml",
+    "crates/crm-core-contracts/src/lib.rs",
     "crates/crm-customer-360-query-adapter/Cargo.toml",
     "crates/crm-customer-360-query-adapter/src/account_overview.rs",
     "crates/crm-customer-360-query-adapter/src/lib.rs",
