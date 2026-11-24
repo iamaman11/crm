@@ -92,6 +92,7 @@ with TemporaryDirectory() as temporary:
     run(pnpm, "--recursive", "--filter", "cloudflare-crm...", "--fail-if-no-match",
         "--workspace-concurrency=2", "exec", "tsc", "-p", "tsconfig.json", "--noEmit")
     run(pnpm, "exec", "vitest", "run", "packages/client/src/cloudflare-v2-contract.test.ts",
-        "apps/cloudflare-crm/test/client-routes.test.mjs")
+        "apps/cloudflare-crm/test/client-routes.test.mjs",
+        "apps/cloudflare-crm/test/automation-route.test.mjs")
     run(pnpm, "--filter", "cloudflare-crm", "test")
     run(pnpm, "--filter", "cloudflare-crm", "build")
