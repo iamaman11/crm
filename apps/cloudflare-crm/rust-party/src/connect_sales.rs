@@ -1199,7 +1199,7 @@ impl SalesV2Service {
         };
         let scope = match &quota.scope {
             SalesQuotaScope::Tenant => Scope::TenantWide(true),
-            SalesQuotaScope::Owner(owner) => Scope::Owner(Self::owner_wire(owner)),
+            SalesQuotaScope::Owner(owner) => Scope::Owner(Box::new(Self::owner_wire(owner))),
             SalesQuotaScope::Territory(id) => Scope::TerritoryId(id.clone()),
         };
         let date = |value: crm_sales::QuotaDate| core_v2::CalendarDate {
