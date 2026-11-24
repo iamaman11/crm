@@ -4694,9 +4694,10 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  // Activity owner writes an opaque bounded event ID from the signed intent
  // digest, not a potentially 180-character user-supplied source ID.
  const longestInteractionId="i".repeat(180);
+ const longKey="sk08a-long-"+randomUUID();
  const longestResult=await interactionV2("CreateInteraction",admin,{
    ...noteInput,interactionId:longestInteractionId,
-   precondition:{idempotencyKey:"sk08a-long-"+randomUUID()}
+   precondition:{idempotencyKey:longKey}
  });
  assert.equal(longestResult.status,200,describeProtobuf(longestResult.body));
  const longSource=(await sql(
@@ -4705,6 +4706,23 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  assert.equal(longSource.length,1);
  assert.equal(longSource[0].event_id,"crm.activities.e1:"+longSource[0].origin_intent_digest);
  assert.ok(longSource[0].event_id.length<=180);
+ // This boundary-length fixture is intentionally not part of the SK-05
+ // Account chronology; remove only its exact four linked D1 records.
+ // All real Interaction/read/replay/rollback evidence above remains intact.
+ await batch([
+   statement("DELETE FROM crm_activity_automation_source_events WHERE tenant=? AND source_id=?",
+     "tenant-a",longestInteractionId),
+   statement("DELETE FROM crm_activity_interaction_receipts WHERE tenant=? AND key=?",
+     "tenant-a",longKey),
+   statement("DELETE FROM crm_audit WHERE tenant_id=? AND subject_id=? AND action=?",
+     "tenant-a",longestInteractionId,"activities.interaction.recorded"),
+   statement("DELETE FROM crm_activity_interactions WHERE tenant=? AND id=?",
+     "tenant-a",longestInteractionId)
+ ]);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_activity_interactions WHERE tenant=? AND id=?",
+   "tenant-a",longestInteractionId))[0].n,0,"long-ID fixture must not alter the next scenario");
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_activity_automation_source_events WHERE tenant=? AND source_id=?",
+   "tenant-a",longestInteractionId))[0].n,0);
 
  console.log(JSON.stringify({event:"crm.native-sk08a-interaction-source",result:"PASS",atomic:true,
    original_activities_owner:true,exact_origin_request:true,tenant_ab:true,
