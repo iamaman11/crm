@@ -1740,10 +1740,9 @@ impl ClosedOutcomeMetric {
         match deal.close_outcome() {
             None => count_one(&mut self.unknown_close_count)?,
             Some(outcome) => {
-                let date = crm_core_contracts::UtcInstant::from_unix_nanos(
-                    outcome.closed_at_unix_nanos(),
-                )
-                .utc_date();
+                let date =
+                    crm_core_contracts::UtcInstant::from_unix_nanos(outcome.closed_at_unix_nanos())
+                        .utc_date();
                 if period.is_none_or(|period| period.includes(date)) {
                     match deal.status() {
                         DealStatus::Won => count_one(&mut self.won_count)?,
@@ -2150,9 +2149,18 @@ impl PortfolioCounts {
                 &mut counts.overdue_expected_close_count,
                 row.overdue_expected_close_count,
             )?;
-            add_count(&mut counts.due_next_30_days_count, row.due_next_30_days_count)?;
-            add_count(&mut counts.no_expected_close_count, row.no_expected_close_count)?;
-            add_count(&mut counts.overdue_linked_task_count, row.overdue_linked_task_count)?;
+            add_count(
+                &mut counts.due_next_30_days_count,
+                row.due_next_30_days_count,
+            )?;
+            add_count(
+                &mut counts.no_expected_close_count,
+                row.no_expected_close_count,
+            )?;
+            add_count(
+                &mut counts.overdue_linked_task_count,
+                row.overdue_linked_task_count,
+            )?;
         }
         Ok(counts)
     }
@@ -2168,8 +2176,14 @@ impl PortfolioCounts {
             row.overdue_expected_close_count,
         )?;
         add_count(&mut self.due_next_30_days_count, row.due_next_30_days_count)?;
-        add_count(&mut self.no_expected_close_count, row.no_expected_close_count)?;
-        add_count(&mut self.overdue_linked_task_count, row.overdue_linked_task_count)
+        add_count(
+            &mut self.no_expected_close_count,
+            row.no_expected_close_count,
+        )?;
+        add_count(
+            &mut self.overdue_linked_task_count,
+            row.overdue_linked_task_count,
+        )
     }
 }
 
@@ -2273,7 +2287,8 @@ impl PortfolioMetrics {
                     .filter(|row| row.known_stage_age_count > 0)
                     .map(|row| {
                         u64::try_from(
-                            row.total_stage_age_seconds / i128::from(row.known_stage_age_count)
+                            row.total_stage_age_seconds
+                                / i128::from(row.known_stage_age_count)
                                 / 86_400,
                         )
                         .map_err(|_| ReadFailureReason::SalesMetricsStageTimeOverflow)

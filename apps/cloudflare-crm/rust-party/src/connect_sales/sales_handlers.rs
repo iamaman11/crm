@@ -1370,7 +1370,9 @@ fn portfolio_currency_totals(
         .collect()
 }
 
-fn closed_outcome_metric(value: sales_deals::ClosedOutcomeMetric) -> sale_wire::SalesClosedOutcomeMetric {
+fn closed_outcome_metric(
+    value: sales_deals::ClosedOutcomeMetric,
+) -> sale_wire::SalesClosedOutcomeMetric {
     sale_wire::SalesClosedOutcomeMetric {
         won_count: value.won_count,
         lost_count: value.lost_count,
@@ -1396,7 +1398,9 @@ impl sale_wire::DealService for SalesV2Service {
         let previous = if input.compare_previous {
             Some(
                 period
-                    .ok_or_else(|| ConnectError::invalid_argument("SALES_ANALYSIS_PERIOD_REQUIRED"))?
+                    .ok_or_else(|| {
+                        ConnectError::invalid_argument("SALES_ANALYSIS_PERIOD_REQUIRED")
+                    })?
                     .previous()
                     .map_err(ConnectError::invalid_argument)?,
             )
@@ -2982,10 +2986,7 @@ impl sale_wire::DealService for SalesV2Service {
                 .into_iter()
                 .map(forecast_currency_metric)
                 .collect(),
-            closed_outcomes: metrics
-                .closed_outcomes
-                .map(closed_outcome_metric)
-                .into(),
+            closed_outcomes: metrics.closed_outcomes.map(closed_outcome_metric).into(),
             analysis_period: input.analysis_period,
             as_of_unix_seconds: metrics.as_of_unix_seconds,
             ..Default::default()
