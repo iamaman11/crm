@@ -1448,35 +1448,44 @@ async fn stage_mutation(
         trace,
         admin,
     } = context;
-    if !admin && matches!(&input, StageMutation::Close(_)) {
-        return Ok(rejected("FORBIDDEN", ErrorCategory::Authorization));
-    }
     if !(8..=120).contains(&key.len()) {
         return Ok(rejected(
             "IDEMPOTENCY_KEY_REQUIRED",
             ErrorCategory::InvalidArgument,
         ));
     }
-    // Only client-owned typed input contributes to the digest. The stage at
-    // replay time cannot alter the idempotent identity of a CloseDeal request.
-    let grant = match delegation(
-        db,
-        tenant,
-        id,
-        actor,
-        admin,
-        crm_sales::OpportunityPermission::Advance,
-    )
-    .await?
-    {
+    // Moving a stage and closing a Deal are distinct delegated permissions.
+    let permission = match &input {
+        StageMutation::Move(_) => crm_sales::OpportunityPermission::Advance,
+        StageMutation::Close(_) => crm_sales::OpportunityPermission::Close,
+    };
+    let grant = match delegation(db, tenant, id, actor, admin, permission).await? {
         Ok(grant) => grant,
         Err(error) => return Ok(Err(error)),
     };
+    // Lead may close, but cannot turn the close into a manual attribution
+    // operation. An absent or empty selection preserves automatic attribution.
+    if let StageMutation::Close(value) = &input
+        && grant.is_some()
+        && value.credit_selection.as_ref().is_some_and(|selection| {
+            selection != &crm_sales::CloseCreditSelection::default()
+        })
+    {
+        return Ok(rejected(
+            "SALES_CLOSE_CREDIT_ADMIN_ONLY",
+            ErrorCategory::Authorization,
+        ));
+    }
+    // Preserve the historical administrator digest; delegated closes are
+    // actor-scoped so one Lead cannot replay another Lead's receipt.
     let digest = match &input {
         StageMutation::Move(value) if grant.is_some() => {
             hash("advance_delegated", id, &(actor, value))?
         }
         StageMutation::Move(value) => hash("advance", id, value)?,
+        StageMutation::Close(value) if grant.is_some() => {
+            hash("close_delegated", id, &(actor, value))?
+        }
         StageMutation::Close(value) => hash("close", id, value)?,
     };
     match prior(db, tenant, key).await {

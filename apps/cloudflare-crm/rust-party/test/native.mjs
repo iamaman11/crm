@@ -2228,67 +2228,220 @@ assert.equal((await salesV2("GetDeal",tenantB,{dealId,receiptIdempotencyKey:sale
 assert.equal((await salesV2("GetDeal",null,{dealId,receiptIdempotencyKey:saleCreate.precondition.idempotencyKey})).status,401);
 assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id=?",
   receiptRead.headers.get("x-request-id")))[0].n,0);
-// Isolated team grant proof using the original Deal CAS and receipts. No
-// global viewer permission, even when a viewer is an opportunity lead.
+// Opportunity Team Lead may close only a specifically granted Deal. The
+// original Sales owner keeps authorization, attribution, CAS, receipts and audit.
 {
   const id="opportunity-team-qa-"+randomUUID();
-  const created=await salesV2("CreateDeal",admin,{...saleCreate,dealId:id,
-    precondition:{idempotencyKey:"opportunity-create-"+id}});
-  assert.equal(created.status,200,describeProtobuf(created.body));
   const email="native-viewer@example.test";
-  const grant=(role,version,key)=>({dealId:id,email,...(role===undefined?{}:{role}),
-    precondition:{expectedVersion:version,idempotencyKey:"opportunity-"+key+"-"+id}});
-  const edit=(version,key,fields={})=>({dealId:id,name:{operation:{case:"set",value:"Opportunity team "+key}},
-    ...fields,precondition:{expectedVersion:version,idempotencyKey:"opportunity-edit-"+key+"-"+id}});
-  assert.equal((await salesV2("UpdateDeal",viewer,edit(1n,"denied"))).status,403);
-  assert.equal((await salesV2("SetOpportunityParticipant",viewer,grant(3,1n,"escalate"))).status,403);
-  assert.equal((await salesV2("SetOpportunityParticipant",admin,grant(0,1n,"unknown"))).status,400);
-  assert.equal((await salesV2("SetOpportunityParticipant",admin,{...grant(3,1n,"foreign"),email:"native-b@example.test"})).status,400);
-  const observer=await salesV2("SetOpportunityParticipant",admin,grant(1,1n,"observer"));
+  const creditTeamId="opportunity-credit-team-"+randomUUID();
+  const creditTeamKey="opportunity-credit-team-"+creditTeamId;
+  const creditTeam=await memberV2("CreateTeam",admin,{
+    teamId:creditTeamId,name:"Opportunity credit QA "+creditTeamId,
+    roster:{memberEmails:["native-a@example.test"]},
+    precondition:{idempotencyKey:creditTeamKey}
+  });
+  assert.equal(creditTeam.status,200,describeProtobuf(creditTeam.body));
+  const createQaDeal=async dealId=>salesV2("CreateDeal",admin,{
+    ...saleCreate,dealId,
+    owner:{owner:{case:"assigneeIdentity",value:"native-a@example.test"}},
+    precondition:{idempotencyKey:"opportunity-create-"+dealId}
+  });
+  const grant=(dealId,role,version,key)=>({dealId,email,...(role===undefined?{}:{role}),
+    precondition:{expectedVersion:version,idempotencyKey:"opportunity-"+key+"-"+dealId}});
+  const edit=(dealId,version,key,fields={})=>({dealId,
+    name:{operation:{case:"set",value:"Opportunity team "+key}},...fields,
+    precondition:{expectedVersion:version,idempotencyKey:"opportunity-edit-"+key+"-"+dealId}});
+  const closeInput=(dealId,version,key,fields={})=>({dealId,outcome:3,reasonCode:"qa",
+    ...fields,precondition:{expectedVersion:version,idempotencyKey:"opportunity-close-"+key+"-"+dealId}});
+  const created=await createQaDeal(id);
+  assert.equal(created.status,200,describeProtobuf(created.body));
+  assert.equal((await salesV2("UpdateDeal",viewer,edit(id,1n,"denied"))).status,403);
+  assert.equal((await salesV2("SetOpportunityParticipant",viewer,grant(id,3,1n,"escalate"))).status,403);
+  assert.equal((await salesV2("SetOpportunityParticipant",admin,grant(id,0,1n,"unknown"))).status,400);
+  assert.equal((await salesV2("SetOpportunityParticipant",admin,{...grant(id,3,1n,"foreign"),email:"native-b@example.test"})).status,400);
+
+  const observer=await salesV2("SetOpportunityParticipant",admin,grant(id,1,1n,"observer"));
   assert.equal(observer.status,200,describeProtobuf(observer.body));
   assert.equal(observer.body.deal.opportunityTeam[0].role,1);
-  assert.equal((await salesV2("SetOpportunityParticipant",admin,grant(1,1n,"observer"))).body.receipt.replayed,true);
-  assert.equal((await salesV2("SetOpportunityParticipant",admin,grant(3,1n,"stale"))).status,409);
-  assert.equal((await salesV2("UpdateDeal",viewer,edit(2n,"observer"))).status,403);
-  const contributor=await salesV2("SetOpportunityParticipant",admin,grant(2,2n,"contributor"));
+  assert.equal((await salesV2("SetOpportunityParticipant",admin,grant(id,1,1n,"observer"))).body.receipt.replayed,true);
+  assert.equal((await salesV2("SetOpportunityParticipant",admin,grant(id,3,1n,"stale"))).status,409);
+  const observerRead=(await salesV2("GetDeal",viewer,{dealId:id})).body;
+  assert.equal(observerRead.capabilities.close,false);
+  assert.equal(observerRead.capabilities.manageCloseCredit,false);
+  assert.equal((await salesV2("CloseDeal",viewer,closeInput(id,observer.body.deal.version,"observer"))).status,403);
+  assert.equal((await salesV2("UpdateDeal",viewer,edit(id,2n,"observer"))).status,403);
+
+  const contributor=await salesV2("SetOpportunityParticipant",admin,grant(id,2,2n,"contributor"));
   assert.equal(contributor.status,200,describeProtobuf(contributor.body));
-  const read=(await salesV2("GetDeal",viewer,{dealId:id})).body;
-  assert.equal(read.capabilities.edit,true);assert.equal(read.capabilities.editCommercial,false);
-  assert.equal(read.capabilities.advance,false);assert.equal(read.capabilities.manageOpportunityTeam,false);
-  assert.equal((await salesV2("UpdateDeal",viewer,edit(3n,"money",{probabilityBasisPoints:1200}))).status,403);
-  assert.equal((await salesV2("UpdateDeal",viewer,edit(3n,"owner",{owner:{owner:{case:"assigneeIdentity",value:email}}}))).status,403);
-  const command=edit(3n,"allowed");
+  const contributorRead=(await salesV2("GetDeal",viewer,{dealId:id})).body;
+  assert.equal(contributorRead.capabilities.edit,true);
+  assert.equal(contributorRead.capabilities.editCommercial,false);
+  assert.equal(contributorRead.capabilities.advance,false);
+  assert.equal(contributorRead.capabilities.close,false);
+  assert.equal(contributorRead.capabilities.manageOpportunityTeam,false);
+  assert.equal((await salesV2("CloseDeal",viewer,closeInput(id,contributor.body.deal.version,"contributor"))).status,403);
+  assert.equal((await salesV2("UpdateDeal",viewer,edit(id,3n,"money",{probabilityBasisPoints:1200}))).status,403);
+  assert.equal((await salesV2("UpdateDeal",viewer,edit(id,3n,"owner",{owner:{owner:{case:"assigneeIdentity",value:email}}}))).status,403);
+  const command=edit(id,3n,"allowed");
   const edited=await salesV2("UpdateDeal",viewer,command);
   assert.equal(edited.status,200,describeProtobuf(edited.body));
   assert.equal(edited.body.deal.version,4n);
   assert.equal((await salesV2("UpdateDeal",viewer,command)).body.receipt.replayed,true);
-  assert.equal((await salesV2("UpdateDeal",viewer,{...command,dealId})).status,403);
-  const lead=await salesV2("SetOpportunityParticipant",admin,grant(3,4n,"lead"));
+  assert.equal((await salesV2("UpdateDeal",viewer,{...command,dealId:"another-deal"})).status,403);
+
+  const lead=await salesV2("SetOpportunityParticipant",admin,grant(id,3,4n,"lead"));
   assert.equal(lead.status,200,describeProtobuf(lead.body));
-  assert.equal((await salesV2("GetDeal",viewer,{dealId:id})).body.capabilities.advance,true);
-  const commercial=await salesV2("UpdateDeal",viewer,edit(5n,"commercial",{probabilityBasisPoints:3300}));
+  const leadRead=(await salesV2("GetDeal",viewer,{dealId:id})).body;
+  assert.equal(leadRead.capabilities.advance,true);
+  assert.equal(leadRead.capabilities.close,true);
+  assert.equal(leadRead.capabilities.manageCloseCredit,false);
+  const adminRead=(await salesV2("GetDeal",admin,{dealId:id})).body;
+  assert.equal(adminRead.capabilities.close,true);
+  assert.equal(adminRead.capabilities.manageCloseCredit,true);
+  const commercial=await salesV2("UpdateDeal",viewer,edit(id,5n,"commercial",{probabilityBasisPoints:3300}));
   assert.equal(commercial.status,200,describeProtobuf(commercial.body));
   assert.equal(commercial.body.deal.probabilityBasisPoints,3300);
-  assert.equal((await salesV2("CloseDeal",viewer,{dealId:id,outcome:3,reasonCode:"qa",
-    precondition:{expectedVersion:6n,idempotencyKey:"opportunity-close-denied-"+id}})).status,403);
-  const revoke=await salesV2("SetOpportunityParticipant",admin,grant(undefined,6n,"revoke"));
+
+  const automaticSelection={};
+  const automaticPreview=await salesV2("PreviewDealCloseCredit",viewer,{
+    dealId:id,expectedVersion:6n,selection:automaticSelection
+  });
+  assert.equal(automaticPreview.status,200,describeProtobuf(automaticPreview.body));
+  assert.ok(automaticPreview.body.eligibleTeams.some(team=>team.id===creditTeamId));
+  assert.equal(automaticPreview.body.creditedTeam?.id,creditTeamId);
+  const manualSelection={leaveTeamUnallocated:true};
+  assert.equal((await salesV2("PreviewDealCloseCredit",viewer,{
+    dealId:id,expectedVersion:6n,selection:manualSelection
+  })).status,403);
+  assert.equal((await salesV2("CloseDeal",viewer,closeInput(id,6n,"manual-denied",{
+    creditSelection:manualSelection
+  }))).status,403);
+
+  const leadCloseInput=closeInput(id,6n,"lead",{
+    creditSelection:automaticSelection,
+    expectedCreditDecision:automaticPreview.body.expectedDecision
+  });
+  const leadClose=await salesV2("CloseDeal",viewer,leadCloseInput);
+  assert.equal(leadClose.status,200,describeProtobuf(leadClose.body));
+  assert.equal(leadClose.body.deal.version,7n);
+  assert.equal(leadClose.body.deal.status,3);
+  assert.equal(leadClose.body.deal.commercialCloseFact?.creditedTeam?.id,creditTeamId);
+  assert.equal(leadClose.body.receipt?.replayed,false);
+  assert.equal((await salesV2("CloseDeal",viewer,leadCloseInput)).body.receipt?.replayed,true);
+  assert.equal((await salesV2("CloseDeal",admin,leadCloseInput)).status,409,
+    "an administrator must not replay a Lead-scoped close receipt");
+  assert.equal((await salesV2("ReopenDeal",viewer,{
+    dealId:id,reasonCode:"qa.reopen",
+    precondition:{expectedVersion:7n,idempotencyKey:"opportunity-reopen-denied-"+id}
+  })).status,403);
+  const reopened=await salesV2("ReopenDeal",admin,{
+    dealId:id,reasonCode:"qa.reopen",
+    precondition:{expectedVersion:7n,idempotencyKey:"opportunity-reopen-"+id}
+  });
+  assert.equal(reopened.status,200,describeProtobuf(reopened.body));
+  assert.equal(reopened.body.deal.version,8n);
+  assert.equal(reopened.body.deal.status,1);
+
+  const adminManualPreview=await salesV2("PreviewDealCloseCredit",admin,{
+    dealId:id,expectedVersion:8n,selection:manualSelection
+  });
+  assert.equal(adminManualPreview.status,200,describeProtobuf(adminManualPreview.body));
+  assert.equal(adminManualPreview.body.creditedTeam,undefined);
+  const adminManualClose=await salesV2("CloseDeal",admin,closeInput(id,8n,"admin-manual",{
+    creditSelection:manualSelection,
+    expectedCreditDecision:adminManualPreview.body.expectedDecision
+  }));
+  assert.equal(adminManualClose.status,200,describeProtobuf(adminManualClose.body));
+  assert.equal(adminManualClose.body.deal.version,9n);
+  assert.equal(adminManualClose.body.deal.commercialCloseFact?.creditedTeam,undefined);
+  const revoke=await salesV2("SetOpportunityParticipant",admin,grant(id,undefined,9n,"revoke"));
   assert.equal(revoke.status,200,describeProtobuf(revoke.body));
   assert.equal(revoke.body.deal.opportunityTeam.length,0);
   assert.equal((await salesV2("UpdateDeal",viewer,command)).status,403);
-  assert.equal((await salesV2("UpdateDeal",viewer,edit(7n,"revoked"))).status,403);
-  assert.equal((await salesV2("SetOpportunityParticipant",tenantB,grant(3,7n,"other"))).status,404);
+  assert.equal((await salesV2("UpdateDeal",viewer,edit(id,10n,"revoked"))).status,403);
+  assert.equal((await salesV2("CloseDeal",tenantB,closeInput(id,9n,"foreign-tenant"))).status,404);
   const events=(await salesV2("ListDealEvents",viewer,{dealId:id,page:{pageSize:25}})).body.events;
   assert.deepEqual(events.filter(e=>e.opportunityTeamAfter).map(e=>e.opportunityTeamAfter.participants.map(m=>m.role)),[[],[3],[2],[1]]);
-  const audit=(await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND action='sales_deals.opportunity_team'","tenant-a",id))[0].n;
-  assert.equal(audit,4);
-  // Keep all other deterministic historical fixtures unchanged.
-  await batch([
-    statement("DELETE FROM crm_sales_deal_events WHERE tenant=? AND deal_id=?","tenant-a",id),
-    statement("DELETE FROM crm_sales_deal_receipts WHERE tenant=? AND json_extract(state,'$.deal_id')=?","tenant-a",id),
-    statement("DELETE FROM crm_audit WHERE tenant_id=? AND subject_id=?","tenant-a",id),
-    statement("DELETE FROM crm_sales_deal_records WHERE tenant=? AND id=?","tenant-a",id)
+  assert.equal(events.filter(e=>e.kind===4).length,2);
+  assert.equal(events.filter(e=>e.kind===5).length,1);
+  assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND action='sales_deals.opportunity_team'","tenant-a",id))[0].n,4);
+  assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND action='sales_deals.close'","tenant-a",id))[0].n,2);
+  assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND action='sales_deals.reopen'","tenant-a",id))[0].n,1);
+
+  // An ungranted Deal and a revoked grant cannot use the SelfWrite transport.
+  const ungrantedId="opportunity-ungranted-"+randomUUID();
+  const ungranted=await createQaDeal(ungrantedId);
+  assert.equal(ungranted.status,200,describeProtobuf(ungranted.body));
+  assert.equal((await salesV2("CloseDeal",viewer,closeInput(ungrantedId,1n,"ungranted"))).status,403);
+  const revokedId="opportunity-revoked-"+randomUUID();
+  const revoked=await createQaDeal(revokedId);
+  assert.equal(revoked.status,200,describeProtobuf(revoked.body));
+  const revokedGrant=await salesV2("SetOpportunityParticipant",admin,grant(revokedId,3,1n,"revoked-grant"));
+  assert.equal(revokedGrant.status,200,describeProtobuf(revokedGrant.body));
+  const revokedRemoval=await salesV2("SetOpportunityParticipant",admin,grant(revokedId,undefined,2n,"revoked-removal"));
+  assert.equal(revokedRemoval.status,200,describeProtobuf(revokedRemoval.body));
+  const revokedCloseKey="opportunity-close-revoked-"+revokedId;
+  assert.equal((await salesV2("CloseDeal",viewer,closeInput(revokedId,3n,"revoked"))).status,403);
+  assert.equal((await sql("SELECT COUNT(*) n FROM crm_sales_deal_receipts WHERE tenant=? AND key=?","tenant-a",revokedCloseKey))[0].n,0);
+  assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND action='sales_deals.close'","tenant-a",revokedId))[0].n,0);
+
+  // Enrollment version is pinned in the grant; reactivation cannot restore it.
+  const versionId="opportunity-member-version-"+randomUUID();
+  const versionDeal=await createQaDeal(versionId);
+  assert.equal(versionDeal.status,200,describeProtobuf(versionDeal.body));
+  const versionGrant=await salesV2("SetOpportunityParticipant",admin,grant(versionId,3,1n,"version-grant"));
+  assert.equal(versionGrant.status,200,describeProtobuf(versionGrant.body));
+  const memberRow=(await sql("SELECT version FROM crm_users WHERE tenant_id=? AND email=?","tenant-a",email))[0];
+  const originalMemberVersion=Number(memberRow.version);
+  assert.ok(Number.isSafeInteger(originalMemberVersion)&&originalMemberVersion>0);
+  await sql("UPDATE crm_users SET active=0,version=version+1 WHERE tenant_id=? AND email=?","tenant-a",email);
+  await sql("UPDATE crm_users SET active=1,version=version+1 WHERE tenant_id=? AND email=?","tenant-a",email);
+  const staleMemberRead=(await salesV2("GetDeal",viewer,{dealId:versionId})).body;
+  assert.equal(staleMemberRead.capabilities.close,false);
+  assert.equal((await salesV2("CloseDeal",viewer,closeInput(versionId,2n,"stale-member"))).status,403);
+  const staleGrantRemoval=await salesV2("SetOpportunityParticipant",admin,grant(versionId,undefined,2n,"stale-member-revoke"));
+  assert.equal(staleGrantRemoval.status,200,describeProtobuf(staleGrantRemoval.body));
+  await sql("UPDATE crm_users SET version=?,active=1 WHERE tenant_id=? AND email=?",originalMemberVersion,"tenant-a",email);
+
+  // A concurrent CloseDeal and grant revocation contend on the same original
+  // Deal version and the same version-pinned D1 predicate. Exactly one wins.
+  const raceId="opportunity-close-revoke-race-"+randomUUID();
+  const raceDeal=await createQaDeal(raceId);
+  assert.equal(raceDeal.status,200,describeProtobuf(raceDeal.body));
+  const raceGrant=await salesV2("SetOpportunityParticipant",admin,grant(raceId,3,1n,"race-grant"));
+  assert.equal(raceGrant.status,200,describeProtobuf(raceGrant.body));
+  const raceCloseKey="opportunity-close-race-"+raceId;
+  const [raceClose,raceRevoke]=await Promise.all([
+    salesV2("CloseDeal",viewer,closeInput(raceId,2n,"race")),
+    salesV2("SetOpportunityParticipant",admin,grant(raceId,undefined,2n,"race-revoke"))
   ]);
-  console.log(JSON.stringify({event:"crm.native-opportunity-team",result:"PASS",roles:true,scoped_update:true,revocation:true,receipt:true,tenant_isolation:true,history:true}));
+  const closeWon=raceClose.status===200;
+  const revokeWon=raceRevoke.status===200;
+  assert.notEqual(closeWon,revokeWon,"close and revocation must not both commit or both lose");
+  if(closeWon) assert.equal(raceRevoke.status,409);
+  else assert.ok([403,409].includes(raceClose.status));
+  assert.equal((await sql("SELECT COUNT(*) n FROM crm_sales_deal_receipts WHERE tenant=? AND key=?","tenant-a",raceCloseKey))[0].n,closeWon?1:0);
+  assert.equal((await sql("SELECT COUNT(*) n FROM crm_sales_deal_events WHERE tenant=? AND deal_id=? AND action='closed'","tenant-a",raceId))[0].n,closeWon?1:0);
+  assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND action='sales_deals.close'","tenant-a",raceId))[0].n,closeWon?1:0);
+  assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND action='sales_deals.opportunity_team'","tenant-a",raceId))[0].n,revokeWon?2:1);
+
+  // Remove only these deterministic QA records after every assertion.
+  const qaIds=[id,ungrantedId,revokedId,versionId,raceId];
+  await batch(qaIds.flatMap(dealId=>[
+    statement("DELETE FROM crm_sales_deal_events WHERE tenant=? AND deal_id=?","tenant-a",dealId),
+    statement("DELETE FROM crm_sales_deal_receipts WHERE tenant=? AND json_extract(state,'$.deal_id')=?","tenant-a",dealId),
+    statement("DELETE FROM crm_audit WHERE tenant_id=? AND subject_id=?","tenant-a",dealId),
+    statement("DELETE FROM crm_sales_deal_records WHERE tenant=? AND id=?","tenant-a",dealId)
+  ]));
+  await batch([
+    statement("DELETE FROM crm_team_receipts WHERE tenant=? AND key=?","tenant-a",creditTeamKey),
+    statement("DELETE FROM crm_audit WHERE tenant_id=? AND subject_id=?","tenant-a",creditTeamId),
+    statement("DELETE FROM crm_access_teams WHERE tenant=? AND id=?","tenant-a",creditTeamId)
+  ]);
+  console.log(JSON.stringify({event:"crm.native-opportunity-team-close",result:"PASS",
+    explicit_roles:true,lead_close:true,automatic_credit:true,admin_manual_credit:true,
+    actor_scoped_receipt:true,revocation:true,member_version_pin:true,concurrent_cas:true,
+    reopen_admin_only:true,tenant_isolation:true,history_audit_receipts:true}));
 }
 const updateSale={dealId,
   name:{operation:{case:"set",value:"Updated Connect Deal"}},

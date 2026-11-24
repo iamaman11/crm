@@ -60,6 +60,8 @@ message DealCapabilities {
   bool close = 5;
   bool reopen = 6;
   bool manage_opportunity_team = 7;
+  // Only administrators may choose manual close-time commercial attribution.
+  bool manage_close_credit = 8;
 }
 
 message Deal {

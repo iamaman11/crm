@@ -3193,6 +3193,9 @@ impl sale_wire::DealService for SalesV2Service {
                 territory_id: value.territory_id.clone(),
             })
             .unwrap_or_default();
+        if !self.admin && selection != crm_sales::CloseCreditSelection::default() {
+            return Err(ConnectError::permission_denied("SALES_CLOSE_CREDIT_ADMIN_ONLY"));
+        }
         let preview = sales_deals::preview_close_credit(
             &self.d1()?,
             &self.tenant,
@@ -3564,9 +3567,10 @@ impl sale_wire::DealService for SalesV2Service {
                 edit_commercial: open && permits(crm_sales::OpportunityPermission::Commercial),
                 advance: open && permits(crm_sales::OpportunityPermission::Advance),
                 assign_owner: open && self.admin,
-                close: open && self.admin,
+                close: open && permits(crm_sales::OpportunityPermission::Close),
                 reopen: !open && self.admin,
                 manage_opportunity_team: self.admin,
+                manage_close_credit: open && self.admin,
                 ..Default::default()
             })
             .into(),

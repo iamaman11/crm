@@ -1047,7 +1047,7 @@ const RPC_POLICIES: &[(&str, RpcPolicy)] = &[
     (
         "/crm.sales.v2.DealService/CloseDeal",
         RpcPolicy {
-            permission: RpcPermission::Write,
+            permission: RpcPermission::SelfWrite,
         },
     ),
     (

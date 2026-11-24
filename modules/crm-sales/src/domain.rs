@@ -52,6 +52,7 @@ pub enum OpportunityPermission {
     Edit,
     Commercial,
     Advance,
+    Close,
 }
 
 impl OpportunityTeamRole {
@@ -59,7 +60,13 @@ impl OpportunityTeamRole {
         match self {
             Self::Observer => false,
             Self::Contributor => permission == OpportunityPermission::Edit,
-            Self::Lead => true,
+            Self::Lead => matches!(
+                permission,
+                OpportunityPermission::Edit
+                    | OpportunityPermission::Commercial
+                    | OpportunityPermission::Advance
+                    | OpportunityPermission::Close
+            ),
         }
     }
 
@@ -1151,6 +1158,17 @@ mod tests {
         assert!(member.role.permits(OpportunityPermission::Edit));
         assert!(!member.role.permits(OpportunityPermission::Commercial));
         assert!(!member.role.permits(OpportunityPermission::Advance));
+        assert!(!member.role.permits(OpportunityPermission::Close));
+        let lead = OpportunityTeamRole::Lead;
+        assert!(lead.permits(OpportunityPermission::Edit));
+        assert!(lead.permits(OpportunityPermission::Commercial));
+        assert!(lead.permits(OpportunityPermission::Advance));
+        assert!(lead.permits(OpportunityPermission::Close));
+        let observer = OpportunityTeamRole::Observer;
+        assert!(!observer.permits(OpportunityPermission::Edit));
+        assert!(!observer.permits(OpportunityPermission::Commercial));
+        assert!(!observer.permits(OpportunityPermission::Advance));
+        assert!(!observer.permits(OpportunityPermission::Close));
         assert!(
             deal.set_opportunity_participant(2, email, Some(member.clone()), 11)
                 .is_err()

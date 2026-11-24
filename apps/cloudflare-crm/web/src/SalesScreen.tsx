@@ -851,18 +851,20 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
           <h3>Коммерческая атрибуция</h3>
           <p>Здесь определяется коммерческий результат, а не исполнитель запроса. Сделка не закрывается при предварительном просмотре.</p>
           <QueryNotice query={creditPreview}/>
-          {advance.owner?.owner.case!=="teamId"&&<SelectField label="Коммерческая команда" value={creditTeam}
-            onChange={e=>setCreditTeam(e.target.value)}>
-            <option value="">Автоматически по членству</option>
-            <option value="unallocated">Не распределять по командам</option>
-            {(creditPreview.data?.response.eligibleTeams??[]).map(t=><option key={t.id} value={"team:"+t.id}>{t.name}</option>)}
-          </SelectField>}
-          <SelectField label="Коммерческая территория" value={creditTerritory}
-            disabled={!!closeCredit?.response.territoryAssigned||territories.busy}
-            onChange={e=>setCreditTerritory(e.target.value)}>
-            <option value="">По назначению клиента или не распределять</option>
-            {(territories.data??[]).filter(t=>!t.configuration?.archived).map(t=><option key={t.territoryId} value={t.territoryId}>{t.configuration?.name}</option>)}
-          </SelectField>
+          {editCapabilities?.manageCloseCredit?<>
+            {advance.owner?.owner.case!=="teamId"&&<SelectField label="Коммерческая команда" value={creditTeam}
+              onChange={e=>setCreditTeam(e.target.value)}>
+              <option value="">Автоматически по членству</option>
+              <option value="unallocated">Не распределять по командам</option>
+              {(creditPreview.data?.response.eligibleTeams??[]).map(t=><option key={t.id} value={"team:"+t.id}>{t.name}</option>)}
+            </SelectField>}
+            <SelectField label="Коммерческая территория" value={creditTerritory}
+              disabled={!!closeCredit?.response.territoryAssigned||territories.busy}
+              onChange={e=>setCreditTerritory(e.target.value)}>
+              <option value="">По назначению клиента или не распределять</option>
+              {(territories.data??[]).filter(t=>!t.configuration?.archived).map(t=><option key={t.territoryId} value={t.territoryId}>{t.configuration?.name}</option>)}
+            </SelectField>
+          </>:<p>Коммерческая атрибуция рассчитывается автоматически по текущему ответственному и действующим назначениям. Ручная корректировка доступна администратору.</p>}
           {closeCredit&&<><p>Сотрудник: {closeCredit.response.creditedActor??"Не распределён"}</p>
             <p>Команда: {closeCredit.response.creditedTeam?.name??"Не распределена"} · территория: {closeCredit.response.creditedTerritory?.name??"Не распределена"}</p></>}
           <Button type="button" variant="secondary" disabled={creditPreview.busy}
