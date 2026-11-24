@@ -49,8 +49,23 @@ try{
      // Signed/enrolled test actor, real persisted role; no JWT fabrication or role header.
      // Register cleanup before UPDATE: its response can be lost after commit.
      roleMayHaveChanged=true;
+     const beforeFence=(await query(
+       "SELECT revision FROM crm_sales_forecast_revisions WHERE tenant=?",[setup.tenant_a])).results;
      const changed=await query("UPDATE crm_users SET role='viewer' WHERE email=? AND tenant_id=? AND active=1 AND role='admin'",[principal,setup.tenant_a]);
-     assert.equal(changed.meta.changes,1,"Only the isolated E2E actor may change role");
+     // D1 meta.changes includes trigger writes (the forecast fence). Prove
+     // the direct role transition and exactly one tenant-local fence instead
+     // of assuming sqlite3_total_changes() counts only the target row.
+     assert.ok(Number.isInteger(changed.meta.changes)&&changed.meta.changes>=1,
+       "The isolated E2E actor role mutation must commit");
+     const [roleRows,fenceRows]=await Promise.all([
+       query("SELECT role FROM crm_users WHERE email=? AND tenant_id=? AND active=1",[principal,setup.tenant_a]),
+       query("SELECT revision FROM crm_sales_forecast_revisions WHERE tenant=?",[setup.tenant_a])
+     ]);
+     assert.deepEqual(roleRows.results,[{role:"viewer"}],"The isolated actor must become viewer");
+     assert.equal(fenceRows.results[0]?.revision,beforeFence[0]?.revision+1,
+       "The member update must advance exactly one tenant-local forecast fence");
+     console.log(JSON.stringify({event:"crm.e2e-viewer-transition",result:"PASS",
+       direct_role:"viewer",d1_total_changes:changed.meta.changes,fence_advanced:1}));
      return restoreRole;
    }
  });
