@@ -69,8 +69,10 @@ with TemporaryDirectory() as temporary:
         "scripts/crm-rpc-descriptors.test.mjs", "scripts/crm-clean-schema.test.mjs",
         "apps/cloudflare-crm/test/architecture-lint.test.mjs")
     run(pnpm, "web:lint")
-    for package in ["@ultimate-crm/client", "@ultimate-crm/ui", "cloudflare-crm"]:
-        run(pnpm, "--filter", package, "typecheck")
+    # pnpm selects the actual CRM workspace dependency closure. Execute tsc
+    # directly so a missing package script cannot silently skip typechecking.
+    run(pnpm, "--recursive", "--filter", "cloudflare-crm...", "--fail-if-no-match",
+        "--workspace-concurrency=2", "exec", "tsc", "-p", "tsconfig.json", "--noEmit")
     run(pnpm, "exec", "vitest", "run", "packages/client/src/cloudflare-v2-contract.test.ts",
         "apps/cloudflare-crm/test/client-routes.test.mjs")
     run(pnpm, "--filter", "cloudflare-crm", "test")
