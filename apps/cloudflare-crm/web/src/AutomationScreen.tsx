@@ -38,7 +38,10 @@ export function AutomationScreen() {
       (await api.automations.getAutomationRule({
         ruleId:resourceId,receiptIdempotencyKey:key
       },{signal})).confirmedMutation,
-    refresh:async()=>{await rules.reload();}
+    refresh:async()=>{
+      if(ruleCursor==="")await rules.reload();
+      else setRuleCursor("");
+    }
   });
   const runMutation=useMutation({
     storageKey:"crm.automation.run.pending.v1",
@@ -50,7 +53,11 @@ export function AutomationScreen() {
         receiptIdempotencyKey:key
       },{signal})).confirmedMutation;
     },
-    refresh:async()=>{await runs.reload();}
+    refresh:async(marker)=>{
+      const id=marker.resourceId.split("/")[0];
+      if(runFilter===id&&runCursor==="")await runs.reload();
+      else {setRunFilter(id);setRunCursor("");}
+    }
   });
   const reset=()=>{
     setEditing(undefined);setDraftId(newId());setSubject("");setAssignee("");
@@ -86,7 +93,12 @@ export function AutomationScreen() {
                 expectedRuleVersion:rule.version,
                 precondition:{idempotencyKey:runMutation.key}
               },rule.ruleId+"/"+interactionId.trim()
-            ),async()=>{setRunFilter(rule.ruleId);setRunCursor("");await runs.reload();})}>
+            ),async()=>{
+                // A changed filter installs a new query loader; reloading the
+                // obsolete one races cancellation after the Task already committed.
+                if(runFilter===rule.ruleId&&runCursor==="")await runs.reload();
+                else {setRunFilter(rule.ruleId);setRunCursor("");}
+              })}>
             Выполнить для взаимодействия
           </Button>
         </>}
@@ -113,7 +125,11 @@ export function AutomationScreen() {
             dueAfterSeconds:BigInt(seconds),
             precondition:{idempotencyKey:ruleMutation.key,
               ...(editing?{expectedVersion:editing.version}:{})}
-          },id),async()=>{reset();setRuleCursor("");await rules.reload();});
+          },id),async()=>{
+            reset();
+            if(ruleCursor==="")await rules.reload();
+            else setRuleCursor("");
+          });
         }}>
           <h3>{editing?"Изменить правило":"Создать правило"}</h3>
           <p>Только конкретное событие и действие CreateTask через оригинальный Rust owner.
