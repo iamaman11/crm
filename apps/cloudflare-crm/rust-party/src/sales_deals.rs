@@ -499,7 +499,10 @@ pub(super) async fn create_typed(
         ));
     }
     if input.owner.is_some() && input.automatic_routing.is_some() {
-        return Ok(rejected("SALES_ROUTING_MANUAL_AUTO_CONFLICT", ErrorCategory::InvalidArgument));
+        return Ok(rejected(
+            "SALES_ROUTING_MANUAL_AUTO_CONFLICT",
+            ErrorCategory::InvalidArgument,
+        ));
     }
     let resolution = if let Some(auto) = &input.automatic_routing {
         let facts = crm_sales::SalesRoutingFacts {
@@ -535,18 +538,29 @@ pub(super) async fn create_typed(
         resolved.decision.clone()
     } else if let Some(selection) = &input.owner {
         if !eligible_owner(db, tenant, selection).await? {
-            return Ok(rejected("SALES_OWNER_NOT_ELIGIBLE", ErrorCategory::InvalidArgument));
+            return Ok(rejected(
+                "SALES_OWNER_NOT_ELIGIBLE",
+                ErrorCategory::InvalidArgument,
+            ));
         }
-        crm_sales::SalesRoutingDecision::explicit(selection.clone(), crm_sales::SalesRoutingSource::Manual)
+        crm_sales::SalesRoutingDecision::explicit(
+            selection.clone(),
+            crm_sales::SalesRoutingSource::Manual,
+        )
     } else {
         crm_sales::SalesRoutingDecision::explicit(
-            SalesOwnerScope::Actor(actor.to_owned()), crm_sales::SalesRoutingSource::Creator)
+            SalesOwnerScope::Actor(actor.to_owned()),
+            crm_sales::SalesRoutingSource::Creator,
+        )
     };
     let owner = match decision.selected_owner.domain_owner() {
         Ok(owner) => owner,
         Err(e) => return Ok(rejected_sdk(e)),
     };
-    let guarded_owner = resolution.as_ref().map(|r| &r.decision.selected_owner).or(input.owner.as_ref());
+    let guarded_owner = resolution
+        .as_ref()
+        .map(|r| &r.decision.selected_owner)
+        .or(input.owner.as_ref());
     let Some(catalog_stage) =
         super::sales_pipelines::active_stage(db, tenant, &input.pipeline_id, &input.stage_id)
             .await?
@@ -599,23 +613,26 @@ pub(super) async fn create_typed(
             Err(code) => return Ok(rejected(code, ErrorCategory::InvalidArgument)),
         },
     };
-    let deal = match Deal::create_with_routing(CreateDeal {
-        deal_id: id,
-        name: input.name,
-        owner,
-        account: Some(ResourceRef {
-            resource_type: "crm.customer-accounts".into(),
-            resource_id: account_id.as_str().into(),
-            version: None,
-        }),
-        primary_contact,
-        stage,
-        amount,
-        expected_close_date,
-        probability,
-        forecast_category: input.forecast_category,
-        occurred_at_unix_nanos: now_nanos(),
-    }, decision) {
+    let deal = match Deal::create_with_routing(
+        CreateDeal {
+            deal_id: id,
+            name: input.name,
+            owner,
+            account: Some(ResourceRef {
+                resource_type: "crm.customer-accounts".into(),
+                resource_id: account_id.as_str().into(),
+                version: None,
+            }),
+            primary_contact,
+            stage,
+            amount,
+            expected_close_date,
+            probability,
+            forecast_category: input.forecast_category,
+            occurred_at_unix_nanos: now_nanos(),
+        },
+        decision,
+    ) {
         Ok(x) => x,
         Err(e) => return Ok(rejected_sdk(e)),
     };
