@@ -3105,6 +3105,60 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      console.log(JSON.stringify({event:"crm.native-shared-projection",result:"PASS",desktop:projectionMetrics,mobile:mobileProjection}));
      checkpoint("Shared native table projection: compact desktop and keyboard-scroll mobile");
 
+     // Reuse the two accepted QA records, without adding analytics fixtures.
+     // Admin grants the fixed template; a distinct signed viewer uses the
+     // exact same generated form on both original owner record pages.
+     const coordinationName="Browser coordinator "+runId;
+     await navigate("team","Команда и распределение работы");
+     await page.getByRole("button",{name:"Создать команду",exact:true}).click();
+     await page.getByLabel("Название команды",{exact:true}).fill(coordinationName);
+     await teamForm.getByLabel("native-viewer@example.test",{exact:true}).check();
+     await mutation(teamForm.getByRole("button",{name:"Сохранить команду",exact:true}),"CreateTeam");
+     const coordinationId=(await sql("SELECT id FROM crm_access_teams WHERE tenant=? AND json_extract(state,'$.name')=?",tenantA,coordinationName))[0].id;
+     const coordinationRow=page.getByRole("row").filter({hasText:coordinationName});
+     await coordinationRow.getByRole("button",{name:"Полномочия координатора",exact:true}).click();
+     const coordinatorForm=page.getByRole("form",{name:"Координатор очереди",exact:true});
+     await coordinatorForm.getByLabel("Сотрудник-координатор",{exact:true}).selectOption("native-viewer@example.test");
+     await mutation(coordinatorForm.getByRole("button",{name:"Сохранить полномочия координатора",exact:true}),"UpdateTeam");
+     await coordinationRow.getByText(/Координатор очереди/).waitFor();
+     const coordinationTask=await firstId("crm_activity_task_records","subject",poolName);
+     await navigate("tasks/"+encodeURIComponent(coordinationTask),"Карточка задачи");
+     await page.getByRole("button",{name:"Редактировать задачу",exact:true}).click();
+     await page.getByLabel("Переназначить задачу",{exact:true}).selectOption("team:"+coordinationId);
+     await mutation(page.getByRole("button",{name:"Сохранить изменения задачи",exact:true}),"UpdateTask");
+     await navigate("sales/"+encodeURIComponent(ownedDealId),"Карточка сделки");
+     await page.getByRole("button",{name:"Редактировать сделку",exact:true}).click();
+     await page.getByLabel("Ответственный за сделку",{exact:true}).selectOption("team:"+coordinationId);
+     await mutation(page.getByRole("button",{name:"Сохранить сделку",exact:true}),"UpdateDeal");
+     const coordinatorContext=await browser.newContext({extraHTTPHeaders:viewerHeaders});
+     watch(coordinatorContext);
+     try {
+       const coordinatorPage=await coordinatorContext.newPage();
+       for(const [route,id,method,table,editLabel] of [
+         ["tasks",coordinationTask,"UpdateTask","crm_activity_task_records","Редактировать задачу"],
+         ["sales",ownedDealId,"UpdateDeal","crm_sales_deal_records","Редактировать сделку"]
+       ]){
+         await coordinatorPage.goto(base+"/#"+route+"/"+encodeURIComponent(id));
+         const distribution=coordinatorPage.getByRole("form",{name:"Распределение из очереди команды",exact:true});
+         await distribution.waitFor();
+         await expect(coordinatorPage.getByRole("button",{name:editLabel,exact:true})).toHaveCount(0);
+         await distribution.getByLabel("Назначить сотруднику команды",{exact:true}).selectOption("native-viewer@example.test");
+         const response=coordinatorPage.waitForResponse(r=>responsePathEndsWith(r,"/"+method)&&r.request().method()==="POST");
+         await distribution.getByRole("button",{name:"Распределить из очереди",exact:true}).click();
+         assert.equal((await response).status(),200);
+         await distribution.waitFor({state:"hidden"});
+         await coordinatorPage.reload();
+         await coordinatorPage.getByText("Ответственный: native-viewer@example.test",{exact:true}).waitFor();
+         assert.equal((await sql("SELECT json_extract(state,'$.owner.actor_id') AS owner FROM "+table+" WHERE tenant=? AND id=?",tenantA,id))[0].owner,"native-viewer@example.test");
+       }
+     } finally {await coordinatorContext.close();}
+     await navigate("team","Команда и распределение работы");
+     await coordinationRow.getByRole("button",{name:"Полномочия координатора",exact:true}).click();
+     await coordinatorForm.getByLabel("Сотрудник-координатор",{exact:true}).selectOption("native-viewer@example.test");
+     await coordinatorForm.getByLabel("Действие с полномочиями",{exact:true}).selectOption("revoke");
+     await mutation(coordinatorForm.getByRole("button",{name:"Сохранить полномочия координатора",exact:true}),"UpdateTeam");
+     await expect(coordinationRow.getByText(/Координатор очереди/)).toHaveCount(0);
+     checkpoint("SK-07 shared Team coordinator, signed viewer distributes Task and Deal, reload and revoke");
 
    }
 

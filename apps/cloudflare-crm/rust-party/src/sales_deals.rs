@@ -705,8 +705,9 @@ pub(super) async fn active_participant(
         return Ok(None);
     };
     Ok(
-        (super::access_members::member_version(db, tenant, actor).await? == Some(grant.member_version))
-            .then(|| grant.clone()),
+        (super::access_members::member_version(db, tenant, actor).await?
+            == Some(grant.member_version))
+        .then(|| grant.clone()),
     )
 }
 
@@ -780,7 +781,9 @@ pub(super) async fn set_participant(
         ));
     }
     let participant = if let Some(role) = input.role {
-        let Some(member_version) = super::access_members::member_version(db, tenant, &input.email).await? else {
+        let Some(member_version) =
+            super::access_members::member_version(db, tenant, &input.email).await?
+        else {
             return Ok(rejected(
                 "SALES_OPPORTUNITY_MEMBER_INELIGIBLE",
                 ErrorCategory::InvalidArgument,
@@ -862,18 +865,32 @@ pub(super) async fn update_typed(
     let distribution = input.team_distribution.clone();
     let distribution_target = if let Some(scope) = distribution.as_ref() {
         let Some(SalesOwnerScope::Actor(target)) = input.owner.as_ref() else {
-            return Ok(rejected("SALES_DISTRIBUTION_OWNER_REQUIRED", ErrorCategory::InvalidArgument));
+            return Ok(rejected(
+                "SALES_DISTRIBUTION_OWNER_REQUIRED",
+                ErrorCategory::InvalidArgument,
+            ));
         };
-        if input.name.is_some() || input.clear_name == Some(true)
-            || input.amount_minor_units.is_some() || input.currency.is_some() || input.clear_amount == Some(true)
-            || input.probability_bps.is_some() || input.use_stage_probability || input.forecast_category.is_some()
+        if input.name.is_some()
+            || input.clear_name == Some(true)
+            || input.amount_minor_units.is_some()
+            || input.currency.is_some()
+            || input.clear_amount == Some(true)
+            || input.probability_bps.is_some()
+            || input.use_stage_probability
+            || input.forecast_category.is_some()
             || !matches!(&input.primary_contact, FieldChange::Keep)
             || !matches!(&input.expected_close_date, FieldChange::Keep)
         {
-            return Ok(rejected("SALES_DISTRIBUTION_OWNER_ONLY", ErrorCategory::Authorization));
+            return Ok(rejected(
+                "SALES_DISTRIBUTION_OWNER_ONLY",
+                ErrorCategory::Authorization,
+            ));
         }
         if !super::access_teams::may_distribute(db, tenant, actor, scope, target).await? {
-            return Ok(rejected("SALES_DISTRIBUTION_DENIED", ErrorCategory::Authorization));
+            return Ok(rejected(
+                "SALES_DISTRIBUTION_DENIED",
+                ErrorCategory::Authorization,
+            ));
         }
         Some(target.clone())
     } else {
@@ -920,8 +937,13 @@ pub(super) async fn update_typed(
         return Ok(rejected("NOT_FOUND", ErrorCategory::NotFound));
     };
     if let Some(scope) = distribution.as_ref() {
-        if deal.status() != DealStatus::Open || !matches!(deal.owner(), DealOwner::Team(team) if team.as_str() == scope.team_id) {
-            return Ok(rejected("SALES_DISTRIBUTION_SOURCE_CHANGED", ErrorCategory::Authorization));
+        if deal.status() != DealStatus::Open
+            || !matches!(deal.owner(), DealOwner::Team(team) if team.as_str() == scope.team_id)
+        {
+            return Ok(rejected(
+                "SALES_DISTRIBUTION_SOURCE_CHANGED",
+                ErrorCategory::Authorization,
+            ));
         }
     }
     if input.clear_name == Some(true) && input.name.is_some() {

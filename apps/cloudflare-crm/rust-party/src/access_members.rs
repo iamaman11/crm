@@ -341,7 +341,11 @@ struct MemberVersion {
     version: String,
 }
 
-pub(super) async fn member_version(db: &D1Database, tenant: &str, email: &str) -> Result<Option<i64>> {
+pub(super) async fn member_version(
+    db: &D1Database,
+    tenant: &str,
+    email: &str,
+) -> Result<Option<i64>> {
     if self::email(email).ok().as_deref() != Some(email) {
         return Ok(None);
     }

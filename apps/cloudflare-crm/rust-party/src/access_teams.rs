@@ -56,7 +56,9 @@ pub(super) async fn distribution_options(
     team: &str,
     actor: &str,
 ) -> Result<Option<DistributionOptions>> {
-    let sql = format!("SELECT CAST(tm.version AS TEXT) version,target.email{COORDINATOR_JOIN} ORDER BY target.email");
+    let sql = format!(
+        "SELECT CAST(tm.version AS TEXT) version,target.email{COORDINATOR_JOIN} ORDER BY target.email"
+    );
     let rows = bind(
         db,
         &sql,
@@ -72,7 +74,9 @@ pub(super) async fn distribution_options(
     let Some(first) = rows.first() else {
         return Ok(None);
     };
-    let team_version = first.version.parse::<i64>()
+    let team_version = first
+        .version
+        .parse::<i64>()
         .map_err(|_| worker::Error::RustError("invalid Team version".into()))?;
     Ok(Some(DistributionOptions {
         scope: DistributionScope {
@@ -90,7 +94,8 @@ pub(super) async fn may_distribute(
     scope: &DistributionScope,
     target: &str,
 ) -> Result<bool> {
-    let sql = format!("SELECT 1{COORDINATOR_JOIN} AND tm.version=CAST(? AS INTEGER) AND target.email=?");
+    let sql =
+        format!("SELECT 1{COORDINATOR_JOIN} AND tm.version=CAST(? AS INTEGER) AND target.email=?");
     Ok(bind(
         db,
         &sql,
@@ -337,24 +342,41 @@ pub(super) async fn mutate(
         team.member_emails = normalized;
     }
     // Removing a roster member or archiving the Team revokes the template.
-    team.queue_coordinators.retain(|grant| {
-        team.active && team.member_emails.contains(&grant.email)
-    });
+    team.queue_coordinators
+        .retain(|grant| team.active && team.member_emails.contains(&grant.email));
     let mut grant_evidence = None;
     if let Some(change) = intent.queue_coordinator {
         let email = match access_members::email(&change.email) {
             Ok(email) if email == change.email => email,
-            _ => return Ok(Err(reject("ACCESS_TEAM_COORDINATOR_INVALID", ErrorCode::InvalidArgument))),
+            _ => {
+                return Ok(Err(reject(
+                    "ACCESS_TEAM_COORDINATOR_INVALID",
+                    ErrorCode::InvalidArgument,
+                )));
+            }
         };
-        let existing = team.queue_coordinators.iter().position(|grant| grant.email == email);
+        let existing = team
+            .queue_coordinators
+            .iter()
+            .position(|grant| grant.email == email);
         if change.enabled {
             if !team.active || !team.member_emails.contains(&email) {
-                return Ok(Err(reject("ACCESS_TEAM_COORDINATOR_NOT_IN_ROSTER", ErrorCode::InvalidArgument)));
+                return Ok(Err(reject(
+                    "ACCESS_TEAM_COORDINATOR_NOT_IN_ROSTER",
+                    ErrorCode::InvalidArgument,
+                )));
             }
-            let Some(member_version) = access_members::member_version(db, tenant, &email).await? else {
-                return Ok(Err(reject("ACCESS_TEAM_COORDINATOR_INACTIVE", ErrorCode::InvalidArgument)));
+            let Some(member_version) = access_members::member_version(db, tenant, &email).await?
+            else {
+                return Ok(Err(reject(
+                    "ACCESS_TEAM_COORDINATOR_INACTIVE",
+                    ErrorCode::InvalidArgument,
+                )));
             };
-            let grant = QueueCoordinator { email, member_version };
+            let grant = QueueCoordinator {
+                email,
+                member_version,
+            };
             if let Some(index) = existing {
                 team.queue_coordinators[index] = grant.clone();
             } else {
@@ -365,7 +387,8 @@ pub(super) async fn mutate(
             team.queue_coordinators.remove(index);
         }
     }
-    team.queue_coordinators.sort_by(|a, b| a.email.cmp(&b.email));
+    team.queue_coordinators
+        .sort_by(|a, b| a.email.cmp(&b.email));
     if team.name.is_empty()
         || team.name.chars().count() > 160
         || team.description.chars().count() > 4000
@@ -421,8 +444,14 @@ pub(super) async fn mutate(
             JsValue::from_str(trace),
             JsValue::from_f64(if changed_roster { 1.0 } else { 0.0 }),
             JsValue::from_f64(previous as f64),
-            grant_evidence.as_ref().map(|grant| JsValue::from_str(&grant.email)).unwrap_or(JsValue::NULL),
-            grant_evidence.as_ref().map(|grant| JsValue::from_str(&grant.member_version.to_string())).unwrap_or(JsValue::NULL),
+            grant_evidence
+                .as_ref()
+                .map(|grant| JsValue::from_str(&grant.email))
+                .unwrap_or(JsValue::NULL),
+            grant_evidence
+                .as_ref()
+                .map(|grant| JsValue::from_str(&grant.member_version.to_string()))
+                .unwrap_or(JsValue::NULL),
         ],
     )?
     .run()

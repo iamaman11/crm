@@ -427,7 +427,10 @@ pub(super) async fn update_typed(
     let distribution = input.team_distribution.clone();
     let distribution_target = if let Some(scope) = distribution.as_ref() {
         let Change::Set(target) = &input.owner else {
-            return Ok(Err(MutationFailure::domain("ACTIVITIES_DISTRIBUTION_OWNER_REQUIRED", ErrorCode::InvalidArgument)));
+            return Ok(Err(MutationFailure::domain(
+                "ACTIVITIES_DISTRIBUTION_OWNER_REQUIRED",
+                ErrorCode::InvalidArgument,
+            )));
         };
         if !matches!(&input.subject, Change::Keep)
             || !matches!(&input.description, Change::Keep)
@@ -435,15 +438,24 @@ pub(super) async fn update_typed(
             || !matches!(&input.due_at_unix_nanos, Change::Keep)
             || input.owner_team_id.is_some()
         {
-            return Ok(Err(MutationFailure::domain("ACTIVITIES_DISTRIBUTION_OWNER_ONLY", ErrorCode::PermissionDenied)));
+            return Ok(Err(MutationFailure::domain(
+                "ACTIVITIES_DISTRIBUTION_OWNER_ONLY",
+                ErrorCode::PermissionDenied,
+            )));
         }
         if !super::access_teams::may_distribute(db, tenant, actor, scope, target).await? {
-            return Ok(Err(MutationFailure::domain("ACTIVITIES_DISTRIBUTION_DENIED", ErrorCode::PermissionDenied)));
+            return Ok(Err(MutationFailure::domain(
+                "ACTIVITIES_DISTRIBUTION_DENIED",
+                ErrorCode::PermissionDenied,
+            )));
         }
         Some(target.clone())
     } else {
         if principal.role != "admin" {
-            return Ok(Err(MutationFailure::domain("FORBIDDEN", ErrorCode::PermissionDenied)));
+            return Ok(Err(MutationFailure::domain(
+                "FORBIDDEN",
+                ErrorCode::PermissionDenied,
+            )));
         }
         None
     };
@@ -499,8 +511,13 @@ pub(super) async fn update_typed(
         )));
     };
     if let Some(scope) = distribution.as_ref() {
-        if task.status() != TaskStatus::Open || !matches!(task.owner(), TaskOwner::Team(team) if team.as_str() == scope.team_id) {
-            return Ok(Err(MutationFailure::domain("ACTIVITIES_DISTRIBUTION_SOURCE_CHANGED", ErrorCode::PermissionDenied)));
+        if task.status() != TaskStatus::Open
+            || !matches!(task.owner(), TaskOwner::Team(team) if team.as_str() == scope.team_id)
+        {
+            return Ok(Err(MutationFailure::domain(
+                "ACTIVITIES_DISTRIBUTION_SOURCE_CHANGED",
+                ErrorCode::PermissionDenied,
+            )));
         }
     }
     let expected_version = input.expected_version;
@@ -599,27 +616,27 @@ pub(super) async fn update_typed(
         super::access_teams::ELIGIBLE
     );
     let mut values = vec![
-            JsValue::from_str(&saved),
-            JsValue::from_f64(task.version() as f64),
-            JsValue::from_str(key),
-            JsValue::from_str(&digest),
-            JsValue::from_str(trace),
-            JsValue::from_str(actor),
-            JsValue::from_str(tenant),
-            JsValue::from_str(id),
-            JsValue::from_f64(expected_version as f64),
-            assignee
-                .as_deref()
-                .map(JsValue::from_str)
-                .unwrap_or(JsValue::NULL),
-            JsValue::from_str(tenant),
-            assignee
-                .as_deref()
-                .map(JsValue::from_str)
-                .unwrap_or(JsValue::NULL),
-            team_id.map(JsValue::from_str).unwrap_or(JsValue::NULL),
-            JsValue::from_str(tenant),
-            team_id.map(JsValue::from_str).unwrap_or(JsValue::NULL),
+        JsValue::from_str(&saved),
+        JsValue::from_f64(task.version() as f64),
+        JsValue::from_str(key),
+        JsValue::from_str(&digest),
+        JsValue::from_str(trace),
+        JsValue::from_str(actor),
+        JsValue::from_str(tenant),
+        JsValue::from_str(id),
+        JsValue::from_f64(expected_version as f64),
+        assignee
+            .as_deref()
+            .map(JsValue::from_str)
+            .unwrap_or(JsValue::NULL),
+        JsValue::from_str(tenant),
+        assignee
+            .as_deref()
+            .map(JsValue::from_str)
+            .unwrap_or(JsValue::NULL),
+        team_id.map(JsValue::from_str).unwrap_or(JsValue::NULL),
+        JsValue::from_str(tenant),
+        team_id.map(JsValue::from_str).unwrap_or(JsValue::NULL),
     ];
     if let (Some(scope), Some(target)) = (distribution.as_ref(), distribution_target.as_deref()) {
         super::access_teams::append_distribution_guard(

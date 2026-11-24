@@ -171,9 +171,11 @@ impl task_wire::TaskService for TaskV2Service {
                 owner_team_id,
                 priority,
                 due_at_unix_nanos,
-                team_distribution: input.team_distribution.as_option().map(|scope| access_teams::DistributionScope {
-                    team_id: scope.team_id.clone(),
-                    team_version: scope.team_version,
+                team_distribution: input.team_distribution.as_option().map(|scope| {
+                    access_teams::DistributionScope {
+                        team_id: scope.team_id.clone(),
+                        team_version: scope.team_version,
+                    }
                 }),
             },
             &key,
@@ -310,8 +312,16 @@ impl task_wire::TaskService for TaskV2Service {
             }
         };
         let distribution = match item.owner() {
-            crm_activities::TaskOwner::Team(team) if item.status() == DomainTaskStatus::Open => access_teams::distribution_options(&db, &self.actor.tenant, team.as_str(), &self.actor.identity)
-                .await.map_err(|_| ConnectError::internal("ACCESS_TEAM_DISTRIBUTION_READ_FAILED"))?,
+            crm_activities::TaskOwner::Team(team) if item.status() == DomainTaskStatus::Open => {
+                access_teams::distribution_options(
+                    &db,
+                    &self.actor.tenant,
+                    team.as_str(),
+                    &self.actor.identity,
+                )
+                .await
+                .map_err(|_| ConnectError::internal("ACCESS_TEAM_DISTRIBUTION_READ_FAILED"))?
+            }
             _ => None,
         };
         RpcResponse::ok(task_wire::GetTaskResponse {
