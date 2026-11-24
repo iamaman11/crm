@@ -139,7 +139,10 @@ impl CommercialCloseFact {
             }
             SalesOwnerScope::Team(id) => {
                 if self.credited_actor.is_some()
-                    || self.credited_team.as_ref().is_some_and(|team| &team.id != id)
+                    || self
+                        .credited_team
+                        .as_ref()
+                        .is_some_and(|team| &team.id != id)
                 {
                     return Err(invalid());
                 }

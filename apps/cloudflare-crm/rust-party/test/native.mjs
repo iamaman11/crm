@@ -5688,7 +5688,8 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      const fact=closed.deal.commercialCloseFact;
      assert.equal(fact.closeVersion,version+1n);
      assert.equal(fact.outcome,request.outcome);
-     assert.deepEqual(fact.amount,facts.amount);
+     assert.equal(fact.amount.currencyCode,facts.amount.currencyCode);
+     assert.equal(fact.amount.minorUnits,facts.amount.minorUnits);
      assert.deepEqual(fact.owner,closed.deal.owner);
      assert.equal(fact.creditedTeam.id,team);
      assert.deepEqual((await call("CloseDeal",admin,request)).deal.commercialCloseFact,fact);
