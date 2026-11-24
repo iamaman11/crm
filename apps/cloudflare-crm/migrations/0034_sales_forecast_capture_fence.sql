@@ -5,12 +5,15 @@ CREATE TABLE crm_sales_forecast_revisions (
  tenant TEXT PRIMARY KEY REFERENCES crm_tenants(id) ON DELETE CASCADE,
  revision INTEGER NOT NULL CHECK(typeof(revision)='integer' AND revision>0)
 );
+-- Use the explicit boolean predicate for the dedicated forecast keyset.
+-- The existing board/metrics parameterized status predicate must not select
+-- these indexes instead of its established stage/pipeline index.
 CREATE INDEX idx_crm_forecast_open_deal
  ON crm_sales_deal_records(tenant,id)
- WHERE json_extract(state,'$.status')='open';
+ WHERE (json_extract(state,'$.status')='open') IS TRUE;
 CREATE INDEX idx_crm_forecast_open_pipeline
  ON crm_sales_deal_records(tenant,json_extract(state,'$.stage.pipeline_id'),id)
- WHERE json_extract(state,'$.status')='open';
+ WHERE (json_extract(state,'$.status')='open') IS TRUE;
 CREATE TRIGGER crm_forecast_deal_insert AFTER INSERT ON crm_sales_deal_records BEGIN
  INSERT INTO crm_sales_forecast_revisions(tenant,revision)
  SELECT NEW.tenant,1 WHERE EXISTS(SELECT 1 FROM crm_tenants WHERE id=NEW.tenant)

@@ -2873,6 +2873,22 @@ console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:
     assert.ok(metricsPlan.some(row=>row.detail.includes("idx_crm_sales_board_stage")));
     assert.ok(metricsPlan.some(row=>row.detail.includes("crm_sales_deal_events")));
     assert.ok(metricsPlan.some(row=>row.detail.includes("idx_crm_sales_link_deal")));
+    // The new forecast capture has a different keyset access pattern. Verify
+    // both exact query variants without weakening the original plan assertions.
+    const captureRust=readFileSync(join(cwd,"src","sales_performance.rs"),"utf8");
+    const capturePage=captureRust.match(/SELECT d\.tenant,d\.id,d\.state,d\.account_id FROM crm_sales_deal_records d WHERE d\.tenant=\?1[\s\S]*?ORDER BY d\.id LIMIT \?4/)?.[0];
+    assert.ok(capturePage,"canonical forecast keyset SELECT must be present");
+    for(const [filter,index,params] of [
+      ["","idx_crm_forecast_open_deal",["tenant-a","", "0",256]],
+      [" AND json_extract(d.state,'$.stage.pipeline_id')=?5","idx_crm_forecast_open_pipeline",["tenant-a","","0",256,"pipeline.other"]]
+    ]){
+      const captureSql="WITH fence AS MATERIALIZED (SELECT COALESCE((SELECT revision FROM crm_sales_forecast_revisions WHERE tenant=?1),0) revision) "+
+        capturePage.replace("{pipeline_filter}",filter);
+      const capturePlan=await sql("EXPLAIN QUERY PLAN "+captureSql,...params);
+      assert.ok(capturePlan.some(row=>row.detail.includes("SEARCH d USING INDEX "+index)&&row.detail.includes("id>?")),
+        describeProtobuf(capturePlan));
+      assert.ok(!capturePlan.some(row=>row.detail.includes("TEMP B-TREE FOR ORDER BY")),describeProtobuf(capturePlan));
+    }
     await benchmark(100);
     await benchmark(1000);
   }finally{
