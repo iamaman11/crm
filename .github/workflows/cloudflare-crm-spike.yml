@@ -91,20 +91,25 @@ jobs:
           echo 'SCCACHE_GHA_ENABLED=true' >> "$GITHUB_ENV"
           echo "RUSTC_WRAPPER=$SCCACHE_PATH" >> "$GITHUB_ENV"
           "$SCCACHE_PATH" --version
-      # Keep Cargo's downloaded registry archives and Git database; sccache
-      # handles compiler outputs by content. Trial without the 1.3 GB target
-      # archive: fresh checkout mtimes invalidate local path fingerprints.
-      # Compare against the prior non-diagnostic warm run before acceptance.
-      - name: Restore Cargo dependency downloads
+      # Cargo unpacks registry/cache and git/db on demand. Keep compiled dependencies
+      # and fingerprints, but avoid transferring a second copy of dependency sources.
+      - name: Restore Cargo compilation cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git/db
-          key: ${{ runner.os }}-${{ runner.arch }}-crm-cargo-downloads-v1-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}
+            target
+            apps/cloudflare-crm/rust-party/target
+          # Cache entries are immutable. Refresh when manifests or codegen inputs
+          # change; ordinary source edits still use Cargo fingerprints and sccache.
+          key: ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}-${{ hashFiles('Cargo.toml', 'apps/cloudflare-crm/rust-party/Cargo.toml', 'apps/cloudflare-crm/rust-party/connect-contracts/Cargo.toml', 'crates/*/Cargo.toml', 'modules/*/Cargo.toml') }}-${{ hashFiles('proto/**/*.proto', 'apps/cloudflare-crm/active-proto-versions.json', 'apps/cloudflare-crm/rust-party/connect-contracts/build.rs', 'crates/crm-proto-contracts/build.rs') }}
           restore-keys: |
-            ${{ runner.os }}-${{ runner.arch }}-crm-cargo-downloads-v1-
+            ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}-${{ hashFiles('Cargo.toml', 'apps/cloudflare-crm/rust-party/Cargo.toml', 'apps/cloudflare-crm/rust-party/connect-contracts/Cargo.toml', 'crates/*/Cargo.toml', 'modules/*/Cargo.toml') }}-
+            ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}-
+            ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}
+            ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-
       # The scanner is pinned independently of application dependencies.
       # Cache only its executable, not a security result: every run still
       # evaluates both the root and Worker Cargo.lock files from this SHA.
