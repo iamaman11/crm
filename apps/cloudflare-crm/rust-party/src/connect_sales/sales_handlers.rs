@@ -2949,14 +2949,15 @@ impl sale_wire::DealService for SalesV2Service {
         let input = req.to_owned_message();
         let id = Self::id(&input.deal_id)?;
         let (key, version) = wire_precondition(input.precondition.as_option(), false)?;
-        let role = input.role.map(|role| {
-            match role.as_known() {
-                Some(sale_wire::OpportunityTeamRole::OPPORTUNITY_TEAM_ROLE_OBSERVER) => Ok(crm_sales::OpportunityTeamRole::Observer),
-                Some(sale_wire::OpportunityTeamRole::OPPORTUNITY_TEAM_ROLE_CONTRIBUTOR) => Ok(crm_sales::OpportunityTeamRole::Contributor),
-                Some(sale_wire::OpportunityTeamRole::OPPORTUNITY_TEAM_ROLE_LEAD) => Ok(crm_sales::OpportunityTeamRole::Lead),
-                _ => Err(ConnectError::invalid_argument("SALES_OPPORTUNITY_ROLE_INVALID")),
-            }
-        }).transpose()?;
+        use crm_sales::OpportunityTeamRole as Domain;
+        use sale_wire::OpportunityTeamRole as Wire;
+        let role = match input.role {
+            None => None,
+            Some(value) if value == Wire::OPPORTUNITY_TEAM_ROLE_OBSERVER => Some(Domain::Observer),
+            Some(value) if value == Wire::OPPORTUNITY_TEAM_ROLE_CONTRIBUTOR => Some(Domain::Contributor),
+            Some(value) if value == Wire::OPPORTUNITY_TEAM_ROLE_LEAD => Some(Domain::Lead),
+            _ => return Err(ConnectError::invalid_argument("SALES_OPPORTUNITY_ROLE_INVALID")),
+        };
         let saved = sales_deals::set_participant(
             sales_deals::ParticipantInput {
                 expected_version: version.unwrap_or_default(),

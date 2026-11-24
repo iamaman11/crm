@@ -2911,6 +2911,22 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
        [{version:5,owner:"native-viewer@example.test",status:"open"}]);
      checkpoint("SK-07.C4 archived owner blocked, atomic reopen with replacement and D1 reload");
 
+     const opportunity=page.getByRole("region",{name:"Команда сделки",exact:true});
+     await opportunity.getByLabel("Участник сделки",{exact:true}).selectOption("native-viewer@example.test");
+     await opportunity.getByLabel("Коммерческая роль",{exact:true}).selectOption("3");
+     await mutation(opportunity.getByRole("button",{name:"Назначить роль сделки",exact:true}),"SetOpportunityParticipant");
+     await opportunity.getByText(/native-viewer@example.test — Руководитель сделки/).waitFor();
+     await reloadDocument();
+     await opportunity.getByText(/native-viewer@example.test — Руководитель сделки/).waitFor();
+     assert.equal((await sql("SELECT json_extract(state,'$.opportunity_team[0].role') role FROM crm_sales_deal_records WHERE tenant=? AND id=?",tenantA,ownedDealId))[0].role,"lead");
+     await mutation(opportunity.getByRole("button",{name:"Отозвать доступ native-viewer@example.test",exact:true}),"SetOpportunityParticipant");
+     await opportunity.getByText("Участники не назначены.",{exact:true}).waitFor();
+     const grantEvents=await sql("SELECT opportunity_team_after AS roster FROM crm_sales_deal_events WHERE tenant=? AND deal_id=? AND opportunity_team_after IS NOT NULL ORDER BY deal_version",tenantA,ownedDealId);
+     assert.equal(grantEvents.length,2);
+     assert.equal(JSON.parse(grantEvents[0].roster)[0].email,"native-viewer@example.test");
+     assert.deepEqual(JSON.parse(grantEvents[1].roster),[]);
+     checkpoint("SK-07 opportunity team grant, immutable history, reload and revoke");
+
      // SK-07.D1: administration and customer card use the same Sales owner.
      await navigate("team","Команда и распределение работы");
      const coverage=page.getByRole("region",{name:"Территории продаж",exact:true});

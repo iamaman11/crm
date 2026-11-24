@@ -31,7 +31,7 @@ function OpportunityTeam({deal,canManage,choices,refresh}:{deal:Deal;canManage:b
   const [email,setEmail]=useState("");
   const [role,setRole]=useState<OpportunityTeamRole>(OpportunityTeamRole.CONTRIBUTOR);
   const mutation=useMutation({
-    storageKey:"crm.deal.opportunity.pending.v1",
+    storageKey:"crm.deal.opportunity.pending.v1:"+deal.dealId,
     lookup:async({resourceId,key},signal)=>(await api.deals.getDeal({dealId:resourceId,receiptIdempotencyKey:key},{signal})).confirmedMutation,
     refresh:async()=>{await refresh();}
   });

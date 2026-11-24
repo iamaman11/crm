@@ -293,7 +293,7 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
       const response=await api.deals.getDeal({dealId},{signal});
       if(!response.deal||!response.capabilities)throw Error("Сделка или полномочия недоступны");
       if(!response.capabilities[mode])throw Error("Нет полномочий для этой операции со сделкой");
-      setEditCapabilities(response.capabilities);
+      if(!signal.aborted)setEditCapabilities(response.capabilities);
       return response.deal;
     });
     if(!value)return;

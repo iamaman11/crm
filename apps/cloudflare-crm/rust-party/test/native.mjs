@@ -2242,9 +2242,13 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id=?"
     ...fields,precondition:{expectedVersion:version,idempotencyKey:"opportunity-edit-"+key+"-"+id}});
   assert.equal((await salesV2("UpdateDeal",viewer,edit(1n,"denied"))).status,403);
   assert.equal((await salesV2("SetOpportunityParticipant",viewer,grant(3,1n,"escalate"))).status,403);
+  assert.equal((await salesV2("SetOpportunityParticipant",admin,grant(0,1n,"unknown"))).status,400);
+  assert.equal((await salesV2("SetOpportunityParticipant",admin,{...grant(3,1n,"foreign"),email:"native-b@example.test"})).status,400);
   const observer=await salesV2("SetOpportunityParticipant",admin,grant(1,1n,"observer"));
   assert.equal(observer.status,200,describeProtobuf(observer.body));
   assert.equal(observer.body.deal.opportunityTeam[0].role,1);
+  assert.equal((await salesV2("SetOpportunityParticipant",admin,grant(1,1n,"observer"))).body.receipt.replayed,true);
+  assert.equal((await salesV2("SetOpportunityParticipant",admin,grant(3,1n,"stale"))).status,409);
   assert.equal((await salesV2("UpdateDeal",viewer,edit(2n,"observer"))).status,403);
   const contributor=await salesV2("SetOpportunityParticipant",admin,grant(2,2n,"contributor"));
   assert.equal(contributor.status,200,describeProtobuf(contributor.body));
@@ -2280,7 +2284,7 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id=?"
   // Keep all other deterministic historical fixtures unchanged.
   await batch([
     statement("DELETE FROM crm_sales_deal_events WHERE tenant=? AND deal_id=?","tenant-a",id),
-    statement("DELETE FROM crm_sales_deal_receipts WHERE tenant=? AND key LIKE ?","tenant-a","%"+id),
+    statement("DELETE FROM crm_sales_deal_receipts WHERE tenant=? AND json_extract(state,'$.deal_id')=?","tenant-a",id),
     statement("DELETE FROM crm_audit WHERE tenant_id=? AND subject_id=?","tenant-a",id),
     statement("DELETE FROM crm_sales_deal_records WHERE tenant=? AND id=?","tenant-a",id)
   ]);
@@ -6366,6 +6370,61 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    assert.equal((await memberV2("UpdateTeam",admin,{teamId:team,active:false,precondition:pre("archive-team",1n)})).status,200);
    for(const [label,email] of [["a",emailA],["b",emailB]])assert.equal((await memberV2("UpdateMember",admin,{email,active:false,precondition:pre("deactivate-"+label,1n)})).status,200);
    console.log(JSON.stringify({event:"crm.native-sk07d2-routing",result:"PASS",priority:true,exact_money:true,capacity_race:true,overflow:true,stale_preview:true,immutable_attribution:true,tenant_ab:true,receipt_event_audit:true}));
+ }
+ // Independent signed viewer and original lifecycle CAS; test at the end
+ // so disposable fixtures never change earlier deterministic analytics.
+ {
+   const suffix=randomUUID(),email="opportunity-"+suffix+"@example.test";
+   const token=jwt(email),pid="opportunity-pipeline-"+suffix,id="opportunity-deal-"+suffix;
+   const pre=(key,version)=>({idempotencyKey:"opportunity-"+key+"-"+suffix,...(version===undefined?{}:{expectedVersion:version})});
+   assert.equal((await memberV2("ProvisionMember",admin,{email,role:1,precondition:pre("member")})).status,200);
+   const pipeline=await salesV2("CreatePipeline",admin,{pipelineId:pid,name:"Opportunity QA",
+     stages:[{stageId:"lead",name:"Lead",probabilityBasisPoints:1000},{stageId:"qualified",name:"Qualified",probabilityBasisPoints:5000}],precondition:pre("pipeline")});
+   assert.equal(pipeline.status,200,describeProtobuf(pipeline.body));
+   const deal=await salesV2("CreateDeal",admin,{dealId:id,name:"Opportunity QA",accountId,
+     stage:{pipelineId:pid,stageId:"lead"},precondition:pre("deal")});
+   assert.equal(deal.status,200,describeProtobuf(deal.body));
+   const grant=(role,version,key)=>({dealId:id,email,...(role===undefined?{}:{role}),precondition:pre(key,version)});
+   const update=(version,key)=>({dealId:id,name:{operation:{case:"set",value:"Opportunity "+key}},precondition:pre(key,version)});
+   const lead=await salesV2("SetOpportunityParticipant",admin,grant(3,1n,"lead"));
+   assert.equal(lead.status,200,describeProtobuf(lead.body));
+   assert.equal(lead.body.deal.opportunityTeam[0].memberVersion,1n);
+   const advance={dealId:id,targetStage:{pipelineId:pid,stageId:"qualified"},targetStatus:1,precondition:pre("move",2n)};
+   const moved=await salesV2("AdvanceStage",token,advance);
+   assert.equal(moved.status,200,describeProtobuf(moved.body));
+   assert.equal(moved.body.deal.stage.stageId,"qualified");
+   assert.equal(moved.body.deal.version,3n);
+   const moveReplay=await salesV2("AdvanceStage",token,advance);
+   assert.equal(moveReplay.status,200,describeProtobuf(moveReplay.body));
+   assert.equal(moveReplay.body.receipt.replayed,true);
+   assert.equal((await sql("SELECT COUNT(*) n FROM crm_sales_link_delivery_records WHERE tenant=? AND deal_id=?","tenant-a",id))[0].n,1);
+   assert.equal((await memberV2("UpdateMember",admin,{email,active:false,precondition:pre("deactivate",1n)})).status,200);
+   assert.equal((await salesV2("UpdateDeal",token,update(3n,"inactive"))).status,401);
+   assert.equal((await memberV2("UpdateMember",admin,{email,active:true,precondition:pre("reactivate",2n)})).status,200);
+   assert.equal((await salesV2("GetDeal",token,{dealId:id})).body.capabilities.edit,false);
+   assert.equal((await salesV2("UpdateDeal",token,update(3n,"stale-grant"))).status,403);
+   const renewed=await salesV2("SetOpportunityParticipant",admin,grant(3,3n,"renew"));
+   assert.equal(renewed.status,200,describeProtobuf(renewed.body));
+   assert.equal(renewed.body.deal.opportunityTeam[0].memberVersion,3n);
+   const [revoke,write]=await Promise.all([
+     salesV2("SetOpportunityParticipant",admin,grant(undefined,4n,"revoke")),
+     salesV2("UpdateDeal",token,update(4n,"race"))
+   ]);
+   assert.equal([revoke,write].filter(r=>r.status===200).length,1);
+   assert.ok([403,409].includes((revoke.status===200?write:revoke).status));
+   if(write.status===200){
+     const removed=await salesV2("SetOpportunityParticipant",admin,grant(undefined,5n,"revoke-after-race"));
+     assert.equal(removed.status,200,describeProtobuf(removed.body));
+   }
+   const final=(await salesV2("GetDeal",token,{dealId:id})).body;
+   assert.equal(final.deal.opportunityTeam.length,0);
+   assert.equal(final.capabilities.edit,false);
+   assert.equal((await salesV2("UpdateDeal",token,update(final.deal.version,"after-revoke"))).status,403);
+   assert.equal((await salesV2("AdvanceStage",token,advance)).status,403);
+   assert.equal((await sql("SELECT COUNT(*) n FROM crm_sales_link_delivery_records WHERE tenant=? AND deal_id=?","tenant-a",id))[0].n,1);
+   const events=(await salesV2("ListDealEvents",viewer,{dealId:id,page:{pageSize:25}})).body.events;
+   assert.equal(events.find(e=>e.kind===3).actor,email);
+   console.log(JSON.stringify({event:"crm.native-opportunity-delegation",result:"PASS",signed_viewer:true,stage_link_once:true,member_version_pin:true,reactivation_no_restore:true,revocation_cas:true,race:[revoke.status,write.status]}));
  }
  assert.deepEqual([...writesWithReceipt].sort(),[...mutationPaths].sort(),
    "every write method must exercise a committed response with a typed receipt");
