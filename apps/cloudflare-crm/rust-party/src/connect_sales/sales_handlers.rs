@@ -298,7 +298,7 @@ impl SalesV2Service {
                 if next.is_some() {
                     return Err(capacity());
                 }
-                teams.into_iter().map(|t| t.team_id).collect()
+                teams.into_iter().map(|t| t.team.team_id).collect()
             }
             ScorecardAxis::Territory => {
                 let (territories, next) = sales_territories::list(
