@@ -3209,9 +3209,10 @@ impl sale_wire::DealService for SalesV2Service {
             let grant = sales_deals::active_participant(&db, &self.tenant, &deal, &self.actor)
                 .await
                 .map_err(|_| ConnectError::internal("SALES_DELEGATION_READ_FAILED"))?;
-            if !grant.as_ref().is_some_and(|grant| {
-                grant.role.permits(crm_sales::OpportunityPermission::Close)
-            }) {
+            if !grant
+                .as_ref()
+                .is_some_and(|grant| grant.role.permits(crm_sales::OpportunityPermission::Close))
+            {
                 return Err(ConnectError::permission_denied("SALES_DELEGATION_DENIED"));
             }
         }
