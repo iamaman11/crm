@@ -5904,6 +5904,9 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    // closed-event scale proof above. Clone only disposable valid fixture state.
    const prefix="report-scale-open-"+suffix+"-";
    const openScale=2501,limitScale=8193;
+   // Fixed-width fixture IDs: indexed binary range, not D1-limited LIKE patterns.
+   const fixtureId=n=>prefix+String(n).padStart(6,"0");
+   const fixtureFirst=fixtureId(1),fixtureLast=fixtureId(limitScale);
    const scaledReportId="report-open-scale-"+suffix;
    const capacityReportId="report-capacity-"+suffix;
    const cloneOpen=async(first,last)=>sql(
@@ -5949,7 +5952,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      // must be wholly before or wholly after the change, never a mixed sum.
      const [race]=await Promise.all([
        salesV2("PreviewSalesPerformanceReport",viewer,captureInput),
-       sql("UPDATE crm_sales_deal_records SET state=json_set(state,'$.probability_basis_points',1000) WHERE tenant=? AND id LIKE ?","tenant-a",prefix+"%")
+       sql("UPDATE crm_sales_deal_records SET state=json_set(state,'$.probability_basis_points',1000) WHERE tenant=? AND id>=? AND id<=?","tenant-a",fixtureFirst,fixtureId(openScale))
      ]);
      const newWeight=10005000n+BigInt(openScale)*1001n*1000n;
      assert.ok([200,409].includes(race.status),describeProtobuf(race.body));
@@ -5968,11 +5971,15 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=?","tenant-a",capacityReportId))[0].n,0);
      assert.equal(await revision("tenant-b"),otherFence);
      console.log(JSON.stringify({event:"crm.native-d3-open-forecast-scale",result:"PASS",added_open_deals:openScale,preview_ms:previewMs,save_ms:saveMs,capture_capacity_rejected:true,concurrent_outcome:race.status,exact_weight:true,tenant_fence:true,rollback_fence:true}));
+   }catch(error){
+     console.error("D3 open forecast scale primary failure:",error);
+     throw error;
    }finally{
-     await sql("DELETE FROM crm_sales_deal_events WHERE tenant=? AND deal_id LIKE ?","tenant-a",prefix+"%");
-     await sql("DELETE FROM crm_sales_deal_receipts WHERE tenant=? AND key LIKE ?","tenant-a",prefix+"%");
-     await sql("DELETE FROM crm_audit WHERE tenant_id=? AND subject_id LIKE ?","tenant-a",prefix+"%");
-     await sql("DELETE FROM crm_sales_deal_records WHERE tenant=? AND id LIKE ?","tenant-a",prefix+"%");
+     await sql("DELETE FROM crm_sales_deal_events WHERE tenant=? AND deal_id>=? AND deal_id<=?","tenant-a",fixtureFirst,fixtureLast);
+     await sql("DELETE FROM crm_sales_deal_receipts WHERE tenant=? AND key>=? AND key<=?","tenant-a",fixtureFirst,fixtureLast);
+     await sql("DELETE FROM crm_audit WHERE tenant_id=? AND subject_id>=? AND subject_id<=?","tenant-a",fixtureFirst,fixtureLast);
+     await sql("DELETE FROM crm_sales_deal_records WHERE tenant=? AND id>=? AND id<=?","tenant-a",fixtureFirst,fixtureLast);
+     assert.equal((await sql("SELECT COUNT(*) n FROM crm_sales_deal_records WHERE tenant=? AND id>=? AND id<=?","tenant-a",fixtureFirst,fixtureLast))[0].n,0);
    }
    const faultId="report-fault-"+suffix;
    await sql("CREATE TRIGGER fixture_report_audit_fail BEFORE INSERT ON crm_audit WHEN NEW.action='sales.performance_report.save' BEGIN SELECT RAISE(ABORT,'fixture report audit rollback'); END;");
