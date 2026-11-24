@@ -1,5 +1,5 @@
 import {useCallback,useState} from "react";
-import {Button,SelectField,TextField} from "@ultimate-crm/ui";
+import {Button,SelectField,TextField,ScrollTable} from "@ultimate-crm/ui";
 import {SalesCapacityOverflow,SalesDispatchMode,SalesRoutingSource} from "@ultimate-crm/client/cloudflare";
 import type {SalesRoutingDecision,SalesRoutingRule,SalesTerritory} from "@ultimate-crm/client/cloudflare";
 import {api,field,newId} from "./api";
@@ -84,7 +84,7 @@ export function SalesRoutingWorkspace({isAdmin,choices,ownersUnavailable,territo
     <QueryNotice query={rules}/><QueryNotice query={catalog}/>
     <p><label><input type="checkbox" checked={includeArchived} onChange={e=>setIncludeArchived(e.target.checked)}/> Показать архивные правила</label></p>
     {isAdmin&&<Button disabled={pending||!ready||rules.busy} onClick={()=>start()}>Создать правило распределения</Button>}
-    <div role="region" aria-label="Правила распределения — таблица" tabIndex={0} style={{maxWidth:"100%",overflowX:"auto"}}>
+    <ScrollTable label="Правила распределения — таблица">
       <table><thead><tr><th scope="col">Правило</th><th scope="col">Приоритет</th><th scope="col">Условия</th><th scope="col">Назначение</th><th scope="col">Состояние</th><th scope="col">Управление</th></tr></thead>
         <tbody>{rules.data?.filter(r=>includeArchived||!r.configuration?.archived).map(r=>{
           const c=r.configuration;const q=c?.criteria;const p=catalog.data?.pipelines.find(p=>p.pipelineId===q?.pipelineId);
@@ -98,7 +98,7 @@ export function SalesRoutingWorkspace({isAdmin,choices,ownersUnavailable,territo
               {c?.overflow===SalesCapacityOverflow.TEAM_QUEUE?" · переполнение в очередь":""}</td>
             <td>{c?.archived?"Архив":"Активно"}</td><td>{isAdmin&&<Button variant="secondary" disabled={pending||!ready} onClick={()=>start(r)}>Изменить правило</Button>}</td></tr>;
         })}</tbody></table>
-    </div>
+    </ScrollTable>
     {editing&&isAdmin&&catalog.data&&<form key={id} aria-label="Настройка правила распределения" onChange={mutation.changed} onSubmit={event=>{
       event.preventDefault();const data=new FormData(event.currentTarget);
       void mutation.runIntent(()=>{

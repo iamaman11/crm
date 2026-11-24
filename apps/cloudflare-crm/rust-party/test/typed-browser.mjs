@@ -3032,6 +3032,36 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      assert.equal(await scoreRegion.getByLabel("Воронка эффективности",{exact:true}).inputValue(),newPipelineId);
      await scoreRegion.getByRole("region",{name:"График плана и нетто",exact:true}).waitFor();
      checkpoint("SK-07.D3 commercial CSV downloads through typed Connect and URL-owned filters");
+     // Check the one shared table presentation across real typed projections,
+     // not an isolated Scorecard CSS fix.
+     const projectionMetrics=await scoreTable.evaluate(el=>({
+       local:el.clientWidth,content:el.scrollWidth,
+       document:document.documentElement.scrollWidth,viewport:innerWidth,
+       first:el.querySelector("tbody th[scope=row]")?.getBoundingClientRect().width??0,
+       heights:Array.from(el.querySelectorAll("tbody tr"),row=>row.getBoundingClientRect().height),
+       shared:el.classList.contains("crm-table-scroll"),
+       allTablesShared:Array.from(document.querySelectorAll(".crm-main table"),table=>table.parentElement?.classList.contains("crm-table-scroll")).every(Boolean),
+     }));
+     assert.equal(projectionMetrics.shared,true);
+     assert.equal(projectionMetrics.allTablesShared,true);
+     assert.ok(projectionMetrics.document<=projectionMetrics.viewport+1,JSON.stringify(projectionMetrics));
+     assert.ok(projectionMetrics.first>=190,JSON.stringify(projectionMetrics));
+     assert.ok(projectionMetrics.heights.length>0&&projectionMetrics.heights.every(h=>h<=104),JSON.stringify(projectionMetrics));
+     await scoreTable.screenshot({path:resolve(directory,"crm-scorecard-desktop.png")});
+     await page.setViewportSize({width:390,height:844});
+     await scoreTable.focus();
+     const mobileProjection=await scoreTable.evaluate(el=>({
+       local:el.clientWidth,content:el.scrollWidth,viewport:innerWidth,
+       document:document.documentElement.scrollWidth,focused:document.activeElement===el,
+     }));
+     assert.ok(mobileProjection.document<=mobileProjection.viewport+1,JSON.stringify(mobileProjection));
+     assert.ok(mobileProjection.content>mobileProjection.local&&mobileProjection.focused,JSON.stringify(mobileProjection));
+     await page.keyboard.press("ArrowRight");
+     await expect.poll(()=>scoreTable.evaluate(el=>el.scrollLeft)).toBeGreaterThan(0);
+     await scoreTable.screenshot({path:resolve(directory,"crm-scorecard-mobile.png")});
+     await page.setViewportSize({width:1280,height:720});
+     console.log(JSON.stringify({event:"crm.native-shared-projection",result:"PASS",desktop:projectionMetrics,mobile:mobileProjection}));
+     checkpoint("Shared native table projection: compact desktop and keyboard-scroll mobile");
 
 
    }

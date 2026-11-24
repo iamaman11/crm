@@ -1,6 +1,6 @@
 import {useCallback,useState} from "react";
-import type {FormEvent,ReactNode} from "react";
-import {Button,Card,PageHeader,SelectField} from "@ultimate-crm/ui";
+import type {FormEvent} from "react";
+import {Button,Card,PageHeader,SelectField,ScrollTable} from "@ultimate-crm/ui";
 import type {SalesPipeline} from "@ultimate-crm/client/cloudflare";
 import {DealStatus,ForecastCategory} from "@ultimate-crm/client/cloudflare";
 import {api} from "./api";
@@ -79,13 +79,7 @@ function outcome(slices:Slice[],previous=false) {
 function winRate({won,denominator}:{won:bigint;denominator:bigint}):string {
   return denominator>0n?percent(Number(won*10000n/denominator))+"%":"недостаточно закрытых сделок";
 }
-function ScrollTable({label,children}:{label:string;children:ReactNode}) {
-  // Accessible local scroll surface, not viewport overflow at 390 px.
-  return <div role="region" aria-label={label} tabIndex={0}
-    style={{width:"100%",maxWidth:"100%",overflowX:"auto"}}>
-    {children}
-  </div>;
-}
+
 function CurrencyTable({title,rows,catalog}:{title:string;rows:CurrencyTotal[];
   catalog:CurrencyCatalog}) {
   return <section aria-label={title}>

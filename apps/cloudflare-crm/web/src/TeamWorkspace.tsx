@@ -1,5 +1,5 @@
 import {useState} from "react";
-import {Button,TextField} from "@ultimate-crm/ui";
+import {Button,TextField,ScrollTable} from "@ultimate-crm/ui";
 import type {Member,Team} from "@ultimate-crm/client/cloudflare";
 import {api,newId} from "./api";
 import {useMutation,prepareMutation,MutationNotice,QueryNotice} from "./hooks";
@@ -43,8 +43,7 @@ export function TeamWorkspace({query,members,isAdmin,actor,onChanged}:{
     <TextField label="Поиск команд" value={search} onChange={e=>setSearch(e.target.value)}/>
     {isAdmin&&<Button disabled={pending} onClick={()=>start()}>Создать команду</Button>}
     {!query.busy&&filtered.length===0&&<p>Команды не найдены.</p>}
-    <div role="region" aria-label="Организационные команды — таблица" tabIndex={0}
-      style={{maxWidth:"100%",overflowX:"auto"}}>
+    <ScrollTable label="Организационные команды — таблица">
       <table><thead><tr><th scope="col">Команда</th><th scope="col">Состояние</th>
         <th scope="col">Состав</th><th scope="col">Очереди</th><th scope="col">Управление</th>
       </tr></thead><tbody>{filtered.map(team=><tr key={team.teamId}>
@@ -60,7 +59,7 @@ export function TeamWorkspace({query,members,isAdmin,actor,onChanged}:{
         <td>{isAdmin&&<Button variant="secondary" disabled={pending}
           onClick={()=>start(team)}>Изменить команду</Button>}</td>
       </tr>)}</tbody></table>
-    </div>
+    </ScrollTable>
     {isAdmin&&(creating||editing)&&<form aria-label="Настройка команды" onSubmit={event=>{
       event.preventDefault();
       const target=editing;

@@ -1,5 +1,5 @@
 import {useCallback,useState} from "react";
-import {Button,SelectField,TextField} from "@ultimate-crm/ui";
+import {Button,SelectField,TextField,ScrollTable,FilterForm,MetricGrid,DivergingTrend} from "@ultimate-crm/ui";
 import {SalesAnalyticsExportKind,SalesQuotaCadence,SalesScorecardAxis} from "@ultimate-crm/client/cloudflare";
 import type {GetSalesScorecardResponse,SalesQuota,SalesScorecardCell,SalesQuotaFactCursor} from "@ultimate-crm/client/cloudflare";
 import {api} from "./api";
@@ -11,7 +11,6 @@ import type {ScorecardFilters} from "./routes";
 import {currentRouteHash,navigateTo} from "./navigation";
 import {boundedInt,enumValue} from "./enumFields";
 import {SalesExportButton} from "./SalesExportButton";
-import styles from "./App.module.css";
 import type {allPipelines} from "./salesPipelineCatalog";
 
 type Request=Extract<Parameters<typeof api.deals.getSalesScorecard>[0],{$typeName?:never}>;
@@ -81,7 +80,7 @@ export function SalesScorecards({catalog,labels,onQuota,isAdmin,request}:{reques
   return <section aria-label="Коммерческая эффективность">
     <h4>Коммерческая эффективность и динамика</h4>
     <p>Исторические закрытия и сторно, а не текущий владелец сделки. Цели подбираются только по точному совпадению области, валюты, воронки и периода. Используется последняя опубликованная версия цели, включая архив. Нет цели — не нулевой план.</p>
-    <form className={styles.analyticsFilters} aria-label="Настройка коммерческой эффективности" onSubmit={event=>{
+    <FilterForm aria-label="Настройка коммерческой эффективности" onSubmit={event=>{
       event.preventDefault();
       try{
         const form=new FormData(event.currentTarget);
@@ -107,7 +106,7 @@ export function SalesScorecards({catalog,labels,onQuota,isAdmin,request}:{reques
       <TextField label="Число периодов" name="count" type="number" min={1} max={24} defaultValue={String(request?.periodCount??12)} required/>
       <TextField label="Часовой пояс эффективности" name="zone" defaultValue={request?.timeZone??"UTC"} required/>
       <Button type="submit" disabled={!!request&&score.busy}>Рассчитать эффективность</Button>
-    </form>
+    </FilterForm>
     {formError&&<p role="alert">{formError}</p>}
     {request&&<QueryNotice query={score}/>}
     {data&&!score.stale&&!formError&&bucket&&<>
@@ -115,16 +114,16 @@ export function SalesScorecards({catalog,labels,onQuota,isAdmin,request}:{reques
       {isAdmin&&request&&<SalesExportButton key={data.eventSequence.toString()+":"+JSON.stringify([request.axis,request.currencyCode,request.pipelineId,request.timeZone,request.cadence,request.periodCount,request.firstDate])} label="Скачать Scorecard CSV" request={{kind:SalesAnalyticsExportKind.SCORECARD,scope:{case:"scorecard",value:request}}} onScorecard={snapshot=>{setExported({request,data:snapshot});setDetail(undefined);setSelection(org);setBucketIndex(0);}}/>}
       {exported?.request===request&&<p>Показан новый согласованный срез, использованный для выгрузки.</p>}
       <p>Win rate — выигранные среди известных событий закрытия, без сторно; это не доля уникальных сделок. Закрытия без валюты могут входить в счётчики разных валют, их нельзя складывать. Неизвестная история показана только на уровне организации. Разрезы не суммируются между собой.</p>
-      {bucket.organization&&<dl className={styles.analyticsKpis}>
+      {bucket.organization&&<MetricGrid>
         <div><dt>План</dt><dd>{goal(bucket.organization)?money(goal(bucket.organization)?.minorUnits.toString()):"Нет цели"}</dd></div>
         <div><dt>Нетто</dt><dd>{money(bucket.organization.netMinorUnits)}</dd></div>
         <div><dt>Выполнение</dt><dd>{ratio(bucket.organization.attainmentBasisPoints)}</dd></div>
         <div><dt>Win rate</dt><dd>{ratio(bucket.organization.winRateBasisPoints)}</dd></div>
-      </dl>}
+      </MetricGrid>}
       <SelectField label="Период scorecard" value={bucketIndex} onChange={e=>{setBucketIndex(Number(e.target.value));setDetail(undefined);}}>
         {data.buckets.map((b,i)=><option key={b.startUnixNanos.toString()} value={i}>{inputDate(b.period?.startDate)} — {inputDate(b.period?.endDate)} · {periodState(b.startUnixNanos,b.endExclusiveUnixNanos)}</option>)}
       </SelectField>
-      <div className={styles.analyticsTable} role="region" aria-label="Таблица коммерческой эффективности" tabIndex={0} style={{maxWidth:"100%",overflowX:"auto"}}>
+      <ScrollTable label="Таблица коммерческой эффективности">
         <table><thead><tr><th scope="col">Область</th>{headings}<th scope="col">Действия</th></tr></thead>
           <tbody>{[org,...dimensions].map(s=>{
             const c=cell(bucket,s);
@@ -134,16 +133,16 @@ export function SalesScorecards({catalog,labels,onQuota,isAdmin,request}:{reques
             </>}</td></tr>;
           })}</tbody>
         </table>
-      </div>
+      </ScrollTable>
       <SelectField label="Область динамики" value={key(selection)} onChange={e=>{const s=[org,...dimensions].find(item=>key(item)===e.target.value);if(s){setSelection(s);setDetail(undefined);}}}>
         {[org,...dimensions].map(s=><option key={key(s)} value={key(s)}>{label(s)}</option>)}
       </SelectField>
-      <AnalyticsTrend buckets={data.buckets.map(b=>({label:inputDate(b.period?.startDate),cell:cell(b,selection)}))} money={money}/>
-      <div className={styles.analyticsTable} role="region" aria-label="Динамика коммерческой эффективности" tabIndex={0} style={{maxWidth:"100%",overflowX:"auto"}}>
+      <DivergingTrend label="График плана и нетто" title="План и нетто по периодам" description="План — серый, нетто — цветной. Отрицательное нетто показано слева от нуля. Точные значения в таблице." series={["План","Нетто"]} rows={data.buckets.map(b=>{const c=cell(b,selection),plan=c?.quota?.configuration?.target?.minorUnits,net=c?BigInt(c.netMinorUnits):undefined;return {label:inputDate(b.period?.startDate),values:[plan,net],formatted:[money(plan?.toString()),money(net?.toString())]};})}/>
+      <ScrollTable label="Динамика коммерческой эффективности">
         <table><thead><tr><th scope="col">Период</th>{headings}</tr></thead>
           <tbody>{data.buckets.map(b=><tr key={b.startUnixNanos.toString()}><th scope="row">{inputDate(b.period?.startDate)} — {inputDate(b.period?.endDate)} · {periodState(b.startUnixNanos,b.endExclusiveUnixNanos)}</th>{values(cell(b,selection))}</tr>)}</tbody>
         </table>
-      </div>
+      </ScrollTable>
       {detail&&selected&&same(selection,{organization:detail.organization??false,...(detail.dimensionId===undefined?{}:{dimensionId:detail.dimensionId})})&&<section aria-label="Исходные коммерческие события">
         <h5>{label(selection)} · {inputDate(bucket.period?.startDate)} — {inputDate(bucket.period?.endDate)}</h5>
         <QueryNotice query={facts}/>
@@ -159,23 +158,3 @@ export function SalesScorecards({catalog,labels,onQuota,isAdmin,request}:{reques
   </section>;
 }
 
-// Visual scaling only: all monetary values and ratios come from the original owner.
-function AnalyticsTrend({buckets,money}:{buckets:ReadonlyArray<{label:string;cell:SalesScorecardCell|undefined}>;money:(value:string|undefined)=>string}){
-  const abs=(n:bigint)=>n<0n?-n:n;
-  const values=buckets.map(b=>({label:b.label,plan:b.cell?.quota?.configuration?.target?.minorUnits,net:b.cell?BigInt(b.cell.netMinorUnits):undefined}));
-  const max=values.reduce((m,v)=>[v.plan,v.net].reduce<bigint>((a,n)=>n!==undefined&&abs(n)>a?abs(n):a,m),1n);
-  const width=(n:bigint)=>String(abs(n)*5000n/max/100n)+"%";
-  return <section aria-label="График плана и нетто" className={styles.analyticsTrend}>
-    <h5>План и нетто по периодам</h5>
-    <p>План — серый, нетто — цветной. Отрицательное нетто показано слева от нуля. Точные значения в таблице.</p>
-    {values.map(v=><div className={styles.trendRow} key={v.label}>
-      <span>{v.label}</span>
-      <div className={styles.trendPlot}>
-        {([["План",v.plan],["Нетто",v.net]] as const).map(([name,n])=><div key={name} className={styles.trendTrack} title={name+": "+money(n?.toString())}>
-          {n!==undefined&&<span className={name==="План"?styles.trendPlan:styles.trendNet} style={{width:width(n),...(n<0n?{right:"50%"}:{left:"50%"})}}/>}
-        </div>)}
-      </div>
-      <span>{money(v.net?.toString())}</span>
-    </div>)}
-  </section>;
-}

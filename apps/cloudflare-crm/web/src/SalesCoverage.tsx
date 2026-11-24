@@ -1,5 +1,5 @@
 import {useCallback,useState} from "react";
-import {Button,SelectField,TextField} from "@ultimate-crm/ui";
+import {Button,SelectField,TextField,ScrollTable} from "@ultimate-crm/ui";
 import {MemberRole,SalesOverlayRole} from "@ultimate-crm/client/cloudflare";
 import type {SalesTerritory,SalesAccountAssignment} from "@ultimate-crm/client/cloudflare";
 import {api,newId} from "./api";
@@ -83,7 +83,7 @@ export function TerritoryWorkspace({isAdmin,choices,ownersUnavailable,reportId,s
     <QueryNotice query={territories}/>
     {isAdmin&&<Button disabled={pending||ownersUnavailable||territories.busy} onClick={()=>start()}>Создать территорию</Button>}
     {!territories.busy&&!territories.error&&items.length===0&&<p>Территорий пока нет.</p>}
-    <div role="region" aria-label="Территории продаж — таблица" tabIndex={0} style={{maxWidth:"100%",overflowX:"auto"}}>
+    <ScrollTable label="Территории продаж — таблица">
       <table><thead><tr><th scope="col">Территория</th><th scope="col">Родительская территория</th>
         <th scope="col">Ответственный</th><th scope="col">Состояние</th><th scope="col">Управление</th></tr></thead>
         <tbody>{items.map(t=><tr key={t.territoryId}>
@@ -93,7 +93,7 @@ export function TerritoryWorkspace({isAdmin,choices,ownersUnavailable,reportId,s
           <td><Button variant="secondary" onClick={()=>{setSelected(t.territoryId);setCursor("");}}>Клиенты территории</Button>{" "}
             {isAdmin&&<Button variant="secondary" disabled={pending||ownersUnavailable} onClick={()=>start(t)}>Изменить территорию</Button>}</td>
         </tr>)}</tbody></table>
-    </div>
+    </ScrollTable>
     {isAdmin&&(creating||editing)&&<form aria-label="Настройка территории" onSubmit={event=>{
       event.preventDefault();const defaultOwner=ownerWire(owner);if(!defaultOwner)return;
       const configuration={name:name.trim(),...(parent?{parentId:parent}:{}),defaultOwner,archived};
@@ -140,7 +140,7 @@ export function TerritoryWorkspace({isAdmin,choices,ownersUnavailable,reportId,s
     <p><label><input type="checkbox" checked={includeArchived} onChange={e=>{setIncludeArchived(e.target.checked);setCursor("");}}/> Показать архивные назначения</label></p>
     <QueryNotice query={assignments}/>
     {!assignments.busy&&!assignments.error&&assignments.data?.assignments.length===0&&<p>Назначений клиентов нет.</p>}
-    <div role="region" aria-label="Клиентские портфели — таблица" tabIndex={0} style={{maxWidth:"100%",overflowX:"auto"}}>
+    <ScrollTable label="Клиентские портфели — таблица">
       <table><thead><tr><th scope="col">Клиент</th><th scope="col">Территория</th><th scope="col">Владелец</th>
         <th scope="col">Дополнительные участники</th><th scope="col">Состояние</th></tr></thead>
         <tbody>{assignments.data?.assignments.map(a=><tr key={a.accountId}>
@@ -150,7 +150,7 @@ export function TerritoryWorkspace({isAdmin,choices,ownersUnavailable,reportId,s
           <td>{a.configuration?.overlays.map(o=>overlayLabel(o.role)+": "+ownerLabel(o.owner,choices)).join("; ")||"—"}</td>
           <td>{a.configuration?.archived?"Архив":"Активен"}</td>
         </tr>)}</tbody></table>
-    </div>
+    </ScrollTable>
     {cursor&&<Button variant="secondary" disabled={assignments.busy} onClick={()=>setCursor("")}>Первая страница портфелей</Button>}
     {assignments.data?.pageInfo?.nextPageToken&&<Button variant="secondary" disabled={assignments.busy}
       onClick={()=>setCursor(assignments.data?.pageInfo?.nextPageToken??"")}>Следующая страница портфелей</Button>}

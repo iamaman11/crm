@@ -1,6 +1,5 @@
 import {useCallback,useState} from "react";
-import type {ReactNode} from "react";
-import {Button,PageHeader,SelectField,TextField} from "@ultimate-crm/ui";
+import {Button,PageHeader,SelectField,TextField,ScrollTable} from "@ultimate-crm/ui";
 import type {Member} from "@ultimate-crm/client/cloudflare";
 import {MemberRole,TaskStatus} from "@ultimate-crm/client/cloudflare";
 import {api,dateText} from "./api";
@@ -15,10 +14,7 @@ import {ownerChoices,ownerValue} from "./ownerCatalog";
 
 const roleName=(role:MemberRole)=>role===MemberRole.ADMIN?"Администратор":
   role===MemberRole.VIEWER?"Чтение всех полей":"Неизвестная роль";
-function ScrollTable({label,children}:{label:string;children:ReactNode}) {
-  return <div role="region" aria-label={label} tabIndex={0}
-    style={{maxWidth:"100%",width:"100%",overflowX:"auto"}}>{children}</div>;
-}
+
 
 /** The original Access enrollment is the single source for a human identity. */
 export function MemberScreen({reportId,scorecard}:{reportId:string;scorecard:ScorecardFilters|undefined}){

@@ -362,3 +362,56 @@ a:focus-visible,
    keyboard navigation or Playwright. After close the persistent notice returns. */
 body:has(dialog[open]) .crm-mutation-notice { display:none; }
 body:has(dialog[open]) dialog[open] .crm-mutation-notice { display:block; }
+
+/* Shared data projection: every active CRM table uses the same scroll and
+   density policy. Intrinsic column width prevents arbitrary mid-word wrapping.
+   Wide datasets scroll inside the named region, never the page. */
+.crm-table-scroll {
+  width:100%;
+  min-width:0;
+  max-width:100%;
+  overflow-x:auto;
+  border:1px solid var(--crm-border);
+  border-radius:var(--crm-radius);
+  background:var(--crm-surface);
+  margin-block:.65rem;
+}
+.crm-table-scroll > table {
+  width:max-content;
+  min-width:100%;
+  border-collapse:collapse;
+  font-size:.875rem;
+  line-height:1.4;
+  font-variant-numeric:tabular-nums;
+}
+.crm-table-scroll :is(th,td) {
+  padding:.45rem .65rem;
+  vertical-align:middle;
+  text-align:start;
+  max-width:22rem;
+  overflow-wrap:anywhere;
+  word-break:normal;
+  border-bottom:1px solid var(--crm-border);
+}
+.crm-table-scroll thead th {background:var(--crm-surface-muted);white-space:nowrap;}
+.crm-table-scroll tbody th[scope="row"] {min-width:12rem;max-width:22rem;font-weight:650;}
+.crm-table-scroll tbody tr:last-child > :is(th,td) {border-bottom:0;}
+.crm-table-scroll td:has(> .crm-button) {max-width:30rem;min-width:12rem;}
+.crm-table-scroll .crm-button {min-height:2rem;padding:.3rem .55rem;font-size:inherit;line-height:1.35;margin:.15rem .15rem .15rem 0;white-space:normal;max-width:100%;}
+.crm-table-scroll :is(ul,ol) {margin:.2rem 0;padding-inline-start:1.1rem;}
+.crm-table-scroll p {margin:.2rem 0;}
+.crm-table-scroll:focus-visible {outline-offset:-3px;}
+
+.crm-filter-form {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr));gap:.65rem;align-items:end;}
+.crm-metric-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,10rem),1fr));gap:.65rem;margin:1rem 0;}
+.crm-metric-grid div {min-width:0;padding:.75rem;border:1px solid var(--crm-border);border-radius:var(--crm-radius);background:var(--crm-surface);}
+.crm-metric-grid dt {color:var(--crm-text-muted);font-size:.875rem;}
+.crm-metric-grid dd {font-weight:700;font-size:1.15rem;margin:.3rem 0 0;overflow-wrap:anywhere;}
+.crm-trend {margin:1rem 0;padding:.75rem;border:1px solid var(--crm-border);border-radius:var(--crm-radius);}
+.crm-trend-row {display:grid;grid-template-columns:minmax(5rem,auto) minmax(4rem,1fr) minmax(4rem,auto);gap:.5rem;align-items:center;margin:.4rem 0;font-variant-numeric:tabular-nums;}
+.crm-trend-plot {min-width:0;display:grid;gap:.2rem;}
+.crm-trend-track {position:relative;height:.6rem;background:linear-gradient(to right,transparent 49.75%,var(--crm-border) 49.75%,var(--crm-border) 50.25%,transparent 50.25%);}
+.crm-trend-reference,.crm-trend-value {position:absolute;top:0;height:100%;border-radius:.2rem;}
+.crm-trend-reference {background:var(--crm-text-muted);}
+.crm-trend-value {background:var(--crm-accent);}
+@media(max-width:480px){.crm-trend-row {grid-template-columns:minmax(4rem,auto) minmax(2rem,1fr);}.crm-trend-row>span:last-child {grid-column:2;overflow-wrap:anywhere;}}

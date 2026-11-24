@@ -7,3 +7,5 @@ export * from "./Feedback";
 export * from "./Forms";
 export * from "./RecordPanel";
 export * from "./RecordCard";
+
+export * from "./DataPresentation";

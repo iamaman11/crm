@@ -1,5 +1,5 @@
 import {useCallback,useState} from "react";
-import {Button,TextField,SelectField} from "@ultimate-crm/ui";
+import {Button,TextField,SelectField,ScrollTable} from "@ultimate-crm/ui";
 import {SalesAnalyticsExportKind,SalesForecastDisposition,SalesPerformanceComparisonStatus} from "@ultimate-crm/client/cloudflare";
 import type {SalesPerformanceReport,SalesQuota,SalesQuotaFactCursor,SalesForecastSource,PreviewSalesPerformanceReportResponse} from "@ultimate-crm/client/cloudflare";
 import {api,newId} from "./api";
@@ -56,7 +56,7 @@ function Summary({report,currencies}:{report:SalesPerformanceReport;currencies:C
   </>;
 }
 function SourceTable({sources,currencies}:{sources:SalesForecastSource[];currencies:CurrencyCatalog|undefined}){
-  return <div role="region" aria-label="Исходные сделки прогноза" tabIndex={0} style={{maxWidth:"100%",overflowX:"auto"}}>
+  return <ScrollTable label="Исходные сделки прогноза">
     <table><thead><tr><th scope="col">Сделка на момент снимка</th><th scope="col">Дата</th><th scope="col">Сумма</th><th scope="col">Прогноз</th><th scope="col">Атрибуция</th><th scope="col">Участие</th></tr></thead>
       <tbody>{sources.map(s=><tr key={s.dealId}><th scope="row"><a href={dealHref(s.dealId)}>{s.dealId}</a> · v{s.dealVersion.toString()}</th>
         <td>{inputDate(s.expectedCloseDate)||"—"}</td>
@@ -65,7 +65,7 @@ function SourceTable({sources,currencies}:{sources:SalesForecastSource[];currenc
         <td>{s.creditedActor??"—"} · {s.creditedTeam?.name??"—"} · {s.creditedTerritory?.name??"—"}</td>
         <td>{disposition(s.disposition)}</td></tr>)}</tbody>
     </table>{sources.length===0&&<p>На этой странице нет исходных сделок.</p>}
-  </div>;
+  </ScrollTable>;
 }
 
 export function SalesPerformanceReports({isAdmin,quota,reportId,currencies}:{isAdmin:boolean;quota:SalesQuota|undefined;reportId:string;currencies:CurrencyCatalog|undefined}){
@@ -132,13 +132,13 @@ export function SalesPerformanceReports({isAdmin,quota,reportId,currencies}:{isA
     <MutationNotice state={mutation}/>
     <p><label><input type="checkbox" checked={quotaOnly} disabled={!quotaId} onChange={event=>{setQuotaOnly(event.target.checked);setReportCursor("");}}/> Только выбранная цель</label></p>
     <QueryNotice query={list}/>
-    <div role="region" aria-label="Сохранённые коммерческие отчёты" tabIndex={0} style={{maxWidth:"100%",overflowX:"auto"}}>
+    <ScrollTable label="Сохранённые коммерческие отчёты">
       <table><thead><tr><th scope="col">Отчёт</th><th scope="col">Цель</th><th scope="col">Снимок UTC</th><th scope="col">Выполнение</th><th scope="col">Взвешенное покрытие</th></tr></thead>
         <tbody>{list.data?.reports.map(r=><tr key={r.reportId}><th scope="row"><a href={salesPerformanceReportHref(r.reportId)} onClick={event=>{if(event.button===0&&!event.ctrlKey&&!event.metaKey&&!event.shiftKey&&!event.altKey){event.preventDefault();navigateTo(salesPerformanceReportHref(r.reportId));}}}>{r.name}</a></th>
           <td>{r.quota?.configuration?.name} · v{r.quota?.version.toString()}</td><td>{time(r.capturedAtUnixNanos)}</td><td>{ratio(r.actuals?.attainmentBasisPoints)}</td><td>{ratio(r.forecast?.weightedCoverageBasisPoints)}</td></tr>)}</tbody>
       </table>
       {list.data?.reports.length===0&&<p>Сохранённых отчётов нет.</p>}
-    </div>
+    </ScrollTable>
     {reportCursor&&<Button variant="secondary" disabled={list.busy} onClick={()=>setReportCursor("")}>Первая страница отчётов</Button>}
     {list.data?.pageInfo?.nextPageToken&&<Button variant="secondary" disabled={list.busy} onClick={()=>setReportCursor(list.data?.pageInfo?.nextPageToken??"")}>Следующая страница отчётов</Button>}
     <QueryNotice query={saved}/>
@@ -171,7 +171,7 @@ export function SalesPerformanceReports({isAdmin,quota,reportId,currencies}:{isA
         {comparison.status!==SalesPerformanceComparisonStatus.COMPARABLE?<p role="status">Отчёты несопоставимы: {comparison.status===SalesPerformanceComparisonStatus.DIFFERENT_SERIES?"разные серии целей или условия расчёта":"разные формулы расчёта"}. Разница не вычисляется.</p>:delta&&<>
           <h5>Изменение: выбранный отчёт минус базовый</h5>
           <p>Разница цели показана отдельно от фактических результатов. Даты снимков не определяют направление сравнения.</p>
-          <div role="region" aria-label="Разница коммерческих показателей" tabIndex={0} style={{maxWidth:"100%",overflowX:"auto"}}>
+          <ScrollTable label="Разница коммерческих показателей">
             <table><thead><tr><th scope="col">Показатель</th><th scope="col">Изменение</th></tr></thead><tbody>
               {([
                 ["План",delta.targetMinorUnits],["Выигрыши",delta.grossMinorUnits],["Сторно",delta.reversalMinorUnits],
@@ -186,7 +186,7 @@ export function SalesPerformanceReports({isAdmin,quota,reportId,currencies}:{isA
                 ["Без суммы",delta.missingAmountCount],["Без исторического факта",delta.unknownHistoryCount],["Не распределено",delta.unallocatedCount]
               ] as const).map(([label,value])=><tr key={label}><th scope="row">{label}</th><td>{signed(String(value),v=>v)}</td></tr>)}
             </tbody></table>
-          </div>
+          </ScrollTable>
         </>}
       </section>}
     </section>}

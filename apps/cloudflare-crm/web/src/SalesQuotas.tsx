@@ -1,5 +1,5 @@
 import {useCallback,useState} from "react";
-import {Button,SelectField,TextField} from "@ultimate-crm/ui";
+import {Button,SelectField,TextField,ScrollTable} from "@ultimate-crm/ui";
 import {SalesQuotaCadence} from "@ultimate-crm/client/cloudflare";
 import type {SalesQuota,SalesQuotaConfiguration,SalesQuotaScope,SalesQuotaFactCursor,SalesTerritory} from "@ultimate-crm/client/cloudflare";
 import {api,field,newId} from "./api";
@@ -86,13 +86,13 @@ export function SalesQuotaWorkspace({isAdmin,choices,ownersUnavailable,territori
     <QueryNotice query={quotas}/><QueryNotice query={catalog}/>
     <p><label><input type="checkbox" checked={includeArchived} onChange={e=>setIncludeArchived(e.target.checked)}/> Показать архивные цели</label></p>
     {isAdmin&&<Button disabled={!ready||pending} onClick={()=>start()}>Создать коммерческую цель</Button>}
-    <div role="region" aria-label="Коммерческие цели — таблица" tabIndex={0} style={{maxWidth:"100%",overflowX:"auto"}}>
+    <ScrollTable label="Коммерческие цели — таблица">
       <table><thead><tr><th scope="col">Цель</th><th scope="col">Область</th><th scope="col">Период</th><th scope="col">План</th><th scope="col">Состояние</th><th scope="col">Действия</th></tr></thead>
       <tbody>{quotas.data?.filter(q=>includeArchived||!q.configuration?.archived).map(q=>{
         const c=q.configuration,p=c?.period,key=scopeValue(c?.scope);
         return <tr key={q.quotaId}><th scope="row">{c?.name} · v{q.version.toString()}</th><td>{labels.find(x=>x.value===key)?.label??key}</td><td>{inputDate(p?.startDate)} — {inputDate(p?.endDate)} · {p?.timeZone}</td><td>{c?.target?money(c.target.minorUnits.toString(),c.target.currencyCode):"—"}</td><td>{c?.archived?"Архив":c?.published?"Опубликована":"Черновик"}</td><td><Button variant="secondary" onClick={()=>select(q)}>План-факт</Button>{" "}{isAdmin&&!c?.archived&&<Button variant="secondary" disabled={pending||!ready} onClick={()=>start(q)}>Изменить цель</Button>}</td></tr>;
       })}</tbody></table>
-    </div>
+    </ScrollTable>
     {editing&&isAdmin&&catalog.data&&<form key={id} aria-label="Настройка коммерческой цели" onChange={mutation.changed} onSubmit={event=>{
       event.preventDefault();const data=new FormData(event.currentTarget);
       void mutation.runIntent(()=>{
