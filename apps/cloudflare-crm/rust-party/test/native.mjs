@@ -5890,6 +5890,15 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    const scaleReportId="report-scale-"+suffix;
    try{
      await sql(scaleInsert.replace("n<"+scaleCount,"n<120"),"tenant-a",one.dealId);
+     // A deliberately incomplete stream belongs to the current year only;
+     // it must not invalidate a historical window before immutable creation.
+     const gappedHistory=await call("GetSalesHistory",viewer,historyInput);
+     assert.equal(gappedHistory.current.unknownHistoryCount,1n);
+     assert.equal(gappedHistory.current.deals.find(d=>d.dealId===one.dealId).status,undefined);
+     assert.equal(gappedHistory.current.deals.find(d=>d.dealId===one.dealId).createdAtUnixNanos,historyDeal.createdAtUnixNanos);
+     assert.equal(gappedHistory.previous.unknownHistoryCount,0n);
+     assert.equal(gappedHistory.previous.deals.length,0);
+     console.log(JSON.stringify({event:"crm.native-history-cutoff-membership",result:"PASS",gap_current:true,gap_future_excluded:true,immutable_creation:true}));
      const pagedScore=await call("GetSalesScorecard",viewer,scoreInput);
      const pagedTeam=pagedScore.buckets[0].dimensions.find(d=>d.dimensionId===team).cell;
      const fullDetail=await call("ExportSalesAnalytics",admin,{kind:6,scope:{case:"scorecard",value:{...scoreDetail,detail:{

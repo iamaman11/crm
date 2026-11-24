@@ -1288,6 +1288,7 @@ struct HistoricalRow {
     deal_id: Option<String>,
     deal_pipeline: Option<String>,
     record_version: Option<String>,
+    record_created_at: Option<String>,
     event_version: Option<String>,
     kind: Option<crm_sales::HistoryKind>,
     pipeline_id: Option<String>,
@@ -1357,7 +1358,7 @@ impl sale_wire::DealService for SalesV2Service {
         // A single D1 statement captures the clock, retained Deal versions and
         // event membership together. No repeated page reads or synthetic history.
         let rows = crate::bind(&db,
-            "WITH clock AS MATERIALIZED (SELECT CAST(strftime('%s','now') AS INTEGER)*1000000000 + CAST(substr(strftime('%f','now'),4,3) AS INTEGER)*1000000 AS nanos) SELECT CAST(c.nanos AS TEXT) as_of,d.id deal_id,json_extract(d.state,'$.stage.pipeline_id') deal_pipeline,CAST(d.version AS TEXT) record_version,CAST(e.deal_version AS TEXT) event_version,e.action kind,e.pipeline_id,e.stage_id,e.previous_stage_id,e.status,e.previous_status,e.reason_code,CAST(e.occurred_at_unix_nanos AS TEXT) event_at,CAST(e.catalog_version AS TEXT) catalog_version FROM clock c LEFT JOIN crm_sales_deal_records d ON d.tenant=?1 AND (?2 IS NULL OR json_extract(d.state,'$.stage.pipeline_id')=?2) LEFT JOIN crm_sales_deal_events e ON e.tenant=d.tenant AND e.deal_id=d.id ORDER BY d.id,e.deal_version LIMIT ?3",
+            "WITH clock AS MATERIALIZED (SELECT CAST(strftime('%s','now') AS INTEGER)*1000000000 + CAST(substr(strftime('%f','now'),4,3) AS INTEGER)*1000000 AS nanos) SELECT CAST(c.nanos AS TEXT) as_of,d.id deal_id,json_extract(d.state,'$.stage.pipeline_id') deal_pipeline,CAST(d.version AS TEXT) record_version,CAST(json_extract(d.state,'$.created_at_unix_nanos') AS TEXT) record_created_at,CAST(e.deal_version AS TEXT) event_version,e.action kind,e.pipeline_id,e.stage_id,e.previous_stage_id,e.status,e.previous_status,e.reason_code,CAST(e.occurred_at_unix_nanos AS TEXT) event_at,CAST(e.catalog_version AS TEXT) catalog_version FROM clock c LEFT JOIN crm_sales_deal_records d ON d.tenant=?1 AND (?2 IS NULL OR json_extract(d.state,'$.stage.pipeline_id')=?2) LEFT JOIN crm_sales_deal_events e ON e.tenant=d.tenant AND e.deal_id=d.id ORDER BY d.id,e.deal_version LIMIT ?3",
             &[JsValue::from_str(&self.tenant),input.pipeline_id.as_deref().map_or(JsValue::NULL, JsValue::from_str),JsValue::from_f64((crm_sales::MAX_HISTORY_ROWS + 1) as f64)],
         ).map_err(|_| failure())?.all().await.map_err(|_| failure())?.results::<HistoricalRow>().map_err(|_| failure())?;
         if rows.len() > crm_sales::MAX_HISTORY_ROWS {
@@ -1381,6 +1382,7 @@ impl sale_wire::DealService for SalesV2Service {
                 id,
                 pipeline_id: row.deal_pipeline.ok_or_else(failure)?,
                 version: integer(row.record_version)?,
+                created_at: integer(row.record_created_at)?,
                 events: Vec::new(),
             });
             if let Some(version) = row.event_version {

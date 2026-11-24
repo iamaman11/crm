@@ -36,6 +36,7 @@ pub struct DealHistory {
     pub id: String,
     pub pipeline_id: String,
     pub version: i64,
+    pub created_at: i64,
     pub events: Vec<HistoryEvent>,
 }
 
@@ -82,6 +83,7 @@ impl DealHistory {
                     }
             } else {
                 event.kind == HistoryKind::Created
+                    && event.at == self.created_at
                     && event.status == DealStatus::Open
                     && event.previous_status.is_none()
                     && event.previous_stage_id.is_none()
@@ -317,11 +319,17 @@ pub fn historical_window(
     let mut stages = BTreeMap::<(String, String, Option<i64>), Vec<i64>>::new();
     let in_window = |at: i64| at >= lo && at < cutoff;
     for history in histories {
+        // Immutable creation time establishes membership even when the event
+        // stream is incomplete. A Deal not yet created cannot be an unknown
+        // historical Deal or contaminate an earlier period comparison.
+        if history.created_at >= cutoff {
+            continue;
+        }
         let mut detail = HistoricalDeal {
             id: history.id.clone(),
             pipeline_id: history.pipeline_id.clone(),
             status: None,
-            created_at: None,
+            created_at: Some(history.created_at),
             last_version: None,
             cohort: false,
             final_close_in_period: false,
@@ -340,10 +348,6 @@ pub fn historical_window(
             continue;
         }
         let first = &history.events[0];
-        if first.at >= cutoff {
-            continue;
-        }
-        detail.created_at = Some(first.at);
         detail.cohort = in_window(first.at);
         let mut entry = Some(first);
         let mut episode_start = first.at;
@@ -485,6 +489,7 @@ mod tests {
                 id: "a".into(),
                 pipeline_id: "p".into(),
                 version: 6,
+                created_at: lo,
                 events: vec![
                     event(1, Created, lo, Open, None, "lead", None),
                     event(
@@ -530,6 +535,21 @@ mod tests {
                 id: "legacy".into(),
                 pipeline_id: "p".into(),
                 version: 2,
+                created_at: lo - second,
+                events: vec![],
+            },
+            DealHistory {
+                id: "at-cutoff".into(),
+                pipeline_id: "p".into(),
+                version: 2,
+                created_at: hi,
+                events: vec![],
+            },
+            DealHistory {
+                id: "after-cutoff".into(),
+                pipeline_id: "p".into(),
+                version: 1,
+                created_at: hi + 2 * second,
                 events: vec![],
             },
         ];
@@ -537,6 +557,8 @@ mod tests {
         assert_eq!(first.final_closes.won, 1);
         assert_eq!(first.final_closes.lost, 0);
         assert_eq!(first.unknown_history, 1);
+        assert_eq!(first.deals.len(), 2);
+        assert_eq!(first.deals[1].created_at, Some(lo - second));
         assert_eq!(first.cohort.won, 1);
         assert_eq!(first.cycle.mean_seconds, Some(3));
         assert_eq!(first.deals[0].visits[0].seconds(), 2);
@@ -551,10 +573,44 @@ mod tests {
             QuotaPeriod::new(next_date, next_date, "UTC".into(), QuotaCadence::Custom).unwrap();
         let later = historical_window(&histories, &next, hi + second).unwrap();
         assert_eq!(later.final_closes.lost, 1);
+        assert_eq!(later.unknown_history, 2);
+        assert_eq!(later.deals.len(), 3);
         assert_eq!(later.reopen_events, 1);
         assert_eq!(later.episode.mean_seconds, Some(1));
         assert_eq!(later.cohort.total(), 0);
         assert!(!later.complete);
         assert_eq!(previous_history_period(&next).unwrap(), period);
+    }
+
+    #[test]
+    fn immutable_creation_must_match_the_first_event() {
+        let date = QuotaDate {
+            year: 2026,
+            month: 11,
+            day: 1,
+        };
+        let period = QuotaPeriod::new(date, date, "UTC".into(), QuotaCadence::Custom).unwrap();
+        let (lo, hi) = period.bounds().unwrap();
+        let histories = [DealHistory {
+            id: "inconsistent".into(),
+            pipeline_id: "p".into(),
+            version: 1,
+            created_at: lo,
+            events: vec![event(
+                1,
+                HistoryKind::Created,
+                lo + 1,
+                DealStatus::Open,
+                None,
+                "lead",
+                None,
+            )],
+        }];
+        let result = historical_window(&histories, &period, hi).unwrap();
+        assert_eq!(result.unknown_history, 1);
+        assert_eq!(result.state.total(), 0);
+        assert_eq!(result.cohort.total(), 0);
+        assert_eq!(result.deals[0].created_at, Some(lo));
+        assert_eq!(result.deals[0].status, None);
     }
 }
