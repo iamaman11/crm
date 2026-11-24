@@ -92,6 +92,60 @@ mod sales_export;
 mod sales_history;
 
 impl SalesV2Service {
+    async fn capability_member_version(
+        &self,
+        db: &worker::D1Database,
+        deals: &[crm_sales::Deal],
+    ) -> std::result::Result<Option<i64>, ConnectError> {
+        if self.admin
+            || !deals
+                .iter()
+                .any(|deal| deal.opportunity_participant(&self.actor).is_some())
+        {
+            return Ok(None);
+        }
+        crate::access_members::member_version(db, &self.tenant, &self.actor)
+            .await
+            .map_err(|_| ConnectError::internal("SALES_DELEGATION_READ_FAILED"))
+    }
+
+    fn deal_capabilities(
+        &self,
+        deal: &crm_sales::Deal,
+        version: Option<i64>,
+    ) -> sale_wire::DealCapabilities {
+        let grant = sales_deals::participant_at_version(deal, &self.actor, version);
+        let open = deal.status() == DomainDealStatus::Open;
+        let permits = |permission| self.admin || grant.is_some_and(|g| g.role.permits(permission));
+        sale_wire::DealCapabilities {
+            edit: open && permits(crm_sales::OpportunityPermission::Edit),
+            edit_commercial: open && permits(crm_sales::OpportunityPermission::Commercial),
+            advance: open && permits(crm_sales::OpportunityPermission::Advance),
+            assign_owner: open && self.admin,
+            close: open && permits(crm_sales::OpportunityPermission::Close),
+            reopen: !open && self.admin,
+            manage_opportunity_team: self.admin,
+            manage_close_credit: open && self.admin,
+            ..Default::default()
+        }
+    }
+
+    async fn capability_page(
+        &self,
+        db: &worker::D1Database,
+        deals: &[crm_sales::Deal],
+    ) -> std::result::Result<Vec<sale_wire::DealCapabilityProjection>, ConnectError> {
+        let version = self.capability_member_version(db, deals).await?;
+        Ok(deals
+            .iter()
+            .map(|deal| sale_wire::DealCapabilityProjection {
+                deal_id: deal.deal_id().as_str().to_owned(),
+                capabilities: Some(self.deal_capabilities(deal, version)).into(),
+                ..Default::default()
+            })
+            .collect())
+    }
+
     async fn read_scorecard(
         &self,
         input: sale_wire::GetSalesScorecardRequest,
@@ -2705,6 +2759,7 @@ impl sale_wire::DealService for SalesV2Service {
             .map(Self::convert)
             .collect::<std::result::Result<Vec<_>, ConnectError>>()?;
         RpcResponse::ok(sale_wire::ListStageDealsResponse {
+            deal_capabilities: self.capability_page(&db, &list).await?,
             deals,
             page_info: Some(core_v2::PageInfo {
                 next_page_token: next.unwrap_or_default(),
@@ -3537,16 +3592,10 @@ impl sale_wire::DealService for SalesV2Service {
             }
             Some(_) => return Err(ConnectError::invalid_argument("IDEMPOTENCY_KEY_REQUIRED")),
         };
-        let grant = sales_deals::active_participant(&db, &self.tenant, &deal, &self.actor)
-            .await
-            .map_err(|_| ConnectError::internal("SALES_DELEGATION_READ_FAILED"))?;
+        let version = self
+            .capability_member_version(&db, std::slice::from_ref(&deal))
+            .await?;
         let open = deal.status() == DomainDealStatus::Open;
-        let permits = |permission| {
-            self.admin
-                || grant
-                    .as_ref()
-                    .is_some_and(|grant| grant.role.permits(permission))
-        };
         let distribution = match deal.owner() {
             crm_sales::DealOwner::Team(team) if open => {
                 access_teams::distribution_options(&db, &self.tenant, team.as_str(), &self.actor)
@@ -3559,18 +3608,7 @@ impl sale_wire::DealService for SalesV2Service {
             deal: Some(Self::convert(&deal)?).into(),
             team_distribution: distribution.map(member_handlers::distribution_wire).into(),
             confirmed_mutation: confirmed_mutation.into(),
-            capabilities: Some(sale_wire::DealCapabilities {
-                edit: open && permits(crm_sales::OpportunityPermission::Edit),
-                edit_commercial: open && permits(crm_sales::OpportunityPermission::Commercial),
-                advance: open && permits(crm_sales::OpportunityPermission::Advance),
-                assign_owner: open && self.admin,
-                close: open && permits(crm_sales::OpportunityPermission::Close),
-                reopen: !open && self.admin,
-                manage_opportunity_team: self.admin,
-                manage_close_credit: open && self.admin,
-                ..Default::default()
-            })
-            .into(),
+            capabilities: Some(self.deal_capabilities(&deal, version)).into(),
             ..Default::default()
         })
     }
@@ -3612,8 +3650,9 @@ impl sale_wire::DealService for SalesV2Service {
         }
         let input = req.to_owned_message();
         let owner_filter = Self::owner_scope(input.owner_filter.as_option())?;
+        let db = self.d1()?;
         let (list, next) = sales_deals::list_page_typed(
-            &self.d1()?,
+            &db,
             &self.tenant,
             sales_deals::DealListQuery {
                 after,
@@ -3639,6 +3678,7 @@ impl sale_wire::DealService for SalesV2Service {
             .map(Self::convert)
             .collect::<std::result::Result<Vec<_>, ConnectError>>()?;
         RpcResponse::ok(sale_wire::ListDealsResponse {
+            deal_capabilities: self.capability_page(&db, &list).await?,
             deals,
             page_info: Some(core_v2::PageInfo {
                 next_page_token: next.unwrap_or_default(),

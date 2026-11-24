@@ -7,7 +7,7 @@ import {enumValue} from "./enumFields";
 import {useQuery,useReadAction,useMutation,prepareMutation,MutationNotice,QueryNotice} from "./hooks";
 import {AccountPicker,AccountName} from "./Pickers";
 import {SearchField} from "./SearchField";
-import {DealContactPicker,DealDetails,dealStatusText,forecastCategoryText,probabilitySourceText} from "./DealRecord";
+import {DealActions,DealContactPicker,DealDetails,dealStatusText,forecastCategoryText,probabilitySourceText} from "./DealRecord";
 import {inputDate,parseDate} from "./calendarInput";
 import {dealHref,salesViewHref,salesPipelineHref} from "./routes";
 import {navigateTo} from "./navigation";
@@ -618,14 +618,13 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
           <p>{moneyText(deal.amount,currencyDefinitions)} · {percent(deal.probabilityBasisPoints)}%</p>
           {deal.status===DealStatus.OPEN&&<p>{probabilitySourceText(deal.probabilitySource)} · {forecastCategoryText(deal.forecastCategory)}</p>}
           <p>{dealStatusText(deal.status)} · версия {deal.version.toString()}</p>
-          {deal.status===DealStatus.OPEN?<>
-            <Button variant="secondary" onClick={()=>void open(deal.dealId,"edit")}>Редактировать</Button>{" "}
-            <Button variant="secondary" onClick={()=>void open(deal.dealId,"close")}>Завершить</Button>
-          </>:(deal.status===DealStatus.WON||deal.status===DealStatus.LOST)?
-            <Button variant="secondary" onClick={()=>void open(deal.dealId,"reopen")}>Открыть повторно</Button>:
-            <p role="status">Неизвестный статус: изменение недоступно</p>}
+          {expandedDeal!==deal.dealId&&<DealActions variant="list"
+            capabilities={allDealsQuery.data?.dealCapabilities.find(p=>p.dealId===deal.dealId)?.capabilities}
+            onEdit={()=>void open(deal.dealId,"edit")} onClose={()=>void open(deal.dealId,"close")}
+            onReopen={()=>void open(deal.dealId,"reopen")}/>}
           {expandedDeal===deal.dealId&&<DealDetails currencies={currencyDefinitions} pipelines={pipelines} key={deal.dealId+":"+detailRevision}
             dealId={deal.dealId} onEdit={()=>void open(deal.dealId,"edit")}
+            onAdvance={()=>void open(deal.dealId,"advance")}
             onClose={()=>void open(deal.dealId,"close")}
              onReopen={()=>void open(deal.dealId,"reopen")}/>}
         </Card>;
@@ -681,7 +680,7 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
               {expandedDeal===d.dealId?"Свернуть":"Раскрыть карточку"}
             </Button>{" "}
             <a href={dealHref(d.dealId)}>Полная страница</a>
-            {d.status===DealStatus.OPEN&&!activePipeline.archived&&
+            {boardPage.dealCapabilities.find(p=>p.dealId===d.dealId)?.capabilities?.advance&&!activePipeline.archived&&
               <span className={styles.dealDragHandle} draggable
                 aria-label={"Перетащить сделку "+d.name}
                 title="Перетащить к следующему этапу; затем подтвердить изменение"
@@ -699,15 +698,13 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
             {d.status===DealStatus.OPEN&&<p>{probabilitySourceText(d.probabilitySource)} · {forecastCategoryText(d.forecastCategory)}</p>}
             <p>Клиент: <AccountName accountId={d.accountId}/></p>
             <p>{dealStatusText(d.status)} · версия {d.version.toString()}</p>
-            {d.status===DealStatus.OPEN?<>
-              <Button variant="secondary" onClick={()=>void open(d.dealId,"edit")}>Изменить сделку</Button>{" "}
-              <Button variant="secondary" onClick={()=>void open(d.dealId,"advance")}>Изменить этап</Button>{" "}
-              <Button variant="secondary" onClick={()=>void open(d.dealId,"close")}>Завершить сделку</Button>
-            </>:(d.status===DealStatus.WON||d.status===DealStatus.LOST)?
-              <Button variant="secondary" onClick={()=>void open(d.dealId,"reopen")}>Открыть повторно</Button>:
-              <p role="status">Неизвестный статус: изменение недоступно</p>}
+            {expandedDeal!==d.dealId&&<DealActions variant="board"
+              capabilities={boardPage.dealCapabilities.find(p=>p.dealId===d.dealId)?.capabilities}
+              onEdit={()=>void open(d.dealId,"edit")} onAdvance={()=>void open(d.dealId,"advance")}
+              onClose={()=>void open(d.dealId,"close")} onReopen={()=>void open(d.dealId,"reopen")}/>}
             {expandedDeal===d.dealId&&<DealDetails currencies={currencyDefinitions} pipelines={pipelines} key={d.dealId+":"+detailRevision}
               dealId={d.dealId} onEdit={()=>void open(d.dealId,"edit")}
+              onAdvance={()=>void open(d.dealId,"advance")}
               onClose={()=>void open(d.dealId,"close")}
                onReopen={()=>void open(d.dealId,"reopen")}/>}
           </Card>)}

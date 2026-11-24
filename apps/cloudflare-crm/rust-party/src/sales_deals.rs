@@ -701,14 +701,20 @@ pub(super) async fn active_participant(
     deal: &Deal,
     actor: &str,
 ) -> Result<Option<crm_sales::OpportunityParticipant>> {
-    let Some(grant) = deal.opportunity_participant(actor) else {
+    if deal.opportunity_participant(actor).is_none() {
         return Ok(None);
-    };
-    Ok(
-        (super::access_members::member_version(db, tenant, actor).await?
-            == Some(grant.member_version))
-        .then(|| grant.clone()),
-    )
+    }
+    let version = super::access_members::member_version(db, tenant, actor).await?;
+    Ok(participant_at_version(deal, actor, version).cloned())
+}
+
+pub(super) fn participant_at_version<'a>(
+    deal: &'a Deal,
+    actor: &str,
+    version: Option<i64>,
+) -> Option<&'a crm_sales::OpportunityParticipant> {
+    deal.opportunity_participant(actor)
+        .filter(|grant| version == Some(grant.member_version))
 }
 
 // No global viewer role expansion. Authorization is checked before receipt

@@ -1,6 +1,6 @@
 import {useCallback,useState} from "react";
 import {Button,SelectField} from "@ultimate-crm/ui";
-import type {ContactPoint,Deal,SalesPipeline,CommercialCloseFact} from "@ultimate-crm/client/cloudflare";
+import type {ContactPoint,Deal,DealCapabilities,SalesPipeline,CommercialCloseFact} from "@ultimate-crm/client/cloudflare";
 import {DealEventKind,OpportunityTeamRole} from "@ultimate-crm/client/cloudflare";
 import {ContactPointStatus,DealStatus,ForecastCategory,ProbabilitySource} from "@ultimate-crm/client/cloudflare";
 import {api,dateText} from "./api";
@@ -44,7 +44,7 @@ function OpportunityTeam({deal,canManage,choices,refresh}:{deal:Deal;canManage:b
   ),async()=>{await refresh();setEmail("");});
   return <section aria-label="Команда сделки">
     <h4>Команда сделки</h4>
-    <p>Отдельно от единственного ответственного. Наблюдатель читает; участник меняет название, контакт и дату; руководитель также меняет коммерческие поля и этап. Закрытие, повторное открытие, смена ответственного и управление доступом — только администратор. Изменение версии сотрудника прекращает прежнее делегирование.</p>
+    <p>Отдельно от единственного ответственного. Наблюдатель читает; участник меняет название, контакт и дату; руководитель также меняет коммерческие поля и этап и может закрыть сделку, на которую получил полномочие. Повторное открытие, ручная коммерческая атрибуция, смена ответственного и управление доступом — только администратор. Изменение версии сотрудника прекращает прежнее делегирование.</p>
     {deal.opportunityTeam.length===0?<p>Участники не назначены.</p>:<ul>
       {deal.opportunityTeam.map(member=><li key={member.email}>{member.email} — {opportunityRoleText(member.role)} · версия сотрудника {member.memberVersion.toString()}
         {canManage&&<Button variant="secondary" disabled={mutation.busy||mutation.pending} onClick={()=>change(member.email)}>Отозвать доступ {member.email}</Button>}
@@ -194,6 +194,19 @@ export function DealHistory({dealId,accountId,pipeline,currencies,choices=[]}:{
   </section>;
 }
 
+// Shared action projection: only generated server capabilities grant actions.
+export function DealActions({capabilities,variant="record",onEdit,onAdvance,onClose,onReopen}:{
+ capabilities?:DealCapabilities;variant?:"record"|"list"|"board";
+ onEdit?:()=>void;onAdvance?:()=>void;onClose?:()=>void;onReopen?:()=>void;
+}){
+  return <div>
+    {onEdit&&capabilities?.edit&&<Button variant="secondary" onClick={onEdit}>{variant==="list"?"Редактировать":variant==="board"?"Изменить сделку":"Редактировать сделку"}</Button>}
+    {" "}{onAdvance&&capabilities?.advance&&<Button variant="secondary" onClick={onAdvance}>{variant==="record"?"Изменить этап сделки":"Изменить этап"}</Button>}
+    {" "}{onClose&&capabilities?.close&&<Button variant="secondary" onClick={onClose}>{variant==="list"?"Завершить":"Завершить сделку"}</Button>}
+    {" "}{onReopen&&capabilities?.reopen&&<Button variant="secondary" onClick={onReopen}>Открыть повторно</Button>}
+  </div>;
+}
+
 // One canonical GetDeal/ContactPoint read projection for inline/full page.
 export function DealDetails({dealId,currencies,pipelines,onEdit,onAdvance,onClose,onReopen}:{
  dealId:string;currencies:CurrencyCatalog;pipelines:readonly SalesPipeline[];
@@ -242,13 +255,7 @@ export function DealDetails({dealId,currencies,pipelines,onEdit,onAdvance,onClos
       {deal.closedAt&&<p>Закрыта: {dateText(deal.closedAt)}</p>}
       <p><a href={dealTasksHref(deal.dealId,deal.accountId)}>Задачи этой сделки</a>
         {" · "}<a href={scopeHref("tasks",deal.accountId)}>Все задачи клиента</a></p>
-      {deal.status===DealStatus.OPEN?<div>
-        {onEdit&&capabilities?.edit&&<Button variant="secondary" onClick={onEdit}>Редактировать сделку</Button>}
-        {" "}{onAdvance&&capabilities?.advance&&<Button variant="secondary" onClick={onAdvance}>Изменить этап сделки</Button>}
-        {" "}{onClose&&capabilities?.close&&<Button variant="secondary" onClick={onClose}>Завершить сделку</Button>}
-      </div>:onReopen&&capabilities?.reopen?<Button variant="secondary" onClick={onReopen}>
-        Открыть повторно
-      </Button>:null}
+      <DealActions capabilities={capabilities} onEdit={onEdit} onAdvance={onAdvance} onClose={onClose} onReopen={onReopen}/>
       {details.data?.teamDistribution&&<TeamDistribution key={"distribution:"+deal.dealId+":"+deal.version} options={details.data.teamDistribution}
         pending={distribution.busy||distribution.pending} onChanged={distribution.changed} onAssign={(scope,email)=>void distribution.runIntent(()=>prepareMutation(api.deals.updateDeal,{
           dealId:deal.dealId,owner:{owner:{case:"assigneeIdentity",value:email}},teamDistribution:scope,

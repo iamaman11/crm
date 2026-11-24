@@ -2919,6 +2919,36 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      await reloadDocument();
      await opportunity.getByText(/native-viewer@example.test — Руководитель сделки/).waitFor();
      assert.equal((await sql("SELECT json_extract(state,'$.opportunity_team[0].role') role FROM crm_sales_deal_records WHERE tenant=? AND id=?",tenantA,ownedDealId))[0].role,"lead");
+     const leadContext=await browser.newContext({extraHTTPHeaders:viewerHeaders});
+     watch(leadContext);
+     try{
+       const leadPage=await leadContext.newPage();
+       await leadPage.goto(base+"/#sales/"+encodeURIComponent(ownedDealId));
+       const leadRecord=leadPage.getByRole("region",{name:"Подробности сделки "+ownedDealId,exact:true});
+       await leadRecord.getByRole("heading",{name:ownedDealName,exact:true}).waitFor();
+       await leadRecord.getByRole("button",{name:"Завершить сделку",exact:true}).click();
+       const closePanel=leadPage.getByRole("dialog");
+       await closePanel.getByText(/Ручная корректировка доступна администратору/).waitFor();
+       await expect(closePanel.getByLabel("Коммерческая команда",{exact:true})).toHaveCount(0);
+       await expect(closePanel.getByLabel("Коммерческая территория",{exact:true})).toHaveCount(0);
+       await closePanel.getByLabel("Результат сделки",{exact:true}).selectOption("3");
+       await closePanel.getByLabel("Причина закрытия",{exact:true}).fill("qa.lead.close");
+       const closed=leadPage.waitForResponse(r=>responsePathEndsWith(r,"/CloseDeal")&&r.request().method()==="POST");
+       await closePanel.getByRole("button",{name:"Завершить сделку",exact:true}).click();
+       assert.equal((await closed).status(),200);
+       await closePanel.waitFor({state:"hidden"});
+       await leadPage.reload();
+       await leadRecord.getByText("Статус: Проиграна",{exact:true}).waitFor();
+       await expect(leadRecord.getByRole("button",{name:"Открыть повторно",exact:true})).toHaveCount(0);
+       assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND actor=? AND action='sales_deals.close'",tenantA,ownedDealId,"native-viewer@example.test"))[0].n,1);
+       assert.equal((await sql("SELECT COUNT(*) n FROM crm_sales_deal_events WHERE tenant=? AND deal_id=? AND action='closed' AND reason_code='qa.lead.close'",tenantA,ownedDealId))[0].n,1);
+       checkpoint("SK-07.C6 signed Lead closes through UI, automatic credit, D1 and reload");
+     }finally{await leadContext.close();}
+     await reloadDocument();
+     await page.getByRole("button",{name:"Открыть повторно",exact:true}).click();
+     await page.getByLabel("Причина повторного открытия",{exact:true}).fill("qa.lead.reopen");
+     await mutation(page.locator("dialog").getByRole("button",{name:"Открыть повторно",exact:true}),"ReopenDeal");
+     await reloadDocument();
      await mutation(opportunity.getByRole("button",{name:"Отозвать доступ native-viewer@example.test",exact:true}),"SetOpportunityParticipant");
      await opportunity.getByText("Участники не назначены.",{exact:true}).waitFor();
      const grantEvents=await sql("SELECT opportunity_team_after AS roster FROM crm_sales_deal_events WHERE tenant=? AND deal_id=? AND opportunity_team_after IS NOT NULL ORDER BY deal_version",tenantA,ownedDealId);

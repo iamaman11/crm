@@ -2265,7 +2265,24 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id=?"
   assert.equal(observer.body.deal.opportunityTeam[0].role,1);
   assert.equal((await salesV2("SetOpportunityParticipant",admin,grant(id,1,1n,"observer"))).body.receipt.replayed,true);
   assert.equal((await salesV2("SetOpportunityParticipant",admin,grant(id,3,1n,"stale"))).status,409);
+  const assertProjection=async(actor,expected)=>{
+    const details=await salesV2("GetDeal",actor,{dealId:id});
+    assert.equal(details.status,200,describeProtobuf(details.body));
+    assert.deepEqual(details.body.capabilities,expected);
+    const list=await salesV2("ListDeals",actor,{search:id,page:{pageSize:25}});
+    assert.equal(list.status,200,describeProtobuf(list.body));
+    assert.deepEqual(list.body.deals,[details.body.deal]);
+    assert.deepEqual(list.body.dealCapabilities.map(x=>x.dealId),[id]);
+    assert.deepEqual(list.body.dealCapabilities[0].capabilities,expected);
+    const stage=await salesV2("ListStageDeals",actor,{
+      pipelineId:details.body.deal.stage.pipelineId,stageId:details.body.deal.stage.stageId,page:{pageSize:100}
+    });
+    assert.equal(stage.status,200,describeProtobuf(stage.body));
+    assert.deepEqual(stage.body.dealCapabilities.map(x=>x.dealId),stage.body.deals.map(x=>x.dealId));
+    assert.deepEqual(stage.body.dealCapabilities.find(x=>x.dealId===id)?.capabilities,expected);
+  };
   const observerRead=(await salesV2("GetDeal",viewer,{dealId:id})).body;
+  await assertProjection(viewer,observerRead.capabilities);
   assert.equal(observerRead.capabilities.close,false);
   assert.equal(observerRead.capabilities.manageCloseCredit,false);
   assert.equal((await salesV2("CloseDeal",viewer,closeInput(id,observer.body.deal.version,"observer"))).status,403);
@@ -2274,6 +2291,7 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id=?"
   const contributor=await salesV2("SetOpportunityParticipant",admin,grant(id,2,2n,"contributor"));
   assert.equal(contributor.status,200,describeProtobuf(contributor.body));
   const contributorRead=(await salesV2("GetDeal",viewer,{dealId:id})).body;
+  await assertProjection(viewer,contributorRead.capabilities);
   assert.equal(contributorRead.capabilities.edit,true);
   assert.equal(contributorRead.capabilities.editCommercial,false);
   assert.equal(contributorRead.capabilities.advance,false);
@@ -2292,10 +2310,12 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id=?"
   const lead=await salesV2("SetOpportunityParticipant",admin,grant(id,3,4n,"lead"));
   assert.equal(lead.status,200,describeProtobuf(lead.body));
   const leadRead=(await salesV2("GetDeal",viewer,{dealId:id})).body;
+  await assertProjection(viewer,leadRead.capabilities);
   assert.equal(leadRead.capabilities.advance,true);
   assert.equal(leadRead.capabilities.close,true);
   assert.equal(leadRead.capabilities.manageCloseCredit,false);
   const adminRead=(await salesV2("GetDeal",admin,{dealId:id})).body;
+  await assertProjection(admin,adminRead.capabilities);
   assert.equal(adminRead.capabilities.close,true);
   assert.equal(adminRead.capabilities.manageCloseCredit,true);
   const commercial=await salesV2("UpdateDeal",viewer,edit(id,5n,"commercial",{probabilityBasisPoints:3300}));
@@ -2359,6 +2379,8 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id=?"
   const revoke=await salesV2("SetOpportunityParticipant",admin,grant(id,undefined,9n,"revoke"));
   assert.equal(revoke.status,200,describeProtobuf(revoke.body));
   assert.equal(revoke.body.deal.opportunityTeam.length,0);
+  await assertProjection(viewer,(await salesV2("GetDeal",viewer,{dealId:id})).body.capabilities);
+  assert.equal((await salesV2("CloseDeal",viewer,leadCloseInput)).status,403);
   assert.equal((await salesV2("UpdateDeal",viewer,command)).status,403);
   assert.equal((await salesV2("UpdateDeal",viewer,edit(id,10n,"revoked"))).status,403);
   assert.equal((await salesV2("CloseDeal",tenantB,closeInput(id,9n,"foreign-tenant"))).status,404);
