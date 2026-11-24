@@ -801,6 +801,55 @@ impl sale_wire::DealService for SalesV2Service {
             .await
             .map_err(|_| ConnectError::internal("SALES_PERFORMANCE_REPORT_READ_FAILED"))?
             .ok_or_else(|| ConnectError::not_found("SALES_PERFORMANCE_REPORT_NOT_FOUND"))?;
+        let comparison = if let Some(baseline_id) = input.baseline_report_id.as_deref() {
+            let baseline_id = Self::id(baseline_id)?;
+            let baseline = sales_performance::get(&db, &self.tenant, &baseline_id)
+                .await
+                .map_err(|_| ConnectError::internal("SALES_PERFORMANCE_REPORT_READ_FAILED"))?
+                .ok_or_else(|| ConnectError::not_found("SALES_PERFORMANCE_REPORT_NOT_FOUND"))?;
+            let (status, delta) = report
+                .compare(&baseline)
+                .map_err(|e| ConnectError::internal(e.code))?;
+            use crm_sales::ComparisonStatus as Domain;
+            use sale_wire::SalesPerformanceComparisonStatus as Wire;
+            Some(sale_wire::SalesPerformanceComparison {
+                status: match status {
+                    Domain::Comparable => Wire::SALES_PERFORMANCE_COMPARISON_STATUS_COMPARABLE,
+                    Domain::DifferentSeries => {
+                        Wire::SALES_PERFORMANCE_COMPARISON_STATUS_DIFFERENT_SERIES
+                    }
+                    Domain::DifferentFormula => {
+                        Wire::SALES_PERFORMANCE_COMPARISON_STATUS_DIFFERENT_FORMULA
+                    }
+                }
+                .into(),
+                baseline: Some(Self::report_wire(baseline)?).into(),
+                delta: delta
+                    .map(|d| sale_wire::SalesPerformanceDelta {
+                        target_minor_units: d.target,
+                        gross_minor_units: d.gross,
+                        reversal_minor_units: d.reversals,
+                        net_minor_units: d.net,
+                        remaining_minor_units: d.remaining,
+                        attainment_basis_points: d.attainment,
+                        open_minor_units: d.open,
+                        weighted_minor_units_times_basis_points: d.weighted,
+                        open_coverage_basis_points: d.open_coverage,
+                        weighted_coverage_basis_points: d.weighted_coverage,
+                        won_count: d.won_count,
+                        lost_count: d.lost_count,
+                        reversal_count: d.reversal_count,
+                        missing_amount_count: d.missing_amount_count,
+                        unknown_history_count: d.unknown_history_count,
+                        unallocated_count: d.unallocated_count,
+                        ..Default::default()
+                    })
+                    .into(),
+                ..Default::default()
+            })
+        } else {
+            None
+        };
         let confirmed_mutation = match receipt_key(input.receipt_idempotency_key.as_deref())? {
             None => None,
             Some(key) => {
@@ -886,6 +935,7 @@ impl sale_wire::DealService for SalesV2Service {
                 .map(Self::forecast_source_wire)
                 .collect::<std::result::Result<Vec<_>, _>>()?,
             forecast_next: next,
+            comparison: comparison.into(),
             ..Default::default()
         })
     }

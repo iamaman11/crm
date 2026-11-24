@@ -1,6 +1,6 @@
 import {useCallback,useState} from "react";
 import {Button,TextField,SelectField} from "@ultimate-crm/ui";
-import {SalesForecastDisposition} from "@ultimate-crm/client/cloudflare";
+import {SalesForecastDisposition,SalesPerformanceComparisonStatus} from "@ultimate-crm/client/cloudflare";
 import type {SalesPerformanceReport,SalesQuota,SalesQuotaFactCursor,SalesForecastSource,PreviewSalesPerformanceReportResponse} from "@ultimate-crm/client/cloudflare";
 import {api,newId} from "./api";
 import {useQuery,useReadAction,useMutation,prepareMutation,MutationNotice,QueryNotice} from "./hooks";
@@ -87,7 +87,7 @@ export function SalesPerformanceReports({isAdmin,quota,reportId,currencies}:{isA
   },[opened,actualAfter,forecastAfter]));
   const compare=useQuery(useCallback(async(signal:AbortSignal)=>{
     if(!compareId||compareId===opened)return undefined;
-    return api.deals.getSalesPerformanceReport({reportId:compareId,pageSize:1},{signal});
+    return api.deals.getSalesPerformanceReport({reportId:opened,baselineReportId:compareId,pageSize:1},{signal});
   },[compareId,opened]));
   const preview=useReadAction<{key:string;response:PreviewSalesPerformanceReportResponse}>();
   const key=quotaId+":"+version?.toString();
@@ -101,8 +101,11 @@ export function SalesPerformanceReports({isAdmin,quota,reportId,currencies}:{isA
   const pending=mutation.busy||mutation.pending;
   const report=saved.data?.report;
   const code=report?.quota?.configuration?.target?.currencyCode;
-  const comparison=compare.data?.report;
-  const sameQuota=!!report&&!!comparison&&report.quota?.quotaId===comparison.quota?.quotaId;
+  const comparison=compare.data?.comparison?.baseline?.reportId===compareId&&
+    compare.data?.report?.reportId===opened?compare.data?.comparison:undefined;
+  const delta=comparison?.delta;
+  const signed=(value:string,format:(v:string)=>string)=>value.startsWith("-")?"−"+format(value.slice(1)):value==="0"?format(value):"+"+format(value);
+  const pp=(value:string|undefined)=>value===undefined?"Не применимо":signed(value,v=>ratio(v).replace("%"," п. п."));
   return <section aria-label="Коммерческие отчёты и прогнозное покрытие">
     <h4>Коммерческие отчёты и прогнозное покрытие</h4>
     <p>Сохранённый отчёт — неизменяемый снимок версии цели, факта и текущего открытого портфеля. Сохранение фиксирует новый снимок, а не устаревший результат предварительного просмотра.</p>
@@ -150,10 +153,34 @@ export function SalesPerformanceReports({isAdmin,quota,reportId,currencies}:{isA
       {saved.data.forecastNext&&<Button variant="secondary" onClick={()=>setForecastAfter(saved.data?.forecastNext??"")}>Следующие сделки прогноза</Button>}
       <SelectField label="Сравнить с отчётом этой цели" value={compareId} onChange={event=>setCompareId(event.target.value)}>
         <option value="">Не сравнивать</option>
+        {compareId&&!list.data?.reports.some(r=>r.reportId===compareId)&&<option value={compareId}>{comparison?.baseline?.name??compareId}</option>}
         {list.data?.reports.filter(r=>r.reportId!==report.reportId&&r.quota?.quotaId===report.quota?.quotaId).map(r=><option key={r.reportId} value={r.reportId}>{r.name}</option>)}
       </SelectField>
       <QueryNotice query={compare}/>
-      {comparison&&sameQuota&&<section aria-label="Сравнение коммерческих отчётов"><h5>{comparison.name}</h5><Summary report={comparison} currencies={currencies}/></section>}
+      {comparison?.baseline&&<section aria-label="Сравнение коммерческих отчётов">
+        <h5>Базовый отчёт: {comparison.baseline.name}</h5>
+        <Summary report={comparison.baseline} currencies={currencies}/>
+        {comparison.status!==SalesPerformanceComparisonStatus.COMPARABLE?<p role="status">Отчёты несопоставимы: {comparison.status===SalesPerformanceComparisonStatus.DIFFERENT_SERIES?"разные серии целей или условия расчёта":"разные формулы расчёта"}. Разница не вычисляется.</p>:delta&&<>
+          <h5>Изменение: выбранный отчёт минус базовый</h5>
+          <p>Разница цели показана отдельно от фактических результатов. Даты снимков не определяют направление сравнения.</p>
+          <div role="region" aria-label="Разница коммерческих показателей" tabIndex={0} style={{maxWidth:"100%",overflowX:"auto"}}>
+            <table><thead><tr><th scope="col">Показатель</th><th scope="col">Изменение</th></tr></thead><tbody>
+              {([
+                ["План",delta.targetMinorUnits],["Выигрыши",delta.grossMinorUnits],["Сторно",delta.reversalMinorUnits],
+                ["Нетто",delta.netMinorUnits],["Остаток цели",delta.remainingMinorUnits],["Открытый портфель",delta.openMinorUnits]
+              ] as const).map(([label,value])=><tr key={label}><th scope="row">{label}</th><td>{signed(value,v=>money(v,code,currencies))}</td></tr>)}
+              <tr><th scope="row">Взвешенный портфель</th><td>{signed(delta.weightedMinorUnitsTimesBasisPoints,v=>weighted(v,code,currencies))}</td></tr>
+              <tr><th scope="row">Выполнение</th><td>{pp(delta.attainmentBasisPoints)}</td></tr>
+              <tr><th scope="row">Покрытие</th><td>{pp(delta.openCoverageBasisPoints)}</td></tr>
+              <tr><th scope="row">Взвешенное покрытие</th><td>{pp(delta.weightedCoverageBasisPoints)}</td></tr>
+              {([
+                ["Число выигрышей",delta.wonCount],["Число проигрышей",delta.lostCount],["Число сторно",delta.reversalCount],
+                ["Без суммы",delta.missingAmountCount],["Без исторического факта",delta.unknownHistoryCount],["Не распределено",delta.unallocatedCount]
+              ] as const).map(([label,value])=><tr key={label}><th scope="row">{label}</th><td>{signed(String(value),v=>v)}</td></tr>)}
+            </tbody></table>
+          </div>
+        </>}
+      </section>}
     </section>}
   </section>;
 }

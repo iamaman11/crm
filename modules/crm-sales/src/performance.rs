@@ -463,9 +463,194 @@ impl PerformanceReport {
     }
 }
 
+/// Comparing captures is not a replay of the mutable commercial ledger.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ComparisonStatus {
+    Comparable,
+    DifferentSeries,
+    DifferentFormula,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PerformanceDelta {
+    pub target: String,
+    pub gross: String,
+    pub reversals: String,
+    pub net: String,
+    pub remaining: String,
+    pub attainment: String,
+    pub open: String,
+    pub weighted: String,
+    pub open_coverage: Option<String>,
+    pub weighted_coverage: Option<String>,
+    pub won_count: i64,
+    pub lost_count: i64,
+    pub reversal_count: i64,
+    pub missing_amount_count: i64,
+    pub unknown_history_count: i64,
+    pub unallocated_count: i64,
+}
+
+impl PerformanceReport {
+    /// Selected capture minus baseline; no inferred time order or FX.
+    pub fn compare(
+        &self,
+        baseline: &Self,
+    ) -> Result<(ComparisonStatus, Option<PerformanceDelta>), SdkError> {
+        if self.formula_version != baseline.formula_version {
+            return Ok((ComparisonStatus::DifferentFormula, None));
+        }
+        self.validate()?;
+        baseline.validate()?;
+        let a = &self.quota;
+        let b = &baseline.quota;
+        if a.quota_id != b.quota_id
+            || a.scope != b.scope
+            || a.pipeline_id != b.pipeline_id
+            || a.period != b.period
+            || a.currency_code != b.currency_code
+        {
+            return Ok((ComparisonStatus::DifferentSeries, None));
+        }
+        let delta = |a: &str, b: &str| -> Result<String, SdkError> {
+            Ok(exact(a)?
+                .checked_sub(exact(b)?)
+                .ok_or_else(overflow)?
+                .to_string())
+        };
+        let optional = |a: &Option<String>, b: &Option<String>| {
+            a.as_deref()
+                .zip(b.as_deref())
+                .map(|(a, b)| delta(a, b))
+                .transpose()
+        };
+        let count = |a: u64, b: u64| {
+            i64::try_from(i128::from(a) - i128::from(b)).map_err(|_| overflow())
+        };
+        let x = &self.actuals;
+        let y = &baseline.actuals;
+        let f = &self.forecast;
+        let g = &baseline.forecast;
+        Ok((
+            ComparisonStatus::Comparable,
+            Some(PerformanceDelta {
+                target: delta(&a.target_minor_units, &b.target_minor_units)?,
+                gross: delta(&x.gross, &y.gross)?,
+                reversals: delta(&x.reversals, &y.reversals)?,
+                net: delta(&x.net, &y.net)?,
+                remaining: delta(&x.remaining, &y.remaining)?,
+                attainment: delta(&x.attainment, &y.attainment)?,
+                open: delta(&f.open, &g.open)?,
+                weighted: delta(&f.weighted, &g.weighted)?,
+                open_coverage: optional(&f.open_coverage, &g.open_coverage)?,
+                weighted_coverage: optional(&f.weighted_coverage, &g.weighted_coverage)?,
+                won_count: count(x.won_count, y.won_count)?,
+                lost_count: count(x.lost_count, y.lost_count)?,
+                reversal_count: count(x.reversal_count, y.reversal_count)?,
+                missing_amount_count: count(x.missing_amount_count, y.missing_amount_count)?,
+                unknown_history_count: count(x.unknown_history_count, y.unknown_history_count)?,
+                unallocated_count: count(x.unallocated_count, y.unallocated_count)?,
+            }),
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn frozen_comparison_preserves_signed_exact_deltas_and_series() {
+        let quota = SalesQuota {
+            quota_id: "quota-a".into(),
+            name: "Quota".into(),
+            scope: SalesQuotaScope::Tenant,
+            pipeline_id: None,
+            period: crate::QuotaPeriod::new(
+                QuotaDate {
+                    year: 2026,
+                    month: 1,
+                    day: 1,
+                },
+                QuotaDate {
+                    year: 2026,
+                    month: 1,
+                    day: 31,
+                },
+                "UTC".into(),
+                crate::QuotaCadence::Monthly,
+            )
+            .unwrap(),
+            currency_code: "EUR".into(),
+            target_minor_units: "1000".into(),
+            published: true,
+            archived: false,
+            revision_reason: "Initial".into(),
+            revision_at_unix_nanos: "1".into(),
+            version: 1,
+        };
+        let actuals = PerformanceActuals {
+            gross: "0".into(),
+            reversals: "0".into(),
+            net: "0".into(),
+            remaining: "1000".into(),
+            attainment: "0".into(),
+            won_count: 0,
+            lost_count: 0,
+            reversal_count: 0,
+            missing_amount_count: 0,
+            unknown_history_count: 0,
+            unallocated_count: 0,
+        };
+        let baseline = PerformanceReport {
+            report_id: "report-a".into(),
+            name: "Baseline".into(),
+            quota,
+            captured_at: "1".into(),
+            captured_by: "actor".into(),
+            event_sequence: "0".into(),
+            formula_version: 1,
+            forecast: ForecastCoverage::new(&actuals, &[]).unwrap(),
+            actuals,
+            actual_candidate_count: 0,
+        };
+        let mut selected = baseline.clone();
+        selected.report_id = "report-b".into();
+        selected.quota.version = 2;
+        selected.quota.target_minor_units = "2000".into();
+        selected.actuals.gross = "9007199254740993".into();
+        selected.actuals.net = selected.actuals.gross.clone();
+        selected.actuals.remaining = (2000i128 - 9007199254740993i128).to_string();
+        selected.actuals.attainment = (9007199254740993i128 * 10_000 / 2000).to_string();
+        selected.actuals.won_count = 1;
+        selected.forecast = ForecastCoverage::new(&selected.actuals, &[]).unwrap();
+        let (status, delta) = selected.compare(&baseline).unwrap();
+        assert_eq!(status, ComparisonStatus::Comparable);
+        let delta = delta.unwrap();
+        assert_eq!(delta.target, "1000");
+        assert_eq!(delta.net, "9007199254740993");
+        assert_eq!(delta.won_count, 1);
+        assert_eq!(delta.weighted_coverage, None);
+        assert_eq!(
+            baseline.compare(&selected).unwrap().1.unwrap().net,
+            "-9007199254740993"
+        );
+        let unchanged = baseline.compare(&baseline).unwrap().1.unwrap();
+        assert_eq!(unchanged.net, "0");
+        assert_eq!(unchanged.open_coverage.as_deref(), Some("0"));
+        assert_eq!(unchanged.weighted_coverage.as_deref(), Some("0"));
+        let mut different_formula = selected.clone();
+        different_formula.formula_version = 2;
+        assert_eq!(
+            different_formula.compare(&baseline).unwrap(),
+            (ComparisonStatus::DifferentFormula, None)
+        );
+        selected.quota.currency_code = "USD".into();
+        assert_eq!(
+            selected.compare(&baseline).unwrap(),
+            (ComparisonStatus::DifferentSeries, None)
+        );
+    }
 
     #[test]
     fn exact_weighted_coverage_and_disjoint_exclusions() {

@@ -2981,7 +2981,16 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      await reloadDocument();
      await reportDetail.getByRole("heading",{name:reportName,exact:true}).waitFor();
      assert.equal((await sql("SELECT COUNT(*) n FROM crm_sales_performance_reports WHERE tenant=? AND json_extract(state,'$.name')=?",tenantA,reportName))[0].n,1);
+     await quotaRegion.getByRole("row").filter({hasText:quotaName}).getByRole("button",{name:"План-факт",exact:true}).click();
+     const secondReportName=reportName+" baseline";
+     await reportRegion.getByLabel("Название отчёта",{exact:true}).fill(secondReportName);
+     await mutation(reportRegion.getByRole("button",{name:"Сохранить коммерческий отчёт",exact:true}),"SaveSalesPerformanceReport");
+     await reportDetail.getByRole("heading",{name:secondReportName,exact:true}).waitFor();
+     await reportDetail.getByLabel("Сравнить с отчётом этой цели").selectOption({label:reportName});
+     const difference=reportDetail.getByRole("region",{name:"Разница коммерческих показателей"});
+     await difference.getByRole("row").filter({has:page.getByRole("rowheader",{name:"Выполнение",exact:true})}).getByRole("cell",{name:"0.00 п. п.",exact:true}).waitFor();
      checkpoint("SK-07.D3 commercial report forecast preview, durable save, direct link, reload and D1");
+     checkpoint("SK-07.D3 frozen report comparison through typed Connect");
 
 
    }

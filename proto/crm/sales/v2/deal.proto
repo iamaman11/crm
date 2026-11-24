@@ -927,12 +927,43 @@ message SaveSalesPerformanceReportResponse {
   SalesPerformanceReport report = 1;
   crm.core.v2.MutationReceipt receipt = 2;
 }
+// Comparison is computed by the original Sales owner from two frozen reports.
+enum SalesPerformanceComparisonStatus {
+  SALES_PERFORMANCE_COMPARISON_STATUS_UNSPECIFIED = 0;
+  SALES_PERFORMANCE_COMPARISON_STATUS_COMPARABLE = 1;
+  SALES_PERFORMANCE_COMPARISON_STATUS_DIFFERENT_SERIES = 2;
+  SALES_PERFORMANCE_COMPARISON_STATUS_DIFFERENT_FORMULA = 3;
+}
+message SalesPerformanceDelta {
+  string target_minor_units = 1;
+  string gross_minor_units = 2;
+  string reversal_minor_units = 3;
+  string net_minor_units = 4;
+  string remaining_minor_units = 5;
+  string attainment_basis_points = 6;
+  string open_minor_units = 7;
+  string weighted_minor_units_times_basis_points = 8;
+  optional string open_coverage_basis_points = 9;
+  optional string weighted_coverage_basis_points = 10;
+  int64 won_count = 11;
+  int64 lost_count = 12;
+  int64 reversal_count = 13;
+  int64 missing_amount_count = 14;
+  int64 unknown_history_count = 15;
+  int64 unallocated_count = 16;
+}
+message SalesPerformanceComparison {
+  SalesPerformanceComparisonStatus status = 1;
+  SalesPerformanceReport baseline = 2;
+  SalesPerformanceDelta delta = 3;
+}
 message GetSalesPerformanceReportRequest {
   string report_id = 1;
   optional string receipt_idempotency_key = 2;
   SalesQuotaFactCursor actual_after = 3;
   string forecast_after = 4;
   uint32 page_size = 5;
+  optional string baseline_report_id = 6;
 }
 message GetSalesPerformanceReportResponse {
   SalesPerformanceReport report = 1;
@@ -942,6 +973,7 @@ message GetSalesPerformanceReportResponse {
   SalesQuotaFactCursor actual_next = 5;
   repeated SalesForecastSource forecast_sources = 6;
   string forecast_next = 7;
+  SalesPerformanceComparison comparison = 8;
 }
 message ListSalesPerformanceReportsRequest {
   crm.core.v2.PageRequest page = 1;
