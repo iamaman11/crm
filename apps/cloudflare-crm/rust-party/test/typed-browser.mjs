@@ -2929,7 +2929,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
        await expect(searchRegion.getByRole("button",{name:"Завершить",exact:true})).toHaveCount(1);
        await leadPage.goto(base+"/#sales?"+new URLSearchParams({pipelineId:newPipelineId}).toString());
        const leadBoard=leadPage.getByRole("region",{name:"Kanban — этапы и сделки",exact:true});
-       const leadCard=leadBoard.locator("section").filter({has:leadBoard.getByRole("heading",{name:ownedDealName,exact:true})}).last();
+       const leadCard=leadBoard.locator("section").filter({has:leadPage.getByRole("heading",{name:ownedDealName,exact:true})}).last();
        await leadCard.getByRole("heading",{name:ownedDealName,exact:true}).waitFor();
        await expect(leadCard.getByRole("button",{name:"Завершить сделку",exact:true})).toHaveCount(1);
        await expect(leadCard.getByLabel("Перетащить сделку "+ownedDealName,{exact:true})).toHaveCount(1);
@@ -2975,7 +2975,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
        await expect(searchRegion.getByRole("button",{name:"Завершить",exact:true})).toHaveCount(0);
        await revokedPage.goto(base+"/#sales?"+new URLSearchParams({pipelineId:newPipelineId}).toString());
        const board=revokedPage.getByRole("region",{name:"Kanban — этапы и сделки",exact:true});
-       const card=board.locator("section").filter({has:board.getByRole("heading",{name:ownedDealName,exact:true})}).last();
+       const card=board.locator("section").filter({has:revokedPage.getByRole("heading",{name:ownedDealName,exact:true})}).last();
        await card.getByRole("heading",{name:ownedDealName,exact:true}).waitFor();
        await expect(card.getByRole("button",{name:"Завершить сделку",exact:true})).toHaveCount(0);
        await expect(card.getByLabel("Перетащить сделку "+ownedDealName,{exact:true})).toHaveCount(0);
