@@ -8,6 +8,11 @@ import {dirname,join} from "node:path";
 import {fileURLToPath} from "node:url";
 import {mock} from "node:test";
 import {createTestHarness} from "wrangler";
+import {
+  binaryPartyV3,decodePartyV3,partyV3Path,
+  binaryAccountV2,decodeAccountV2,accountV2Path,
+  binarySalesV2,decodeSalesV2,salesV2Path,decodeDomainErrorDetail,
+} from "../../../../scripts/crm-connect-binary-fixture.mjs";
 
 const root=dirname(dirname(fileURLToPath(import.meta.url)));
 const sha=process.env.CRM_SOURCE_SHA;
@@ -91,12 +96,122 @@ try{
   assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM crm_users").first()).n,2);
   assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM crm_tenants").first()).n,1);
   assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM crm_audit").first()).n,0);
+  // Extend the same artifact proof through the actual generated binary RPCs.
+  // No direct insertion of domain state; all fixtures are made by original owners.
+  providerStatus=200;
+  const partyId="production-artifact-party",accountId="production-artifact-account";
+  const pipelineId="production.artifact",dealId="production-artifact-deal";
+  const pre=(key,expectedVersion)=>({idempotencyKey:"artifact-"+key,
+    ...(expectedVersion===undefined?{}:{expectedVersion})});
+  const rpc=(path,encode,decode)=>async(method,identity,input,status=200)=>{
+    const response=await worker.fetch(path(method),{method:"POST",
+      headers:{"content-type":"application/proto","connect-protocol-version":"1",
+        ...(identity?{"cf-access-jwt-assertion":token(identity)}:{})},
+      body:encode(method,input)});
+    assert.equal(response.status,status,method);
+    assert.equal(response.headers.get("x-crm-source-sha"),sha);
+    const body=status<400?decode(method,new Uint8Array(await response.arrayBuffer())):await response.json();
+    return {body,requestId:response.headers.get("x-request-id")};
+  };
+  const party=rpc(partyV3Path,binaryPartyV3,decodePartyV3);
+  const account=rpc(accountV2Path,binaryAccountV2,decodeAccountV2);
+  const sales=rpc(salesV2Path,binarySalesV2,decodeSalesV2);
+  const committed=(reply,version)=>{
+    assert.equal(reply.body.receipt?.resourceVersion,version);
+    assert.equal(reply.body.receipt?.requestId,reply.requestId);
+    assert.equal(reply.body.receipt?.replayed,false);
+  };
+  committed(await party("CreateParty",admin,{partyId,kind:2,displayName:"Artifact Party",
+    precondition:pre("party")}),1n);
+  committed(await account("CreateAccount",admin,{accountId,primaryPartyId:partyId,
+    name:"Artifact Account",precondition:pre("account")}),1n);
+  committed(await sales("CreatePipeline",admin,{pipelineId,name:"Artifact Pipeline",
+    stages:[{stageId:"lead",name:"Lead",probabilityBasisPoints:1000},
+      {stageId:"qualified",name:"Qualified",probabilityBasisPoints:4500}],
+    precondition:pre("pipeline")}),1n);
+  const create={dealId,accountId,name:"Artifact Deal",
+    stage:{pipelineId,stageId:"lead",ordinal:1},probabilityBasisPoints:1000,
+    precondition:pre("deal")};
+  const count=async(table)=>(await db.prepare("SELECT COUNT(*) AS n FROM "+table).first()).n;
+  const snapshot=async()=>Promise.all([
+    db.prepare("SELECT state,version FROM crm_sales_deal_records WHERE tenant=? AND id=?")
+      .bind("artifact-proof",dealId).first(),
+    count("crm_sales_deal_receipts"),count("crm_sales_deal_events"),
+    count("crm_sales_link_delivery_records"),count("crm_activity_task_records"),
+    count("crm_activity_task_receipts"),count("crm_audit"),
+  ]);
+  const beforeCreate=await snapshot();
+  await sales("CreateDeal",null,create,401);
+  await sales("CreateDeal",viewer,create,403);
+  assert.deepEqual(await snapshot(),beforeCreate);
+  const created=await sales("CreateDeal",admin,create);
+  committed(created,1n);
+  const get={dealId,receiptIdempotencyKey:create.precondition.idempotencyKey};
+  const confirmed=await sales("GetDeal",viewer,get);
+  assert.equal(confirmed.body.confirmedMutation?.resourceVersion,1n);
+  assert.equal(confirmed.body.confirmedMutation?.originalRequestId,created.requestId);
+  const missing={dealId,receiptIdempotencyKey:"artifact-missing-receipt"};
+  assert.equal((await sales("GetDeal",viewer,missing)).body.confirmedMutation,undefined);
+  // Real D1 receipt read failure is not the same as a proven absent key.
+  // These are public production RPCs, not the old CI-only diagnostic route.
+  const beforeUnavailable=await snapshot();
+  await db.prepare("ALTER TABLE crm_sales_deal_receipts RENAME TO fixture_artifact_unavailable_receipts").run();
+  try{
+    const unavailable=await sales("GetDeal",viewer,get,503);
+    assert.equal(unavailable.body.code,"unavailable");
+    assert.equal(unavailable.body.message,"SALES_RECEIPT_READ_FAILED");
+    const absent=await sales("GetDeal",viewer,missing,503);
+    assert.equal(absent.body.message,"SALES_RECEIPT_READ_FAILED");
+    const replayUnavailable=await sales("CreateDeal",admin,create,503);
+    const detail=decodeDomainErrorDetail(replayUnavailable.body.details.find(
+      d=>d.type==="crm.core.v2.DomainErrorDetail"));
+    assert.equal(detail.domainCode,"SALES_COMMIT_UNCONFIRMED");
+    assert.equal(detail.commitOutcome,2);
+    assert.equal(detail.requestId,replayUnavailable.requestId);
+  }finally{
+    await db.prepare("ALTER TABLE fixture_artifact_unavailable_receipts RENAME TO crm_sales_deal_receipts").run();
+  }
+  assert.deepEqual(await snapshot(),beforeUnavailable);
+  assert.equal((await sales("GetDeal",viewer,missing)).body.confirmedMutation,undefined);
+  assert.equal((await sales("GetDeal",viewer,get)).body.confirmedMutation?.originalRequestId,
+    created.requestId);
+  const replay=await sales("CreateDeal",admin,create);
+  assert.equal(replay.body.receipt?.replayed,true);
+  assert.equal(replay.body.receipt?.originalRequestId,created.requestId);
+  assert.deepEqual(await snapshot(),beforeUnavailable);
+  const advance={dealId,targetStage:{pipelineId,stageId:"qualified",ordinal:2},
+    targetStatus:1,precondition:pre("advance",1n)};
+  const moved=await sales("AdvanceStage",admin,advance);
+  committed(moved,2n);
+  const linked=await db.prepare("SELECT deal_version,disposition,task_id,request_id FROM crm_sales_link_delivery_records WHERE tenant=? AND deal_id=?")
+    .bind("artifact-proof",dealId).first();
+  assert.equal(linked?.deal_version,2);
+  assert.equal(linked?.disposition,"applied");
+  assert.equal(linked?.request_id,moved.requestId);
+  assert.ok(linked?.task_id);
+  const task=await db.prepare("SELECT version,state FROM crm_activity_task_records WHERE tenant=? AND id=?")
+    .bind("artifact-proof",linked.task_id).first();
+  assert.equal(task?.version,1);
+  assert.ok(JSON.parse(task.state).related_resources.some(ref=>ref.resource_id===dealId&&ref.version===2));
+  const afterAdvance=await snapshot();
+  assert.equal((await sales("AdvanceStage",admin,advance)).body.receipt?.replayed,true);
+  await sales("UpdateDeal",admin,{dealId,name:{operation:{case:"set",value:"Stale"}},
+    precondition:pre("stale",1n)},409);
+  assert.deepEqual(await snapshot(),afterAdvance,"replay/stale write must not change D1");
+  const actions=(await db.prepare("SELECT action FROM crm_audit WHERE tenant_id=? AND request_id=? ORDER BY action")
+    .bind("artifact-proof",moved.requestId).all()).results.map(row=>row.action);
+  assert.deepEqual(actions,["activity_tasks.create","sales_activities_link.applied","sales_deals.advance"]);
+  console.log(JSON.stringify({event:"crm.production-rpc-d1-artifact",result:"PASS",
+    source_sha:sha,generated_binary:true,role_denial:true,real_receipt_read_failure:true,
+    replay:true,cas:true,atomic_link:true,request_correlation:true}));
   assert.deepEqual(artifact(),before,"production bundle changed during test");
   const evidence={event:"crm.production-access-artifact",result:"PASS",source_sha:sha,
     production_features:["native"],artifact:before,jwks_requests:jwksRequests,
     signed_admin_viewer:true,invalid_signature_denied:true,wrong_claims_denied:true,
     unknown_service_denied:true,provider_failure_denied:true,ci_endpoint_absent:true,
-    unchanged_d1:true,scope:"production Access feasibility; full native-ci suite still mandatory"};
+    unchanged_d1:true,production_rpc_d1:{generated_binary:true,role_denial:true,
+      receipt_read_failure:true,replay:true,cas:true,atomic_link:true},
+    scope:"production Access and selected RPC/D1 parity; full native-ci suite still mandatory"};
   writeFileSync(process.env.CRM_PRODUCTION_ACCESS_PROOF,JSON.stringify(evidence)+"\n");
   console.log(JSON.stringify(evidence));
 }finally{
