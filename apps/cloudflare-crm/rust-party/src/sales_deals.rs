@@ -86,6 +86,10 @@ pub(super) struct CloseInput {
     pub(super) expected_version: i64,
     pub(super) outcome: StatusInput,
     pub(super) reason_code: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) credit_selection: Option<crm_sales::CloseCreditSelection>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) expected_credit_decision: Option<String>,
 }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -1030,6 +1034,71 @@ impl CreditResolution {
         Ok(resolution)
     }
 
+    async fn select(
+        &mut self,
+        db: &D1Database,
+        tenant: &str,
+        deal: &Deal,
+        selection: &crm_sales::CloseCreditSelection,
+    ) -> Result<std::result::Result<(), SdkError>> {
+        use super::sales_territories::{Kind, Record, get};
+        let explicit = if self.context.territory.is_none() {
+            if let Some(id) = &selection.territory_id {
+                match get(db, tenant, Kind::Territory, id).await? {
+                    Some(Record::Territory(value)) if !value.archived => {
+                        Some(crm_sales::CommercialDimension {
+                            id: value.territory_id,
+                            name: value.name,
+                            version: value.version,
+                        })
+                    }
+                    _ => None,
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        match self.context.clone().select(deal.owner(), selection, explicit) {
+            Ok(context) => {
+                self.territory = context
+                    .territory
+                    .as_ref()
+                    .map(|value| (value.id.clone(), value.version));
+                self.context = context;
+                Ok(Ok(()))
+            }
+            Err(error) => Ok(Err(error)),
+        }
+    }
+
+    fn fingerprint(
+        &self,
+        tenant: &str,
+        id: &str,
+        deal: &Deal,
+        selection: &crm_sales::CloseCreditSelection,
+    ) -> Result<String> {
+        hash(
+            "commercial-credit-v1",
+            id,
+            &(
+                tenant,
+                deal.version(),
+                self.owner_kind,
+                &self.owner_id,
+                &self.teams,
+                &self.account_id,
+                self.assignment_version,
+                &self.territory,
+                &self.pipeline_id,
+                self.pipeline_version,
+                selection,
+            ),
+        )
+    }
+
     fn append_guard(&self, sql: &mut String, values: &mut Vec<JsValue>, tenant: &str) {
         sql.push_str(&format!(" AND ({CREDIT_TEAMS})=?"));
         values.extend(self.team_parameters(tenant));
@@ -1057,6 +1126,60 @@ impl CreditResolution {
             JsValue::from_f64(self.pipeline_version as f64),
         ]);
     }
+}
+
+pub(super) struct CloseCreditPreview {
+    pub(super) teams: Vec<crm_sales::CommercialDimension>,
+    pub(super) territory_assigned: bool,
+    pub(super) fact: crm_sales::CommercialCloseFact,
+    pub(super) fingerprint: String,
+    pub(super) deal_version: i64,
+}
+
+pub(super) async fn preview_close_credit(
+    db: &D1Database,
+    tenant: &str,
+    id: &str,
+    expected_version: i64,
+    selection: &crm_sales::CloseCreditSelection,
+) -> Result<std::result::Result<CloseCreditPreview, SdkError>> {
+    let Some(deal) = load(db, tenant, id).await? else {
+        return Ok(Err(SdkError::new(
+            "NOT_FOUND",
+            ErrorCategory::NotFound,
+            false,
+            "Deal not found.",
+        )));
+    };
+    if deal.version() != expected_version || deal.status() != DealStatus::Open {
+        return Ok(Err(SdkError::new(
+            "SALES_CLOSE_CREDIT_STALE",
+            ErrorCategory::Conflict,
+            false,
+            "Deal changed; refresh the preview.",
+        )));
+    }
+    let mut credit = CreditResolution::load(db, tenant, &deal).await?;
+    let teams = credit.context.teams.clone();
+    let territory_assigned = credit.context.territory.is_some();
+    if let Err(error) = credit.select(db, tenant, &deal, selection).await? {
+        return Ok(Err(error));
+    }
+    let fingerprint = credit.fingerprint(tenant, id, &deal, selection)?;
+    // Only attribution dimensions leave this preview. It is not a stored
+    // close event and does not assert any commercial outcome or timestamp.
+    let fact =
+        match crm_sales::CommercialCloseFact::capture(&deal, DealStatus::Won, 0, credit.context) {
+            Ok(fact) => fact,
+            Err(error) => return Ok(Err(error)),
+        };
+    Ok(Ok(CloseCreditPreview {
+        teams,
+        territory_assigned,
+        fact,
+        fingerprint,
+        deal_version: deal.version(),
+    }))
 }
 
 async fn stage_mutation(
@@ -1091,8 +1214,30 @@ async fn stage_mutation(
         return Ok(rejected("NOT_FOUND", ErrorCategory::NotFound));
     };
     let before = deal.clone();
-    let credit = if matches!(&input, StageMutation::Close(_)) {
-        Some(CreditResolution::load(db, tenant, &deal).await?)
+    let credit = if let StageMutation::Close(value) = &input {
+        if value.expected_version != deal.version() {
+            return Ok(rejected("VERSION_CONFLICT", ErrorCategory::Conflict));
+        }
+        if value.credit_selection.is_some() && value.expected_credit_decision.is_none() {
+            return Ok(rejected(
+                "SALES_CLOSE_CREDIT_PREVIEW_REQUIRED",
+                ErrorCategory::InvalidArgument,
+            ));
+        }
+        let selection = value.credit_selection.clone().unwrap_or_default();
+        let mut resolution = CreditResolution::load(db, tenant, &deal).await?;
+        if let Err(error) = resolution.select(db, tenant, &deal, &selection).await? {
+            return Ok(rejected_sdk(error));
+        }
+        if let Some(expected) = &value.expected_credit_decision
+            && *expected != resolution.fingerprint(tenant, id, &deal, &selection)?
+        {
+            return Ok(rejected(
+                "SALES_CLOSE_CREDIT_STALE",
+                ErrorCategory::Conflict,
+            ));
+        }
+        Some(resolution)
     } else {
         None
     };

@@ -1794,6 +1794,56 @@ impl sale_wire::DealService for SalesV2Service {
         })
     }
     #[worker::send]
+    async fn preview_deal_close_credit(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, sale_wire::PreviewDealCloseCreditRequest>,
+    ) -> ServiceResult<sale_wire::PreviewDealCloseCreditResponse> {
+        let input = req.to_owned_message();
+        let id = Self::id(&input.deal_id)?;
+        let selection = input
+            .selection
+            .as_option()
+            .map(|value| crm_sales::CloseCreditSelection {
+                team_id: value.team_id.clone(),
+                leave_team_unallocated: value.leave_team_unallocated,
+                territory_id: value.territory_id.clone(),
+            })
+            .unwrap_or_default();
+        let preview = sales_deals::preview_close_credit(
+            &self.d1()?,
+            &self.tenant,
+            &id,
+            input.expected_version,
+            &selection,
+        )
+        .await
+        .map_err(|_| ConnectError::internal("SALES_CLOSE_CREDIT_READ_FAILED"))?
+        .map_err(|error| match error.category {
+            crm_module_sdk::ErrorCategory::NotFound => ConnectError::not_found(error.code),
+            crm_module_sdk::ErrorCategory::Conflict => ConnectError::aborted(error.code),
+            _ => ConnectError::invalid_argument(error.code),
+        })?;
+        let dimension = |value: &crm_sales::CommercialDimension| sale_wire::CommercialDimension {
+            id: value.id.clone(),
+            name: value.name.clone(),
+            version: value.version,
+            ..Default::default()
+        };
+        RpcResponse::ok(sale_wire::PreviewDealCloseCreditResponse {
+            deal_version: preview.deal_version,
+            owner: Some(Self::owner_wire(&preview.fact.owner)).into(),
+            credited_actor: preview.fact.credited_actor,
+            eligible_teams: preview.teams.iter().map(dimension).collect(),
+            credited_team: preview.fact.credited_team.as_ref().map(dimension).into(),
+            credited_territory: preview.fact.credited_territory.as_ref().map(dimension).into(),
+            territory_assigned: preview.territory_assigned,
+            expected_decision: preview.fingerprint,
+            ..Default::default()
+        })
+    }
+
+    #[worker::send]
     async fn close_deal(
         &self,
         _ctx: RequestContext,
@@ -1818,6 +1868,14 @@ impl sale_wire::DealService for SalesV2Service {
                 expected_version: version.unwrap_or_default(),
                 outcome: status,
                 reason_code: input.reason_code,
+                credit_selection: input.credit_selection.as_option().map(|value| {
+                    crm_sales::CloseCreditSelection {
+                        team_id: value.team_id.clone(),
+                        leave_team_unallocated: value.leave_team_unallocated,
+                        territory_id: value.territory_id.clone(),
+                    }
+                }),
+                expected_credit_decision: input.expected_credit_decision,
             },
             &key,
             &self.d1()?,

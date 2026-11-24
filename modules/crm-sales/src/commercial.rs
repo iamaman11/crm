@@ -28,6 +28,84 @@ pub struct CloseCreditContext {
     pub catalog_version: Option<i64>,
 }
 
+/// Explicit close credit intent. Default keeps existing automatic rules.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CloseCreditSelection {
+    pub team_id: Option<String>,
+    pub leave_team_unallocated: bool,
+    pub territory_id: Option<String>,
+}
+
+impl CloseCreditContext {
+    /// Resolve against versioned evidence supplied by storage. No caller
+    /// may invent a team membership or override an active account territory.
+    pub fn select(
+        mut self,
+        owner: &DealOwner,
+        selection: &CloseCreditSelection,
+        explicit_territory: Option<CommercialDimension>,
+    ) -> Result<Self, SdkError> {
+        let reject = || {
+            SdkError::new(
+                "SALES_CLOSE_CREDIT_SELECTION_INVALID",
+                ErrorCategory::InvalidArgument,
+                false,
+                "Select an eligible team and territory.",
+            )
+        };
+        if selection.leave_team_unallocated && selection.team_id.is_some() {
+            return Err(reject());
+        }
+        match owner {
+            DealOwner::Team(id) => {
+                if selection.leave_team_unallocated
+                    || selection
+                        .team_id
+                        .as_ref()
+                        .is_some_and(|selected| {
+                            selected != id.as_str()
+                                || !self.teams.iter().any(|team| &team.id == selected)
+                        })
+                {
+                    return Err(reject());
+                }
+            }
+            DealOwner::Actor(_) if selection.leave_team_unallocated => self.teams.clear(),
+            DealOwner::Actor(id) if selection.team_id.is_some() => {
+                if id.as_str().starts_with("service:") {
+                    return Err(reject());
+                }
+                self.teams
+                    .retain(|team| selection.team_id.as_ref() == Some(&team.id));
+                if self.teams.len() != 1 {
+                    return Err(reject());
+                }
+            }
+            DealOwner::Actor(_) => {}
+        }
+        if let Some(id) = &selection.territory_id {
+            if let Some(assigned) = &self.territory {
+                if &assigned.id != id {
+                    return Err(SdkError::new(
+                        "SALES_CLOSE_CREDIT_TERRITORY_CONFLICT",
+                        ErrorCategory::Conflict,
+                        false,
+                        "The account already has an assigned territory.",
+                    ));
+                }
+            } else {
+                self.territory = Some(
+                    explicit_territory
+                        .filter(|territory| &territory.id == id)
+                        .ok_or_else(reject)?,
+                );
+            }
+        }
+        Ok(self)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CommercialCloseFact {
@@ -169,5 +247,81 @@ impl CommercialCloseFact {
                 }
             })
             .transpose()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crm_module_sdk::ActorId;
+
+    fn dimension(id: &str) -> CommercialDimension {
+        CommercialDimension {
+            id: id.into(),
+            name: id.into(),
+            version: 1,
+        }
+    }
+
+    #[test]
+    fn explicit_credit_respects_membership_and_assigned_territory() {
+        let owner = DealOwner::Actor(ActorId::try_new("actor-1").unwrap());
+        let context = CloseCreditContext {
+            teams: vec![dimension("team-a"), dimension("team-b")],
+            territory: Some(dimension("territory-a")),
+            ..Default::default()
+        };
+        let chosen = CloseCreditSelection {
+            team_id: Some("team-b".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            context
+                .clone()
+                .select(&owner, &chosen, None)
+                .unwrap()
+                .teams,
+            vec![dimension("team-b")]
+        );
+        assert!(
+            context
+                .clone()
+                .select(
+                    &owner,
+                    &CloseCreditSelection {
+                        leave_team_unallocated: true,
+                        ..Default::default()
+                    },
+                    None,
+                )
+                .unwrap()
+                .teams
+                .is_empty()
+        );
+        assert!(
+            context
+                .clone()
+                .select(
+                    &owner,
+                    &CloseCreditSelection {
+                        team_id: Some("unrelated".into()),
+                        ..Default::default()
+                    },
+                    None,
+                )
+                .is_err()
+        );
+        assert!(
+            context
+                .select(
+                    &owner,
+                    &CloseCreditSelection {
+                        territory_id: Some("territory-b".into()),
+                        ..Default::default()
+                    },
+                    Some(dimension("territory-b")),
+                )
+                .is_err()
+        );
     }
 }

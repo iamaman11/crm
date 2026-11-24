@@ -5677,13 +5677,43 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    await call("PreviewSalesRouting",viewer,{...facts,territoryId:"conflicting-"+suffix},409);
    await call("PreviewSalesRouting",tenantB,facts,409);
    const activeAssignment=(await call("GetSalesAccountAssignment",viewer,{accountId})).assignment;
+   await call("PreviewDealCloseCredit",viewer,{dealId:one.dealId,expectedVersion:1n,
+     selection:{territoryId:"conflict-"+suffix}},409);
    await call("UpdateSalesAccountAssignment",admin,{accountId,configuration:{...activeAssignment.configuration,archived:true},precondition:pre("assignment-archive",activeAssignment.version)});
    const reassigned=await call("UpdateDeal",admin,{dealId:one.dealId,owner:actor(emailB),precondition:pre("manual-reassign",1n)});
    assert.equal(reassigned.deal.owner.owner.value,emailB);
    assert.deepEqual(reassigned.deal.initialRouting,first.deal.initialRouting);
+   // Explicit close credit shares the actual owner resolver and atomic guards.
+   const secondTeam="credit-team-"+suffix;
+   assert.equal((await memberV2("CreateTeam",admin,{teamId:secondTeam,name:"Credit choice "+suffix,
+     roster:{memberEmails:[emailB]},precondition:pre("credit-team")})).status,200);
+   const previewInput={dealId:one.dealId,expectedVersion:2n,selection:{teamId:team,territoryId}};
+   const creditPreview=await call("PreviewDealCloseCredit",viewer,previewInput);
+   assert.equal(creditPreview.eligibleTeams.length,2);
+   assert.equal(creditPreview.creditedTeam.id,team);
+   assert.equal(creditPreview.creditedTerritory.id,territoryId);
+   assert.equal(creditPreview.territoryAssigned,false);
+   assert.deepEqual(await call("PreviewDealCloseCredit",admin,previewInput),creditPreview);
+   assert.equal((await call("PreviewDealCloseCredit",viewer,{...previewInput,selection:{}})).creditedTeam,undefined);
+   assert.equal((await call("PreviewDealCloseCredit",viewer,{...previewInput,selection:{leaveTeamUnallocated:true}})).creditedTeam,undefined);
+   await call("PreviewDealCloseCredit",tenantB,previewInput,404);
+   await call("PreviewDealCloseCredit",viewer,{...previewInput,selection:{teamId:"missing-"+suffix}},400);
+   const closeIntent={dealId:one.dealId,outcome:2,reasonCode:"qa.cleanup",precondition:pre("close-stale",2n),
+     creditSelection:previewInput.selection,expectedCreditDecision:creditPreview.expectedDecision};
+   await call("CloseDeal",viewer,closeIntent,403);
+   assert.equal((await memberV2("UpdateTeam",admin,{teamId:secondTeam,name:"Credit choice revised "+suffix,
+     roster:{memberEmails:[emailB]},precondition:pre("credit-team-rename",1n)})).status,200);
+   await call("CloseDeal",admin,closeIntent,409);
+   assert.equal((await call("GetDeal",viewer,{dealId:one.dealId})).deal.version,2n);
+   assert.equal((await sql("SELECT COUNT(*) n FROM crm_sales_deal_receipts WHERE tenant=? AND key=?","tenant-a",closeIntent.precondition.idempotencyKey))[0].n,0);
+   let replayCreditIntent;
    for(const [index,input] of [one,winner,overflow,manual].entries()){
      const version=index===0?2n:1n;
-     const request={dealId:input.dealId,outcome:index===0?2:3,reasonCode:"qa.cleanup",precondition:pre("close-"+index,version)};
+     const selection=index===0?{teamId:team,territoryId}:{teamId:team};
+     const credit=await call("PreviewDealCloseCredit",viewer,{dealId:input.dealId,expectedVersion:version,selection});
+     const request={dealId:input.dealId,outcome:index===0?2:3,reasonCode:"qa.cleanup",precondition:pre("close-"+index,version),
+       creditSelection:selection,expectedCreditDecision:credit.expectedDecision};
+     if(index===0)replayCreditIntent=request;
      const closed=await call("CloseDeal",admin,request);
      const fact=closed.deal.commercialCloseFact;
      assert.equal(fact.closeVersion,version+1n);
@@ -5692,12 +5722,16 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      assert.equal(fact.amount.minorUnits,facts.amount.minorUnits);
      assert.deepEqual(fact.owner,closed.deal.owner);
      assert.equal(fact.creditedTeam.id,team);
+     if(index===0)assert.equal(fact.creditedTerritory.id,territoryId);
      assert.deepEqual((await call("CloseDeal",admin,request)).deal.commercialCloseFact,fact);
      assert.deepEqual((await call("GetDeal",viewer,{dealId:input.dealId})).deal.commercialCloseFact,fact);
      assert.deepEqual((await call("ListDealEvents",viewer,{dealId:input.dealId})).events[0].commercialCloseFact,fact);
      assert.equal((await sql("SELECT COUNT(*) n FROM crm_sales_deal_events WHERE tenant=? AND deal_id=?","tenant-a",input.dealId))[0].n,Number(version)+1);
      assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=?","tenant-a",input.dealId))[0].n,Number(version)+1);
    }
+   assert.equal((await memberV2("UpdateTeam",admin,{teamId:secondTeam,active:false,
+     precondition:pre("credit-team-archive",2n)})).status,200);
+   assert.equal((await call("CloseDeal",admin,replayCreditIntent)).receipt.replayed,true);
    const originalClose=(await call("GetDeal",viewer,{dealId:one.dealId})).deal.commercialCloseFact;
    const reopened=await call("ReopenDeal",admin,{dealId:one.dealId,reasonCode:"qa.revisit",precondition:pre("credit-reopen",3n)});
    assert.equal(reopened.deal.commercialCloseFact,undefined);

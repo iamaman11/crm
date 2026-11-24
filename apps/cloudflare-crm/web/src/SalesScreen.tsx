@@ -87,6 +87,23 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
   const [previewVisible,setPreviewVisible]=useState(false);
   const routingPreview=useReadAction<{key:string;response:PreviewSalesRoutingResponse}>();
   const territories=useQuery(useCallback(allTerritories,[]));
+  const [creditTeam,setCreditTeam]=useState("");
+  const [creditTerritory,setCreditTerritory]=useState("");
+  const creditKey=JSON.stringify([advance?.dealId,advance?.version.toString(),creditTeam,creditTerritory]);
+  const creditPreview=useQuery(useCallback(async(signal:AbortSignal)=>{
+    if(editorMode!=="close"||!advance)return undefined;
+    const selection={
+      ...(creditTeam.startsWith("team:")?{teamId:creditTeam.slice(5)}:{}),
+      leaveTeamUnallocated:creditTeam==="unallocated",
+      ...(creditTerritory?{territoryId:creditTerritory}:{})
+    };
+    const response=await api.deals.previewDealCloseCredit({
+      dealId:advance.dealId,expectedVersion:advance.version,selection
+    },{signal});
+    return {key:creditKey,response,selection};
+  },[editorMode,advance,creditTeam,creditTerritory,creditKey]));
+  const closeCredit=creditPreview.data?.key===creditKey?creditPreview.data:undefined;
+  const creditReady=!!closeCredit?.response.expectedDecision&&!creditPreview.busy&&!creditPreview.error;
   const [probabilityChoice,setProbabilityChoice]=useState(String(ProbabilitySource.STAGE_DEFAULT));
   const [expandedDeal,setExpandedDeal]=useState("");
   const [detailRevision,setDetailRevision]=useState(0);
@@ -280,6 +297,7 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
     setSelected(mode==="edit"?value:undefined);
     if(mode==="edit")setProbabilityChoice(value.probabilitySource===ProbabilitySource.STAGE_DEFAULT?"keep":String(ProbabilitySource.MANUAL));
     setAdvance(mode==="edit"?undefined:value);
+    setCreditTeam("");setCreditTerritory("");
     setDroppedStageId(mode==="advance"?droppedOn:"");
     setEditorMode(mode);mutation.changed();
   };
@@ -792,12 +810,17 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
               dealId:advance.dealId,reasonCode:field(data,"reason"),...(owner?{owner}:{}),precondition
             },advance.dealId);
           }
-          if(editorMode==="close")return prepareMutation(api.deals.closeDeal,{
-            dealId:advance.dealId,
-            outcome:enumValue(field(data,"targetStatus"),
-              [DealStatus.WON,DealStatus.LOST],"Результат сделки"),
-            reasonCode:field(data,"reason"),precondition
-          },advance.dealId);
+          if(editorMode==="close"){
+            if(!creditReady||!closeCredit)throw Error("Обновите коммерческую атрибуцию");
+            return prepareMutation(api.deals.closeDeal,{
+              dealId:advance.dealId,
+              outcome:enumValue(field(data,"targetStatus"),
+                [DealStatus.WON,DealStatus.LOST],"Результат сделки"),
+              reasonCode:field(data,"reason"),precondition,
+              creditSelection:closeCredit.selection,
+              expectedCreditDecision:closeCredit.response.expectedDecision
+            },advance.dealId);
+          }
           const currentStage=advance.stage;
           if(!currentStage)throw Error("У сделки отсутствует текущий этап");
           const next=nextStages.find(s=>s.stageId===field(data,"nextStage"));
@@ -820,6 +843,27 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
           <option value={DealStatus.LOST}>Проиграна</option>
         </SelectField>
         <TextField label="Причина закрытия" name="reason" required/>
+        <section aria-label="Предварительная коммерческая атрибуция">
+          <h3>Коммерческая атрибуция</h3>
+          <p>Здесь определяется коммерческий результат, а не исполнитель запроса. Сделка не закрывается при предварительном просмотре.</p>
+          <QueryNotice query={creditPreview}/>
+          {advance.owner?.owner.case!=="teamId"&&<SelectField label="Коммерческая команда" value={creditTeam}
+            onChange={e=>setCreditTeam(e.target.value)}>
+            <option value="">Автоматически по членству</option>
+            <option value="unallocated">Не распределять по командам</option>
+            {(creditPreview.data?.response.eligibleTeams??[]).map(t=><option key={t.id} value={"team:"+t.id}>{t.name}</option>)}
+          </SelectField>}
+          <SelectField label="Коммерческая территория" value={creditTerritory}
+            disabled={!!closeCredit?.response.territoryAssigned||territories.busy}
+            onChange={e=>setCreditTerritory(e.target.value)}>
+            <option value="">По назначению клиента или не распределять</option>
+            {(territories.data??[]).filter(t=>!t.configuration?.archived).map(t=><option key={t.territoryId} value={t.territoryId}>{t.configuration?.name}</option>)}
+          </SelectField>
+          {closeCredit&&<><p>Сотрудник: {closeCredit.response.creditedActor??"Не распределён"}</p>
+            <p>Команда: {closeCredit.response.creditedTeam?.name??"Не распределена"} · территория: {closeCredit.response.creditedTerritory?.name??"Не распределена"}</p></>}
+          <Button type="button" variant="secondary" disabled={creditPreview.busy}
+            onClick={()=>void creditPreview.reload().catch(()=>{})}>Обновить атрибуцию</Button>
+        </section>
       </>:editorMode==="reopen"?<>
         <p>Вернуть сделку в текущий активный этап воронки.</p>
         <TextField label="Причина повторного открытия" name="reason" required/>
@@ -836,7 +880,7 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
         </SelectField>
         {nextStages.length===0&&<p>Следующих этапов нет. Сделку можно завершить на текущем этапе.</p>}
       </>}</FormGrid></fieldset>
-        <Button type="submit" disabled={mutation.busy||mutation.pending||editorMode==="advance"&&nextStages.length===0}>
+        <Button type="submit" disabled={mutation.busy||mutation.pending||editorMode==="advance"&&nextStages.length===0||editorMode==="close"&&!creditReady}>
           {editorMode==="close"?"Завершить сделку":
              editorMode==="reopen"?"Открыть повторно":"Сохранить этап"}
         </Button>{" "}

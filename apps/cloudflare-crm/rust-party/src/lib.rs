@@ -983,6 +983,12 @@ const RPC_POLICIES: &[(&str, RpcPolicy)] = &[
         },
     ),
     (
+        "/crm.sales.v2.DealService/PreviewDealCloseCredit",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
         "/crm.sales.v2.DealService/CloseDeal",
         RpcPolicy {
             permission: RpcPermission::Write,

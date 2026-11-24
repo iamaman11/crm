@@ -1450,6 +1450,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("heading",{name:"Завершить сделку: Browser Deal "+runId,exact:true}).waitFor();
    await expect(page.getByText(/^Код причины без пробелов:/)).toBeVisible();
    await page.getByLabel("Причина закрытия",{exact:true}).fill("contract-signed");
+   await expect(page.getByRole("region",{name:"Предварительная коммерческая атрибуция"})).toBeVisible();
+   await expect(page.getByRole("region",{name:"Предварительная коммерческая атрибуция"}).getByText(/^Сотрудник:/)).toBeVisible();
    // A different real write loses its response and the page is reloaded.
    // Only opaque identifiers survive; lookup must not issue CloseDeal again.
    const closeRoute="**/crm.sales.v2.DealService/CloseDeal";

@@ -133,11 +133,33 @@ message AdvanceStageResponse {
 }
 
 // Explicit lifecycle commands: moving a stage never means closing a Deal.
+message CloseCreditSelection {
+  optional string team_id = 1;
+  bool leave_team_unallocated = 2;
+  optional string territory_id = 3;
+}
+message PreviewDealCloseCreditRequest {
+  string deal_id = 1;
+  int64 expected_version = 2;
+  CloseCreditSelection selection = 3;
+}
+message PreviewDealCloseCreditResponse {
+  int64 deal_version = 1;
+  crm.core.v2.ActorOrTeamOwner owner = 2;
+  optional string credited_actor = 3;
+  repeated CommercialDimension eligible_teams = 4;
+  CommercialDimension credited_team = 5;
+  CommercialDimension credited_territory = 6;
+  bool territory_assigned = 7;
+  string expected_decision = 8;
+}
 message CloseDealRequest {
   string deal_id = 1;
   DealStatus outcome = 2; // WON or LOST, never OPEN
   string reason_code = 3;
   crm.core.v2.MutationPrecondition precondition = 4;
+  CloseCreditSelection credit_selection = 5;
+  optional string expected_credit_decision = 6;
 }
 message CloseDealResponse {
   Deal deal = 1;
@@ -910,6 +932,9 @@ service DealService {
   }
   rpc AdvanceStage(AdvanceStageRequest) returns (AdvanceStageResponse) {
     option idempotency_level = IDEMPOTENT;
+  }
+  rpc PreviewDealCloseCredit(PreviewDealCloseCreditRequest) returns (PreviewDealCloseCreditResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
   }
   rpc CloseDeal(CloseDealRequest) returns (CloseDealResponse) {
     option idempotency_level = IDEMPOTENT;
