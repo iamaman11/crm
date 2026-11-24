@@ -146,6 +146,17 @@ impl SalesV2Service {
             .collect())
     }
 
+    async fn account_page_names(
+        &self,
+        db: &worker::D1Database,
+        deals: &[sale_wire::Deal],
+    ) -> std::result::Result<Vec<(String, String)>, ConnectError> {
+        let ids: Vec<_> = deals.iter().map(|deal| deal.account_id.as_str()).collect();
+        accounts::page_names(db, &self.tenant, &ids)
+            .await
+            .map_err(|_| ConnectError::internal("Sales Account page names read failed"))
+    }
+
     async fn read_scorecard(
         &self,
         input: sale_wire::GetSalesScorecardRequest,
@@ -2759,6 +2770,11 @@ impl sale_wire::DealService for SalesV2Service {
             .map(Self::convert)
             .collect::<std::result::Result<Vec<_>, ConnectError>>()?;
         RpcResponse::ok(sale_wire::ListStageDealsResponse {
+            account_names: self
+                .account_page_names(&db, &deals)
+                .await?
+                .into_iter()
+                .collect(),
             deal_capabilities: self.capability_page(&db, &list).await?,
             deals,
             page_info: Some(core_v2::PageInfo {
@@ -3678,6 +3694,11 @@ impl sale_wire::DealService for SalesV2Service {
             .map(Self::convert)
             .collect::<std::result::Result<Vec<_>, ConnectError>>()?;
         RpcResponse::ok(sale_wire::ListDealsResponse {
+            account_names: self
+                .account_page_names(&db, &deals)
+                .await?
+                .into_iter()
+                .collect(),
             deal_capabilities: self.capability_page(&db, &list).await?,
             deals,
             page_info: Some(core_v2::PageInfo {

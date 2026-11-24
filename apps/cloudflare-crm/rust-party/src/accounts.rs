@@ -69,6 +69,32 @@ pub(super) async fn load(db: &D1Database, tenant: &str, id: &str) -> Result<Opti
     .map(|row| decoded(&row.state))
     .transpose()
 }
+/// Resolve display names from the original Account state for a bounded read page.
+/// The caller provides only IDs from an already authorized tenant-scoped page.
+pub(super) async fn page_names(
+    db: &D1Database,
+    tenant: &str,
+    ids: &[&str],
+) -> Result<Vec<(String, String)>> {
+    let unique: std::collections::BTreeSet<_> = ids.iter().copied().collect();
+    if unique.is_empty() {
+        return Ok(Vec::new());
+    }
+    let encoded =
+        serde_json::to_string(&unique).map_err(|e| worker::Error::RustError(e.to_string()))?;
+    let rows = bind(
+        db,
+        "SELECT id,state FROM crm_account_records WHERE tenant=? AND id IN (SELECT value FROM json_each(?))",
+        &[JsValue::from_str(tenant), JsValue::from_str(&encoded)],
+    )?
+    .all()
+    .await?
+    .results::<Row>()?;
+    rows.into_iter()
+        .map(|row| Ok((row.id, decoded(&row.state)?.name().to_owned())))
+        .collect()
+}
+
 async fn prior(db: &D1Database, tenant: &str, key: &str) -> Result<Option<Receipt>> {
     bind(
         db,

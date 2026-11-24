@@ -5,6 +5,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+from time import perf_counter
 from tempfile import TemporaryDirectory
 
 root = Path(__file__).resolve().parents[3]
@@ -19,7 +20,15 @@ with TemporaryDirectory() as temporary:
     env = {**os.environ, "CRM_MODULE_COVERAGE_REPORT": report, "CRM_PROTO_DESCRIPTOR_FILE": image}
 
     def run(*args):
-        subprocess.run(args, cwd=root, env=env, check=True)
+        started = perf_counter()
+        try:
+            subprocess.run(args, cwd=root, env=env, check=True)
+        finally:
+            print(json.dumps({
+                "event": "crm.web-check.phase",
+                "command": args,
+                "elapsed_ms": round((perf_counter() - started) * 1000),
+            }), flush=True)
 
 
     # TypeScript --showConfig resolves all inherited compiler options itself.

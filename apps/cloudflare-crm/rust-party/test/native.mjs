@@ -2698,6 +2698,15 @@ const overflow=await salesV2("ListStageDeals",viewer,{
 assert.equal(overflow.status,200,describeProtobuf(overflow.body));
 assert.equal(overflow.body.totalCount,27n,"board count must include all 27, not the page");
 assert.equal(overflow.body.deals.length,25);
+const ownerAccountName=(await accountV2("GetAccount",viewer,{accountId})).body.account.name;
+assert.deepEqual(Object.entries(overflow.body.accountNames),[[accountId,ownerAccountName]],
+  "25 cards sharing an Account carry one canonical name");
+const salesNamedPage=await salesV2("ListDeals",viewer,{accountId,page:{pageSize:25}});
+assert.equal(salesNamedPage.status,200);
+assert.deepEqual(Object.entries(salesNamedPage.body.accountNames),[[accountId,ownerAccountName]]);
+assert.deepEqual((await salesV2("ListDeals",admin,{accountId,page:{pageSize:25}})).body.accountNames,
+  salesNamedPage.body.accountNames);
+assert.deepEqual(Object.keys((await salesV2("ListDeals",tenantB,{accountId})).body.accountNames),[]);
 assert.deepEqual(overflow.body.currencyTotals,[],
   "missing optional Money is not zero currency or an invented total");
 assert.ok(overflow.body.pageInfo?.nextPageToken);
@@ -2707,6 +2716,7 @@ const overflowLast=await salesV2("ListStageDeals",viewer,{
 assert.equal(overflowLast.status,200);
 assert.equal(overflowLast.body.deals.length,2);
 assert.equal(overflowLast.body.totalCount,27n);
+assert.deepEqual(overflowLast.body.accountNames,overflow.body.accountNames);
 assert.deepEqual(overflowLast.body.currencyTotals,overflow.body.currencyTotals);
 const stageCount=await salesV2("ListStageDeals",viewer,{
   pipelineId:"pipeline.enterprise",stageId:"lead",page:{pageSize:1}});
@@ -2850,6 +2860,7 @@ const missingAccount=await salesV2("ListStageDeals",viewer,{
   pipelineId:"pipeline.other",stageId:"lead",accountId:randomUUID()});
 assert.equal(missingAccount.status,200);
 assert.equal(missingAccount.body.totalCount,0n);
+assert.deepEqual(Object.keys(missingAccount.body.accountNames),[]);
 assert.deepEqual(missingAccount.body.currencyTotals,[]);
 const updatedCurrency=await salesV2("UpdateDeal",admin,{
   dealId:"r7-totals-01",

@@ -298,6 +298,8 @@ message ListDealsResponse {
   repeated Deal deals = 1;
   crm.core.v2.PageInfo page_info = 2;
   repeated DealCapabilityProjection deal_capabilities = 3;
+  // Current Account owner names for the returned page only.
+  map<string, string> account_names = 4;
 }
 
 // User-managed tenant pipeline. Stage rank is assigned only by the Rust owner.
@@ -397,6 +399,8 @@ message ListStageDealsResponse {
   uint64 total_count = 3;
   repeated StageCurrencyTotal currency_totals = 4;
   repeated DealCapabilityProjection deal_capabilities = 5;
+  // Current Account owner names for the returned page only, not all stage rows.
+  map<string, string> account_names = 6;
 }
 
 // Tenant-scoped named filters are presentation state, not a second Deal

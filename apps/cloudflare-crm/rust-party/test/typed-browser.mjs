@@ -2927,12 +2927,21 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
        const searchRegion=leadPage.getByRole("region",{name:"Результаты поиска сделок",exact:true});
        await searchRegion.getByRole("heading",{name:ownedDealName,exact:true}).waitFor();
        await expect(searchRegion.getByRole("button",{name:"Завершить",exact:true})).toHaveCount(1);
+       const boardAccountReads=[];
+       const trackBoardAccountRead=request=>{
+         if(new URL(request.url()).pathname.endsWith("/GetAccount"))boardAccountReads.push(request.url());
+       };
+       leadPage.on("request",trackBoardAccountRead);
        await leadPage.goto(base+"/#sales?"+new URLSearchParams({pipelineId:newPipelineId}).toString());
        const leadBoard=leadPage.getByRole("region",{name:"Kanban — этапы и сделки",exact:true});
        const leadCard=leadBoard.locator("section").filter({has:leadPage.getByRole("heading",{name:ownedDealName,exact:true})}).last();
        await leadCard.getByRole("heading",{name:ownedDealName,exact:true}).waitFor();
        await expect(leadCard.getByRole("button",{name:"Завершить сделку",exact:true})).toHaveCount(1);
        await expect(leadCard.getByLabel("Перетащить сделку "+ownedDealName,{exact:true})).toHaveCount(1);
+       await expect(leadCard.locator('a[href="#accounts/'+accountId+'"]')).toHaveText(/.+/);
+       leadPage.off("request",trackBoardAccountRead);
+       assert.equal(boardAccountReads.length,0,"Kanban account names come from the typed stage page");
+       checkpoint("SK-07 Sales Kanban: canonical account names without per-card GetAccount");
        await leadPage.goto(base+"/#sales/"+encodeURIComponent(ownedDealId));
        const leadRecord=leadPage.getByRole("region",{name:"Подробности сделки "+ownedDealId,exact:true});
        await leadRecord.getByRole("heading",{name:ownedDealName,exact:true}).waitFor();

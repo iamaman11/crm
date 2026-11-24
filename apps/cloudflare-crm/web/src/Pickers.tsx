@@ -134,6 +134,13 @@ export function PartyName({partyId}:{partyId:string}) {
     :<span>Участник загружается</span>;
 }
 
+/** List projections already contain an authorized owner name; no per-row RPC. */
+export function AccountPageName({accountId,name}:{accountId:string;name:string|undefined}) {
+  return name===undefined
+    ?<span>Клиент недоступен</span>
+    :<a href={accountHref(accountId)}>{name}</a>;
+}
+
 export function AccountName({accountId}:{accountId:string}) {
   const query=useQuery(useCallback(async(signal:AbortSignal)=>
     (await api.accounts.getAccount({accountId},{signal})).account,[accountId]));

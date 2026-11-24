@@ -5,7 +5,7 @@ import {DealStatus,ProbabilitySource,ForecastCategory} from "@ultimate-crm/clien
 import {api,field,newId} from "./api";
 import {enumValue} from "./enumFields";
 import {useQuery,useReadAction,useMutation,prepareMutation,MutationNotice,QueryNotice} from "./hooks";
-import {AccountPicker,AccountName} from "./Pickers";
+import {AccountPicker,AccountPageName} from "./Pickers";
 import {SearchField} from "./SearchField";
 import {DealActions,DealContactPicker,DealDetails,dealStatusText,forecastCategoryText,probabilitySourceText} from "./DealRecord";
 import {inputDate,parseDate} from "./calendarInput";
@@ -275,7 +275,9 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
   // The canonical ListDeals RPC already supports a tenant-wide cursor and
   // optional Account/status filters. It is the default all-pipelines overview;
   // the independent ListStageDeals query is only for a selected Kanban board.
+  const showAllDeals=!focusedDealId&&(!pipelineId||!!accountId||!!dealSearch);
   const allDealsQuery=useQuery(useCallback(async(signal:AbortSignal)=>{
+    if(!showAllDeals)return undefined;
     const selectedStatus=status?enumValue(status,[DealStatus.OPEN,DealStatus.WON,DealStatus.LOST],"Статус сделки"):undefined;
     return api.deals.listDeals({
       page:{pageSize:25,pageToken:allDealsCursor},search:dealSearch,
@@ -283,7 +285,7 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
       ...(selectedStatus!==undefined?{status:selectedStatus}:{}),
       ...(owner?{ownerFilter:ownerWire(owner)}:{})
     },{signal});
-  },[accountId,allDealsCursor,status,dealSearch,owner]));
+  },[showAllDeals,accountId,allDealsCursor,status,dealSearch,owner]));
   const refreshSales=async()=>{
     await Promise.all([query.reload(),allDealsQuery.reload(),metricsQuery.reload()]);
   };
@@ -599,7 +601,7 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
           {" "}{metricsQuery.data.closedOutcomes.unknownCloseCount.toString()}</p>
       </>:<p>Для расчёта конверсии выберите все статусы сделок.</p>}
     </section>}
-    {(!pipelineId||accountId||dealSearch)&&<section aria-label={dealSearch?"Результаты поиска сделок":accountId?"Сделки клиента во всех воронках":"Сделки во всех воронках"}>
+    {showAllDeals&&<section aria-label={dealSearch?"Результаты поиска сделок":accountId?"Сделки клиента во всех воронках":"Сделки во всех воронках"}>
       <h2>{dealSearch?"Результаты поиска сделок":accountId?"Все сделки клиента во всех воронках":"Все сделки во всех воронках"}</h2>
       <p>Показано {allDealsQuery.data?.deals.length??0} сделок на текущей странице.
         {dealSearch?" Совпадения ищутся во всех воронках; действуют выбранные фильтры клиента и статуса.":" Это общий список, независимо от выбранной доски; полный итог не подменяется размером страницы."}</p>
@@ -615,6 +617,7 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
           <p>Воронка: {pipeline?.name??deal.stage?.pipelineId??"неизвестна"} · Этап: {stage?.name??deal.stage?.stageId??"неизвестен"}</p>
           {pipeline&&<Button variant="secondary" onClick={()=>selectPipeline(pipeline.pipelineId)}>Открыть воронку</Button>}
           <p>Ответственный: {ownerLabel(deal.owner,ownerChoices)}</p>
+          <p>Клиент: <AccountPageName accountId={deal.accountId} name={allDealsQuery.data?.accountNames[deal.accountId]}/></p>
           <p>{moneyText(deal.amount,currencyDefinitions)} · {percent(deal.probabilityBasisPoints)}%</p>
           {deal.status===DealStatus.OPEN&&<p>{probabilitySourceText(deal.probabilitySource)} · {forecastCategoryText(deal.forecastCategory)}</p>}
           <p>{dealStatusText(deal.status)} · версия {deal.version.toString()}</p>
@@ -696,7 +699,7 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
             <p>Ответственный: {ownerLabel(d.owner,ownerChoices)}</p>
             <p>{moneyText(d.amount,currencyDefinitions)} · {percent(d.probabilityBasisPoints)}%</p>
             {d.status===DealStatus.OPEN&&<p>{probabilitySourceText(d.probabilitySource)} · {forecastCategoryText(d.forecastCategory)}</p>}
-            <p>Клиент: <AccountName accountId={d.accountId}/></p>
+            <p>Клиент: <AccountPageName accountId={d.accountId} name={boardPage.accountNames[d.accountId]}/></p>
             <p>{dealStatusText(d.status)} · версия {d.version.toString()}</p>
             {expandedDeal!==d.dealId&&<DealActions variant="board"
               capabilities={boardPage.dealCapabilities.find(p=>p.dealId===d.dealId)?.capabilities}
