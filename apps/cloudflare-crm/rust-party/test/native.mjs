@@ -5948,13 +5948,21 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
        statement("INSERT INTO crm_ci_missing_forecast_table VALUES (1)")
      ]));
      assert.equal(await revision("tenant-a"),fence,"failed batch must roll back the fence");
-     // Real concurrent read and atomic fixture mutation: a successful report
-     // must be wholly before or wholly after the change, never a mixed sum.
-     const [race]=await Promise.all([
+     // Race a real typed owner command against the capture. The fixture
+     // loader cannot bypass the catalogue rank-only guard on existing Deals.
+     // Changing a team's eligibility would affect many rows but would also
+     // alter unrelated fixture semantics. Use a single real Deal mutation.
+     const raceFence=await revision("tenant-a");
+     const [race,mutation]=await Promise.all([
        salesV2("PreviewSalesPerformanceReport",viewer,captureInput),
-       sql("UPDATE crm_sales_deal_records SET state=json_set(state,'$.probability_basis_points',1000) WHERE tenant=? AND id>=? AND id<=?","tenant-a",fixtureFirst,fixtureId(openScale))
+       salesV2("UpdateDeal",admin,{dealId:fixtureId(openScale),probabilityBasisPoints:1000,
+         precondition:pre("open-scale-race",1n)})
      ]);
-     const newWeight=10005000n+BigInt(openScale)*1001n*1000n;
+     assert.equal(mutation.status,200,describeProtobuf(mutation.body));
+     assert.equal(mutation.body.deal.version,2n);
+     assert.equal(mutation.body.deal.probabilityBasisPoints,1000);
+     assert.equal(await revision("tenant-a"),raceFence+1n);
+     const newWeight=weightedAmount-1001n*4000n;
      assert.ok([200,409].includes(race.status),describeProtobuf(race.body));
      if(race.status===200)assert.ok([String(weightedAmount),String(newWeight)].includes(race.body.report.forecast.weightedMinorUnitsTimesBasisPoints),"mixed capture");
      else assert.match(race.body.message,/SALES_FORECAST_SNAPSHOT_CHANGED/);
@@ -5977,6 +5985,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    }finally{
      await sql("DELETE FROM crm_sales_deal_events WHERE tenant=? AND deal_id>=? AND deal_id<=?","tenant-a",fixtureFirst,fixtureLast);
      await sql("DELETE FROM crm_sales_deal_receipts WHERE tenant=? AND key>=? AND key<=?","tenant-a",fixtureFirst,fixtureLast);
+     await sql("DELETE FROM crm_sales_deal_receipts WHERE tenant=? AND key=?","tenant-a",pre("open-scale-race",1n).idempotencyKey);
      await sql("DELETE FROM crm_audit WHERE tenant_id=? AND subject_id>=? AND subject_id<=?","tenant-a",fixtureFirst,fixtureLast);
      await sql("DELETE FROM crm_sales_deal_records WHERE tenant=? AND id>=? AND id<=?","tenant-a",fixtureFirst,fixtureLast);
      assert.equal((await sql("SELECT COUNT(*) n FROM crm_sales_deal_records WHERE tenant=? AND id>=? AND id<=?","tenant-a",fixtureFirst,fixtureLast))[0].n,0);
