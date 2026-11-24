@@ -196,8 +196,8 @@ export function DealHistory({dealId,accountId,pipeline,currencies,choices=[]}:{
 
 // Shared action projection: only generated server capabilities grant actions.
 export function DealActions({capabilities,variant="record",onEdit,onAdvance,onClose,onReopen}:{
- capabilities?:DealCapabilities;variant?:"record"|"list"|"board";
- onEdit?:()=>void;onAdvance?:()=>void;onClose?:()=>void;onReopen?:()=>void;
+ capabilities:DealCapabilities|undefined;variant?:"record"|"list"|"board";
+ onEdit?:(()=>void)|undefined;onAdvance?:(()=>void)|undefined;onClose?:(()=>void)|undefined;onReopen?:(()=>void)|undefined;
 }){
   return <div>
     {onEdit&&capabilities?.edit&&<Button variant="secondary" onClick={onEdit}>{variant==="list"?"Редактировать":variant==="board"?"Изменить сделку":"Редактировать сделку"}</Button>}
