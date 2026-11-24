@@ -1,6 +1,9 @@
 packages:
   - "apps/*"
-  - "!apps/cloudflare-crm"
   - "packages/*"
+# Only explicitly reviewed native installers are allowed.
 allowBuilds:
-  '@bufbuild/buf': true
+  '@bufbuild/buf@1.75.0': true
+  'esbuild@0.28.2': true
+  'workerd@1.20261118.1': true
+  'sharp@0.35.5': true

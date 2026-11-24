@@ -44,8 +44,12 @@ pub fn encode_import_job_state(job: &ImportJob) -> Result<Vec<u8>, SdkError> {
 
 pub fn decode_import_job_state(bytes: &[u8]) -> Result<ImportJob, SdkError> {
     validate_size(bytes, IMPORT_JOB_STATE_MAXIMUM_BYTES, "import-job")?;
-    let state: ImportJobStateV1 = serde_json::from_slice(bytes)
-        .map_err(|error| persisted_error(format!("import-job state JSON is invalid: {error}")))?;
+    // The schema and mandatory canonical-byte check remain owned here. The
+    // shared decoder only sanitizes diagnostics (no user keys or payloads).
+    let state: ImportJobStateV1 =
+        crm_module_sdk::decode_json(bytes, &[]).map_err(|diagnostic| {
+            persisted_error(format!("import-job state JSON is invalid: {diagnostic}"))
+        })?;
     require_canonical_json(bytes, &state, "import-job")?;
     ImportJob::rehydrate(state.try_into()?)
         .map_err(|error| persisted_error(format!("{}: {}", error.code, error.safe_message)))
@@ -61,8 +65,10 @@ pub fn encode_import_row_state(row: &ImportRow) -> Result<Vec<u8>, SdkError> {
 
 pub fn decode_import_row_state(bytes: &[u8]) -> Result<ImportRow, SdkError> {
     validate_size(bytes, IMPORT_ROW_STATE_MAXIMUM_BYTES, "import-row")?;
-    let state: ImportRowStateV1 = serde_json::from_slice(bytes)
-        .map_err(|error| persisted_error(format!("import-row state JSON is invalid: {error}")))?;
+    let state: ImportRowStateV1 =
+        crm_module_sdk::decode_json(bytes, &[]).map_err(|diagnostic| {
+            persisted_error(format!("import-row state JSON is invalid: {diagnostic}"))
+        })?;
     require_canonical_json(bytes, &state, "import-row")?;
     ImportRow::rehydrate(state.try_into()?)
         .map_err(|error| persisted_error(format!("{}: {}", error.code, error.safe_message)))
@@ -739,6 +745,42 @@ mod tests {
         let decoded = decode_import_row_state(&bytes).unwrap();
         assert_eq!(decoded.snapshot(), row.snapshot());
         assert!(decoded.source_external_id_sha256().is_some());
+    }
+
+    #[test]
+    fn canonical_import_decoders_keep_schema_and_hide_untrusted_json() {
+        let job = ImportJob::create(CreateImportJob {
+            job_id: ImportJobId::try_new("import-471-sanitized").unwrap(),
+            source: source(),
+            mapping: mapping(),
+            partial_execution_policy: PartialExecutionPolicy::AllValidRows,
+            occurred_at_unix_nanos: 1,
+        })
+        .unwrap();
+        let row = ImportRow::create(CreateImportRow {
+            job_id: ImportJobId::try_new("import-471-sanitized").unwrap(),
+            row_position: 1,
+            external_row_key: Some("row-1".to_owned()),
+            source_external_id: Some("customer-471".to_owned()),
+            occurred_at_unix_nanos: 1,
+        })
+        .unwrap();
+        let mut job_json: serde_json::Value =
+            serde_json::from_slice(&encode_import_job_state(&job).unwrap()).unwrap();
+        let mut row_json: serde_json::Value =
+            serde_json::from_slice(&encode_import_row_state(&row).unwrap()).unwrap();
+        for state in [&mut job_json, &mut row_json] {
+            state["untrusted-471-key"] = serde_json::Value::String("secret-471-value".to_owned());
+        }
+        for error in [
+            decode_import_job_state(&serde_json::to_vec(&job_json).unwrap()).unwrap_err(),
+            decode_import_row_state(&serde_json::to_vec(&row_json).unwrap()).unwrap_err(),
+        ] {
+            assert_eq!(error.code, "CUSTOMER_DATA_IMPORT_PERSISTED_STATE_INVALID");
+            let output = format!("{error:?}");
+            assert!(!output.contains("untrusted-471-key"));
+            assert!(!output.contains("secret-471-value"));
+        }
     }
 
     #[test]

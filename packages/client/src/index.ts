@@ -1,3 +1,4 @@
+export { createCloudflareCrmClient } from "./cloudflare";
 export {
   GovernedClient,
   ProductClientError,

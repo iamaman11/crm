@@ -1,0 +1,162 @@
+syntax = "proto3";
+
+package crm.customer_privacy.v2;
+
+import "crm/core/v2/operation.proto";
+
+// CRM connects intake and signed-human own-subject verification.
+// Staff/document verification, complete nine-owner discovery, exports and
+// erasure execution remain NOT_CONNECTED until original owner evidence is live.
+enum PrivacyCaseKind {
+  PRIVACY_CASE_KIND_UNSPECIFIED = 0;
+  PRIVACY_CASE_KIND_ACCESS = 1;
+  PRIVACY_CASE_KIND_PORTABILITY_EXPORT = 2;
+  PRIVACY_CASE_KIND_RESTRICT_PROCESSING = 3;
+  PRIVACY_CASE_KIND_ERASURE = 4;
+}
+
+enum PrivacyCaseStatus {
+  PRIVACY_CASE_STATUS_UNSPECIFIED = 0;
+  PRIVACY_CASE_STATUS_DRAFT = 1;
+  PRIVACY_CASE_STATUS_SUBMITTED = 2;
+  PRIVACY_CASE_STATUS_SUBJECT_VERIFIED = 3;
+  PRIVACY_CASE_STATUS_SCOPING = 4;
+  PRIVACY_CASE_STATUS_SCOPED = 5;
+  PRIVACY_CASE_STATUS_PLANNED = 6;
+  PRIVACY_CASE_STATUS_AWAITING_APPROVAL = 7;
+  PRIVACY_CASE_STATUS_EXECUTING = 8;
+  PRIVACY_CASE_STATUS_CONVERGING = 9;
+  PRIVACY_CASE_STATUS_RESCOPE_REQUIRED = 10;
+  PRIVACY_CASE_STATUS_FAILED_RETRYABLE = 11;
+  PRIVACY_CASE_STATUS_COMPLETED = 12;
+  PRIVACY_CASE_STATUS_PARTIALLY_COMPLETED = 13;
+  PRIVACY_CASE_STATUS_DENIED = 14;
+  PRIVACY_CASE_STATUS_CANCELLED = 15;
+  PRIVACY_CASE_STATUS_FAILED_TERMINAL = 16;
+}
+
+message PrivacyCase {
+  string case_id = 1;
+  PrivacyCaseKind kind = 2;
+  PrivacyCaseStatus status = 3;
+  int64 version = 4;
+  bool subject_verified = 5;
+}
+
+message CreatePrivacyCaseRequest {
+  string case_id = 1;
+  PrivacyCaseKind kind = 2;
+  crm.core.v2.MutationPrecondition precondition = 3;
+}
+
+message CreatePrivacyCaseResponse {
+  PrivacyCase privacy_case = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+message SubmitPrivacyCaseRequest {
+  string case_id = 1;
+  crm.core.v2.MutationPrecondition precondition = 2;
+}
+
+message SubmitPrivacyCaseResponse {
+  PrivacyCase privacy_case = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+// Human self-service only: the Worker binds this case to an already
+// Access-verified email ContactPoint owned by the indicated Person.
+message VerifyOwnPrivacyCaseSubjectRequest {
+  string case_id = 1;
+  string party_id = 2;
+  string contact_point_id = 3;
+  crm.core.v2.MutationPrecondition precondition = 4;
+}
+
+message VerifyOwnPrivacyCaseSubjectResponse {
+  PrivacyCase privacy_case = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+message CancelPrivacyCaseRequest {
+  string case_id = 1;
+  crm.core.v2.MutationPrecondition precondition = 2;
+}
+
+message CancelPrivacyCaseResponse {
+  PrivacyCase privacy_case = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+// Read-only current-state preview for the subject verified by signed Access.
+// NOT a frozen/complete discovery snapshot: only Parties and ContactPoints
+// have live owner contributions. Do not authorize export/erasure from this.
+message PreviewOwnPrivacyScopeRequest {
+  string case_id = 1;
+}
+message PrivacyScopePreviewResource {
+  string owner_module_id = 1;
+  string resource_type = 2;
+  string resource_id = 3;
+  int64 resource_version = 4;
+}
+message PrivacyScopePreviewOwner {
+  string owner_module_id = 1;
+  uint32 resource_count = 2;
+  bytes contribution_digest = 3;
+}
+message PreviewOwnPrivacyScopeResponse {
+  string case_id = 1;
+  int64 case_version = 2;
+  string canonical_party_id = 3;
+  bytes registry_digest = 4;
+  repeated PrivacyScopePreviewResource resources = 5;
+  repeated PrivacyScopePreviewOwner owners = 6;
+  repeated string missing_owner_module_ids = 7;
+  // FALSE until the original OwnerScopeRegistry has all nine contributions.
+  bool complete = 8;
+}
+
+message GetPrivacyCaseRequest {
+  string case_id = 1;
+  // Optional original mutation key for tenant-bound, read-only reconciliation.
+  optional string receipt_idempotency_key = 2;
+}
+
+message GetPrivacyCaseResponse {
+  PrivacyCase privacy_case = 1;
+  crm.core.v2.MutationCommitEvidence confirmed_mutation = 2;
+}
+
+message ListPrivacyCasesRequest {
+  crm.core.v2.PageRequest page = 1;
+}
+
+message ListPrivacyCasesResponse {
+  repeated PrivacyCase cases = 1;
+  crm.core.v2.PageInfo page_info = 2;
+}
+
+service PrivacyCaseService {
+  rpc CreatePrivacyCase(CreatePrivacyCaseRequest) returns (CreatePrivacyCaseResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc SubmitPrivacyCase(SubmitPrivacyCaseRequest) returns (SubmitPrivacyCaseResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc VerifyOwnPrivacyCaseSubject(VerifyOwnPrivacyCaseSubjectRequest) returns (VerifyOwnPrivacyCaseSubjectResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc CancelPrivacyCase(CancelPrivacyCaseRequest) returns (CancelPrivacyCaseResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc PreviewOwnPrivacyScope(PreviewOwnPrivacyScopeRequest) returns (PreviewOwnPrivacyScopeResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc GetPrivacyCase(GetPrivacyCaseRequest) returns (GetPrivacyCaseResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListPrivacyCases(ListPrivacyCasesRequest) returns (ListPrivacyCasesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}

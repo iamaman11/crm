@@ -28,43 +28,61 @@ provides:
       binding:
         kind: protobuf_rpc
         rpc: crm.consents.v1.ConsentAuthorizationService.CreateConsentAuthorization
-        request: crm.consents.v1.CreateConsentAuthorizationRequest
-        response: crm.consents.v1.CreateConsentAuthorizationResponse
     - id: consents.authorization.withdraw
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.consents.v1.ConsentAuthorizationService.WithdrawConsentAuthorization
-        request: crm.consents.v1.WithdrawConsentAuthorizationRequest
-        response: crm.consents.v1.WithdrawConsentAuthorizationResponse
     - id: consents.authorization.get
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.consents.v1.ConsentAuthorizationService.GetConsentAuthorization
-        request: crm.consents.v1.GetConsentAuthorizationRequest
-        response: crm.consents.v1.GetConsentAuthorizationResponse
     - id: consents.authorization.list
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.consents.v1.ConsentAuthorizationService.ListConsentAuthorizations
-        request: crm.consents.v1.ListConsentAuthorizationsRequest
-        response: crm.consents.v1.ListConsentAuthorizationsResponse
     - id: consents.communication.authorize
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.consents.v1.ConsentAuthorizationService.AuthorizeCommunication
-        request: crm.consents.v1.AuthorizeCommunicationRequest
-        response: crm.consents.v1.AuthorizeCommunicationResponse
     - id: consents.privacy.scope.contribute
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.customer_privacy.v1.ConsentsPrivacyScopeContributionService.ConsentsPrivacyScopeContribution
-        request: crm.customer_privacy.v1.ConsentsPrivacyScopeContributionRequest
-        response: crm.customer_privacy.v1.ConsentsPrivacyScopeContributionResponse
+    - id: consents.communication.evaluate
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.consents.v2.ConsentAuthorizationService.EvaluateConsent
+    - id: consents.communication.suppress
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.consents.v2.ConsentAuthorizationService.SuppressCommunication
+    - id: consents.authorization.get
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.consents.v2.ConsentAuthorizationService.GetConsentAuthorization
+    - id: consents.authorization.grant-verified-email
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.consents.v2.ConsentAuthorizationService.GrantVerifiedEmailConsent
+    - id: consents.authorization.withdraw
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.consents.v2.ConsentAuthorizationService.WithdrawConsentAuthorization
+    - id: consents.authorization.list
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.consents.v2.ConsentAuthorizationService.ListConsentAuthorizations
   events:
     - id: consents.authorization.created
       version: 1.0.0

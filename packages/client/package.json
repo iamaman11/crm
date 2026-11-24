@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./cloudflare": "./src/cloudflare.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -12,8 +13,8 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@bufbuild/protobuf": "2.12.1",
-    "@connectrpc/connect": "2.1.2",
-    "@connectrpc/connect-web": "2.1.2"
+    "@bufbuild/protobuf": "2.17.0",
+    "@connectrpc/connect": "2.3.0",
+    "@connectrpc/connect-web": "2.3.0"
   }
 }

@@ -19,10 +19,10 @@ SCHEMA_VERSION = "crm.affected-scope/v2"
 POLICY_SCHEMA_VERSION = "crm.affected-scope-policy/v1"
 POLICY_PATH = Path("affected-scope-policy.json")
 WORKFLOW_SUFFIXES = {".yml", ".yaml"}
+# Only Cloudflare Workers/D1 is an active CRM runtime; PostgreSQL process scopes are retired.
 REQUIRED_SCOPE_IDS = {
-    "contracts", "protobuf_api_compatibility", "database_migrations",
-    "postgresql_acceptance", "process_runtime_acceptance", "product_plane",
-    "frontend", "operations",
+    "contracts", "protobuf_api_compatibility", "d1_migrations",
+    "d1_runtime_acceptance", "cloudflare_product_plane", "frontend", "operations",
 }
 BROAD_PATH_PATTERNS = (
     "Cargo.toml", "Cargo.lock", ".github/workflows/**",
@@ -252,10 +252,12 @@ def workflow_decisions(root: Path, paths: list[str]) -> list[WorkflowDecision]:
             events = {events: None}
         elif isinstance(events, list):
             events = {str(event): None for event in events}
-        if not isinstance(events, dict) or "pull_request" not in events:
+        # The canonical CRM runs one dev push pipeline; the generic analyzer also supports PR fixtures.
+        event = "push" if workflow_path.name == "cloudflare-crm-spike.yml" else "pull_request"
+        if not isinstance(events, dict) or event not in events:
             continue
         relative = workflow_path.relative_to(root).as_posix()
-        pull_request = events["pull_request"]
+        pull_request = events[event]
         if pull_request is None:
             decisions.append(WorkflowDecision(name, relative, True, ("workflow has no pull-request path filter",)))
             continue
@@ -287,11 +289,11 @@ def enforce_scope_workflow_coverage(
             continue
         absent = sorted(set(rule.required_workflows) - set(by_name))
         if absent:
-            raise RuntimeError(f"scope {rule.id} requires missing permanent PR workflows: {absent}")
+            raise RuntimeError(f"scope {rule.id} requires missing required CI workflows: {absent}")
         for required in rule.required_workflows:
             if not by_name[required].selected:
                 raise RuntimeError(
-                    f"scope {rule.id} requires {required}, but its governed pull-request path filters did not select it"
+                    f"scope {rule.id} requires {required}, but its governed CI path filters did not select it"
                 )
 
 

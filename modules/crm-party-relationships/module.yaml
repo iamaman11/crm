@@ -26,36 +26,46 @@ provides:
       binding:
         kind: protobuf_rpc
         rpc: crm.party_relationships.v1.PartyRelationshipService.CreatePartyRelationship
-        request: crm.party_relationships.v1.CreatePartyRelationshipRequest
-        response: crm.party_relationships.v1.CreatePartyRelationshipResponse
     - id: party-relationships.party-relationship.update
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.party_relationships.v1.PartyRelationshipService.UpdatePartyRelationship
-        request: crm.party_relationships.v1.UpdatePartyRelationshipRequest
-        response: crm.party_relationships.v1.UpdatePartyRelationshipResponse
     - id: party-relationships.party-relationship.get
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.party_relationships.v1.PartyRelationshipService.GetPartyRelationship
-        request: crm.party_relationships.v1.GetPartyRelationshipRequest
-        response: crm.party_relationships.v1.GetPartyRelationshipResponse
     - id: party-relationships.party-relationship.list
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.party_relationships.v1.PartyRelationshipService.ListPartyRelationships
-        request: crm.party_relationships.v1.ListPartyRelationshipsRequest
-        response: crm.party_relationships.v1.ListPartyRelationshipsResponse
     - id: party_relationships.privacy.scope.contribute
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.customer_privacy.v1.PartyRelationshipsPrivacyScopeContributionService.PartyRelationshipsPrivacyScopeContribution
-        request: crm.customer_privacy.v1.PartyRelationshipsPrivacyScopeContributionRequest
-        response: crm.customer_privacy.v1.PartyRelationshipsPrivacyScopeContributionResponse
+    - id: party-relationships.party-relationship.create
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.party_relationships.v2.PartyRelationshipService.CreatePartyRelationship
+    - id: party-relationships.party-relationship.update
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.party_relationships.v2.PartyRelationshipService.UpdatePartyRelationship
+    - id: party-relationships.party-relationship.get
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.party_relationships.v2.PartyRelationshipService.GetPartyRelationship
+    - id: party-relationships.party-relationship.list
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.party_relationships.v2.PartyRelationshipService.ListPartyRelationships
   events:
     - id: party-relationships.party-relationship.created
       version: 1.0.0

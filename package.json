@@ -2,28 +2,27 @@
   "name": "ultimate-crm-product-plane",
   "version": "0.0.0",
   "private": true,
-  "packageManager": "pnpm@11.12.0",
+  "packageManager": "pnpm@12.21.0",
   "engines": {
-    "node": ">=24.18.0 <25",
-    "pnpm": ">=11.12.0 <12"
+    "node": ">=26.13.1 <27",
+    "pnpm": ">=12.21.0 <13"
   },
   "scripts": {
-    "contracts:generate": "python scripts/generate_contract_bindings.py --write",
-    "web:generate": "buf generate --template buf.gen.web.yaml && python scripts/generate_contract_bindings.py --write && cargo run -p crm-proto-contracts --bin generate_hashes -- packages/client/src/contract_hashes.ts",
+    "web:generate": "buf generate --template buf.gen.web.yaml",
     "gen": "pnpm web:generate",
-    "gen:diff": "git diff --exit-code contracts/module-contract-bindings.json packages/client/src/contract_hashes.ts",
     "web:typecheck": "pnpm web:generate && pnpm -r --if-present typecheck",
-    "web:lint": "pnpm -r --if-present lint",
+    "web:lint": "pnpm exec oxlint -c .oxlintrc.json apps/cloudflare-crm/web/src packages/client/src packages/ui/src",
     "web:test": "pnpm -r --if-present test",
-    "web:build": "pnpm web:generate && pnpm --filter @ultimate-crm/web build",
-    "web:check": "pnpm web:typecheck && pnpm web:lint && pnpm web:test && pnpm web:build"
+    "web:build": "pnpm web:generate && pnpm --filter cloudflare-crm build",
+    "web:check": "python apps/cloudflare-crm/scripts/check-web.py"
   },
   "devDependencies": {
-    "@bufbuild/buf": "1.66.1",
-    "@bufbuild/protoc-gen-es": "2.12.1",
-    "@types/node": "24.13.2",
-    "oxlint": "1.72.0",
-    "typescript": "6.0.2",
-    "vitest": "4.1.9"
+    "@bufbuild/buf": "1.75.0",
+    "@bufbuild/protoc-gen-es": "2.16.0",
+    "@types/node": "26.6.6",
+    "binaryen": "132.0.0",
+    "oxlint": "1.94.0",
+    "typescript": "7.0.2",
+    "vitest": "5.1.1"
   }
 }

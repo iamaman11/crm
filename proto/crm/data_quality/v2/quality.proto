@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package crm.data_quality.v2;
+
+import "crm/parties/v3/party.proto";
+
+// Read-only original builtin Party-name review. No invented scoring,
+// persisted finding, remediation workflow or provider job.
+message QualityRuleResult {
+  string rule_key = 1;
+  string title = 2;
+  string remediation = 3;
+  bool passed = 4;
+  string reason_code = 5;
+  string severity_code = 6;
+}
+
+message EvaluatePartyNameRequest {
+  string party_id = 1;
+}
+
+message EvaluatePartyNameResponse {
+  crm.parties.v3.Party party = 1;
+  string rule_set_version = 2;
+  repeated QualityRuleResult checks = 3;
+  uint32 failed_count = 4;
+}
+
+service DataQualityService {
+  rpc EvaluatePartyName(EvaluatePartyNameRequest) returns (EvaluatePartyNameResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}

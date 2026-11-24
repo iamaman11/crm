@@ -26,43 +26,56 @@ provides:
       binding:
         kind: protobuf_rpc
         rpc: crm.contact_points.v1.ContactPointService.CreateContactPoint
-        request: crm.contact_points.v1.CreateContactPointRequest
-        response: crm.contact_points.v1.CreateContactPointResponse
     - id: contact-points.contact-point.update
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.contact_points.v1.ContactPointService.UpdateContactPoint
-        request: crm.contact_points.v1.UpdateContactPointRequest
-        response: crm.contact_points.v1.UpdateContactPointResponse
     - id: contact-points.contact-point.verify
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.contact_points.v1.ContactPointService.VerifyContactPoint
-        request: crm.contact_points.v1.VerifyContactPointRequest
-        response: crm.contact_points.v1.VerifyContactPointResponse
     - id: contact-points.contact-point.get
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.contact_points.v1.ContactPointService.GetContactPoint
-        request: crm.contact_points.v1.GetContactPointRequest
-        response: crm.contact_points.v1.GetContactPointResponse
     - id: contact-points.contact-point.list
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.contact_points.v1.ContactPointService.ListContactPoints
-        request: crm.contact_points.v1.ListContactPointsRequest
-        response: crm.contact_points.v1.ListContactPointsResponse
     - id: contact_points.privacy.scope.contribute
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.customer_privacy.v1.ContactPointsPrivacyScopeContributionService.ContactPointsPrivacyScopeContribution
-        request: crm.customer_privacy.v1.ContactPointsPrivacyScopeContributionRequest
-        response: crm.customer_privacy.v1.ContactPointsPrivacyScopeContributionResponse
+    - id: contact-points.contact-point.create
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.contact_points.v2.ContactPointService.CreateContactPoint
+    - id: contact-points.contact-point.update
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.contact_points.v2.ContactPointService.UpdateContactPoint
+    - id: contact-points.contact-point.verify-own-email
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.contact_points.v2.ContactPointService.VerifyOwnEmailContactPoint
+    - id: contact-points.contact-point.get
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.contact_points.v2.ContactPointService.GetContactPoint
+    - id: contact-points.contact-point.list
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.contact_points.v2.ContactPointService.ListContactPoints
   events:
     - id: contact-points.contact-point.created
       version: 1.0.0

@@ -367,6 +367,49 @@ impl PartyRuleSetVersion {
     }
 }
 
+/// Fixed, explicitly scoped review preset for the initial Cloudflare CRM.
+/// Only name checks; not a tenant-configured policy, persisted evaluation job,
+/// completeness profile, overall quality score or remediation workflow.
+/// The original data-quality domain owns both the rule definitions and evaluation.
+pub fn builtin_party_name_review_rules_v1() -> Result<PartyRuleSetVersion, SdkError> {
+    PartyRuleSetVersion::publish(vec![
+        PartyQualityRule::try_new(
+            RuleKey::try_new("party.name.minimum.3bytes")?,
+            QualitySeverity::Warning,
+            PartyQualityEvaluator::display_name_min_utf8_bytes(3)?,
+            "Название содержит не менее 3 байт UTF-8",
+            "Уточните короткое название. Правило проверяет байты UTF-8, а не буквы.",
+        )?,
+        PartyQualityRule::try_new(
+            RuleKey::try_new("party.name.placeholder")?,
+            QualitySeverity::Warning,
+            PartyQualityEvaluator::display_name_placeholder_exact_ascii_casefold(vec![
+                "unknown".into(), "n/a".into(), "tbd".into(),
+            ])?,
+            "Название не является служебной заглушкой",
+            "Замените точную заглушку unknown, n/a или tbd на настоящее название.",
+        )?,
+    ])
+}
+
+#[cfg(test)]
+mod builtin_party_name_review_tests {
+    use super::*;
+    fn input(name: &str) -> PartyQualityInput {
+        PartyQualityInput::try_new(EvaluatedPartyKind::Person, name).unwrap()
+    }
+    #[test]
+    fn stable_preset_evaluates_original_domain_not_operator_invented_score() {
+        let rules = builtin_party_name_review_rules_v1().unwrap();
+        assert_eq!(rules.version_id(), builtin_party_name_review_rules_v1().unwrap().version_id());
+        assert!(rules.evaluate(&input("Мария")).iter().all(PartyRuleEvaluation::passed));
+        assert!(rules.evaluate(&input("unknown")).iter().any(|r|
+            r.reason_code() == "DATA_QUALITY_PARTY_DISPLAY_NAME_PLACEHOLDER"));
+        assert!(rules.evaluate(&input("A")).iter().any(|r|
+            r.reason_code() == "DATA_QUALITY_PARTY_DISPLAY_NAME_TOO_SHORT"));
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PartyRuleEvaluation {
     rule_set_version_id: PartyRuleSetVersionId,

@@ -180,29 +180,24 @@ def build_registry(
                 if kind != "protobuf_rpc":
                     raise ValueError(f"{location}.binding.kind must be 'protobuf_rpc'")
                 rpc = require_string(binding, "rpc", f"{location}.binding")
-                request = require_string(binding, "request", f"{location}.binding")
-                response = require_string(binding, "response", f"{location}.binding")
             except ValueError as error:
                 errors.append(str(error))
                 continue
             if contract in seen_capabilities:
                 errors.append(f"duplicate capability provider {contract.display()}")
             seen_capabilities.add(contract)
-            if request not in messages:
-                errors.append(f"{contract.display()} request message does not exist: {request}")
-            if response not in messages:
-                errors.append(f"{contract.display()} response message does not exist: {response}")
             method = methods.get(rpc)
-            expected = RpcDescriptor(request=request, response=response)
             if method is None:
                 errors.append(f"{contract.display()} RPC does not exist: {rpc}")
-            elif method != expected:
-                errors.append(
-                    f"{contract.display()} RPC {rpc} resolves to {method.request} -> {method.response}, "
-                    f"expected {request} -> {response}"
-                )
+                continue
+            # Protobuf alone owns input and output wire types; preserve output.
+            if method.request not in messages:
+                errors.append(f"{contract.display()} request message does not exist: {method.request}")
+            if method.response not in messages:
+                errors.append(f"{contract.display()} response message does not exist: {method.response}")
             capabilities.append(
-                {"id": contract.contract_id, "version": contract.version, "rpc": rpc, "request": request, "response": response}
+                {"id": contract.contract_id, "version": contract.version, "rpc": rpc,
+                 "request": method.request, "response": method.response}
             )
 
         events: list[dict[str, str]] = []

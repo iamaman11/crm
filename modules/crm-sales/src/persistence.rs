@@ -1,6 +1,7 @@
 use crate::domain::{
-    Deal, DealCloseOutcomeSnapshot, DealOwner, DealSnapshot, DealStage, DealStatus, PipelineId,
-    ReasonCode, StageId, TeamId,
+    Deal, DealCloseOutcomeSnapshot, DealOwner, DealSnapshot, DealStage, DealStatus,
+    ForecastCategory, PipelineId, ProbabilityEstimate, ProbabilitySource, ReasonCode, StageId,
+    TeamId,
 };
 use crm_core_contracts::{BasisPoints, CalendarDate, CurrencyCode, Money};
 use crm_module_sdk::{ActorId, ErrorCategory, RecordId, ResourceRef, SdkError};
@@ -8,10 +9,10 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 pub const DEAL_STATE_SCHEMA_ID: &str = "crm.sales.deal.state";
-pub const DEAL_STATE_SCHEMA_VERSION: &str = "1.0.0";
+pub const DEAL_STATE_SCHEMA_VERSION: &str = "1.2.0";
 pub const DEAL_STATE_MAXIMUM_BYTES: u64 = 256 * 1024;
 pub const DEAL_STATE_RETENTION_POLICY_ID: &str = "crm.sales.business_record";
-const DEAL_STATE_DESCRIPTOR: &[u8] = b"crm.sales.deal.state/v1:deal_id,name,owner,account,primary_contact,stage,status,amount,expected_close_date,probability_basis_points,close_outcome,created_at_unix_nanos,updated_at_unix_nanos,version";
+const DEAL_STATE_DESCRIPTOR: &[u8] = b"crm.sales.deal.state/v1.2:deal_id,name,owner,account,primary_contact,stage,status,amount,expected_close_date,probability_basis_points,probability_source,forecast_category,close_outcome,created_at_unix_nanos,updated_at_unix_nanos,version,initial_routing";
 
 pub fn deal_state_descriptor_hash() -> [u8; 32] {
     Sha256::digest(DEAL_STATE_DESCRIPTOR).into()
@@ -24,10 +25,62 @@ pub fn encode_deal_state(deal: &Deal) -> Result<Vec<u8>, SdkError> {
     Ok(bytes)
 }
 
+// Static diagnostic labels only; Serde remains the sole schema validator.
+const DEAL_DIAGNOSTIC_FIELDS: &[&str] = &[
+    "deal_id",
+    "name",
+    "owner",
+    "initial_routing",
+    "source",
+    "selected_owner",
+    "target",
+    "rule_id",
+    "rule_version",
+    "rule_name",
+    "territory_id",
+    "territory_version",
+    "territory_name",
+    "assignment_version",
+    "dispatch",
+    "selected_open_deals",
+    "maximum_open_deals",
+    "capacity_overflow",
+    "actor",
+    "team",
+    "kind",
+    "actor_id",
+    "team_id",
+    "account",
+    "primary_contact",
+    "resource_type",
+    "resource_id",
+    "stage",
+    "pipeline_id",
+    "stage_id",
+    "ordinal",
+    "status",
+    "amount",
+    "minor_units",
+    "currency",
+    "expected_close_date",
+    "year",
+    "month",
+    "day",
+    "probability_basis_points",
+    "probability_source",
+    "forecast_category",
+    "close_outcome",
+    "reason_code",
+    "closed_at_unix_nanos",
+    "created_at_unix_nanos",
+    "updated_at_unix_nanos",
+    "version",
+];
+
 pub fn decode_deal_state(bytes: &[u8]) -> Result<Deal, SdkError> {
     validate_size(bytes)?;
-    let state: DealStateV1 = serde_json::from_slice(bytes)
-        .map_err(|error| persisted_error(format!("deal state JSON is invalid: {error}")))?;
+    let state: DealStateV1 = crm_module_sdk::decode_json(bytes, DEAL_DIAGNOSTIC_FIELDS)
+        .map_err(|error| persisted_error(error.to_string()))?;
     let snapshot = state.try_into()?;
     Deal::rehydrate(snapshot)
         .map_err(|error| persisted_error(format!("{}: {}", error.code, error.safe_message)))
@@ -39,6 +92,8 @@ struct DealStateV1 {
     deal_id: String,
     name: String,
     owner: OwnerState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    initial_routing: Option<crate::SalesRoutingDecision>,
     account: Option<ResourceState>,
     primary_contact: Option<ResourceState>,
     stage: StageState,
@@ -46,6 +101,11 @@ struct DealStateV1 {
     amount: Option<MoneyState>,
     expected_close_date: Option<DateState>,
     probability_basis_points: u16,
+    // Existing Deals were explicitly estimated and not categorized.
+    #[serde(default)]
+    probability_source: ProbabilitySource,
+    #[serde(default)]
+    forecast_category: ForecastCategory,
     close_outcome: Option<CloseOutcomeState>,
     created_at_unix_nanos: i64,
     updated_at_unix_nanos: i64,
@@ -112,13 +172,16 @@ impl From<DealSnapshot> for DealStateV1 {
             deal_id: value.deal_id.to_string(),
             name: value.name,
             owner: value.owner.into(),
+            initial_routing: value.initial_routing,
             account: value.account.map(Into::into),
             primary_contact: value.primary_contact.map(Into::into),
             stage: value.stage.into(),
             status: value.status.into(),
             amount: value.amount.map(Into::into),
             expected_close_date: value.expected_close_date.map(Into::into),
-            probability_basis_points: value.probability.get(),
+            probability_basis_points: value.probability.basis_points().get(),
+            probability_source: value.probability.source(),
+            forecast_category: value.forecast_category,
             close_outcome: value.close_outcome.map(Into::into),
             created_at_unix_nanos: value.created_at_unix_nanos,
             updated_at_unix_nanos: value.updated_at_unix_nanos,
@@ -135,6 +198,7 @@ impl TryFrom<DealStateV1> for DealSnapshot {
             deal_id: RecordId::try_new(value.deal_id).map_err(identifier_error)?,
             name: value.name,
             owner: value.owner.try_into()?,
+            initial_routing: value.initial_routing,
             account: value.account.map(Into::into),
             primary_contact: value.primary_contact.map(Into::into),
             stage: value.stage.try_into()?,
@@ -144,8 +208,11 @@ impl TryFrom<DealStateV1> for DealSnapshot {
                 .expected_close_date
                 .map(TryInto::try_into)
                 .transpose()?,
-            probability: BasisPoints::try_new(value.probability_basis_points)
-                .map_err(contract_error)?,
+            probability: ProbabilityEstimate::from_parts(
+                value.probability_source,
+                BasisPoints::try_new(value.probability_basis_points).map_err(contract_error)?,
+            ),
+            forecast_category: value.forecast_category,
             close_outcome: value.close_outcome.map(TryInto::try_into).transpose()?,
             created_at_unix_nanos: value.created_at_unix_nanos,
             updated_at_unix_nanos: value.updated_at_unix_nanos,
@@ -337,7 +404,7 @@ fn persisted_error(message: impl Into<String>) -> SdkError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{AdvanceDealStage, CreateDeal, StageTransitionPolicy};
+    use crate::domain::{CloseDeal, CreateDeal};
 
     fn deal() -> Deal {
         Deal::create(CreateDeal {
@@ -361,7 +428,8 @@ mod tests {
                 CurrencyCode::try_new("USD").unwrap(),
             )),
             expected_close_date: Some(CalendarDate::try_new(2027, 2, 28).unwrap()),
-            probability: BasisPoints::try_new(4_250).unwrap(),
+            probability: ProbabilityEstimate::Manual(BasisPoints::try_new(4_250).unwrap()),
+            forecast_category: ForecastCategory::Pipeline,
             occurred_at_unix_nanos: 10,
         })
         .unwrap()
@@ -371,18 +439,11 @@ mod tests {
     fn round_trip_preserves_exact_state_and_schema_hash() {
         let mut value = deal();
         value
-            .advance_stage(AdvanceDealStage {
+            .close(CloseDeal {
                 expected_version: 1,
-                target_stage: DealStage::try_new(
-                    PipelineId::try_new("pipeline.enterprise").unwrap(),
-                    StageId::try_new("closed_won").unwrap(),
-                    4,
-                )
-                .unwrap(),
-                target_status: DealStatus::Won,
-                close_reason_code: Some(ReasonCode::try_new("selected").unwrap()),
+                outcome: DealStatus::Won,
+                reason_code: ReasonCode::try_new("selected").unwrap(),
                 occurred_at_unix_nanos: 30,
-                policy: StageTransitionPolicy::default(),
             })
             .unwrap();
 
@@ -395,6 +456,45 @@ mod tests {
             9_999_999_999_999_999_999_i128
         );
         assert_ne!(deal_state_descriptor_hash(), [0; 32]);
+    }
+
+    #[test]
+    fn malformed_nested_money_has_safe_owner_diagnostic() {
+        let mut json: serde_json::Value =
+            serde_json::from_slice(&encode_deal_state(&deal()).unwrap()).unwrap();
+        json["amount"]["minor_units"] = serde_json::json!(["private-input"]);
+        let error = decode_deal_state(&serde_json::to_vec(&json).unwrap()).unwrap_err();
+        assert_eq!(error.code, "SALES_DEAL_PERSISTED_STATE_INVALID");
+        assert_eq!(error.category, ErrorCategory::Internal);
+        assert!(!error.retryable);
+        assert!(
+            error
+                .internal_reference
+                .as_deref()
+                .unwrap()
+                .contains("$.amount.minor_units")
+        );
+        assert!(!format!("{error:?}").contains("private-input"));
+        json["amount"]["private-extra-field"] = serde_json::json!("private-value");
+        let error = decode_deal_state(&serde_json::to_vec(&json).unwrap()).unwrap_err();
+        assert!(!format!("{error:?}").contains("private-extra-field"));
+        assert!(!format!("{error:?}").contains("private-value"));
+        let mut trailing = encode_deal_state(&deal()).unwrap();
+        trailing.extend_from_slice(b" null");
+        assert!(decode_deal_state(&trailing).is_err());
+    }
+
+    #[test]
+    fn forecast_metadata_defaults_and_rejects_unknown_values() {
+        let mut state: serde_json::Value =
+            serde_json::from_slice(&encode_deal_state(&deal()).unwrap()).unwrap();
+        state.as_object_mut().unwrap().remove("probability_source");
+        state.as_object_mut().unwrap().remove("forecast_category");
+        let decoded = decode_deal_state(&serde_json::to_vec(&state).unwrap()).unwrap();
+        assert_eq!(decoded.probability_source(), ProbabilitySource::Manual);
+        assert_eq!(decoded.forecast_category(), ForecastCategory::Pipeline);
+        state["forecast_category"] = serde_json::json!("unknown");
+        assert!(decode_deal_state(&serde_json::to_vec(&state).unwrap()).is_err());
     }
 
     #[test]

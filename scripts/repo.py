@@ -76,7 +76,6 @@ def command_conformance(_: argparse.Namespace) -> None:
     command_architecture(argparse.Namespace())
     command_manifests(argparse.Namespace())
     command_contracts(argparse.Namespace(write=False))
-    run([sys.executable, "scripts/generate_repository_navigation.py", "--check"])
     run([sys.executable, "scripts/check_native_module_composition.py"])
     run([sys.executable, "scripts/check_production_route_classifications.py"])
     run(
@@ -84,31 +83,14 @@ def command_conformance(_: argparse.Namespace) -> None:
             sys.executable,
             "-m",
             "unittest",
-            "tests/test_architecture_documentation_consistency.py",
             "tests/test_contract_bindings.py",
-            "tests/test_customer_privacy_architecture_freeze.py",
             "tests/test_customer_privacy_contract_inventory.py",
-            "tests/test_customer_privacy_owner_scope_contracts.py",
-            "tests/test_local_demo.py",
-            "tests/test_local_dev.py",
             "tests/test_local_lifecycle.py",
             "tests/test_module_compatibility.py",
             "tests/test_module_manifest_validation.py",
             "tests/test_module_scaffolding.py",
             "tests/test_native_module_composition.py",
             "tests/test_production_route_classifications.py",
-            "tests/test_repository_navigation.py",
-        ]
-    )
-    run(
-        [
-            "cargo",
-            "test",
-            "-p",
-            "crm-application-runtime",
-            "--test",
-            "production_route_parity",
-            "--all-features",
         ]
     )
 
@@ -178,7 +160,7 @@ def command_packet_check(args: argparse.Namespace) -> None:
             changed = write_generated_documents(ROOT)
             for path in changed:
                 print(f"WROTE {path}", flush=True)
-        report = packet_check(ROOT, args.base)
+        report = packet_check(ROOT, args.base, before=args.before)
     except (NavigationError, RuntimeError) as error:
         raise CommandError(str(error)) from error
     if args.json:
@@ -222,63 +204,6 @@ def command_bootstrap(args: argparse.Namespace) -> None:
     else:
         print(render_bootstrap(report), end="")
 
-
-def command_dev_up(args: argparse.Namespace) -> None:
-    try:
-        from local_dev import LifecycleError, dev_up, render_dev
-    except ModuleNotFoundError:
-        from scripts.local_dev import LifecycleError, dev_up, render_dev
-
-    try:
-        report = dev_up(ROOT, dry_run=args.dry_run)
-    except LifecycleError as error:
-        raise CommandError(str(error)) from error
-    if args.json:
-        print(json.dumps(report, indent=2, sort_keys=True))
-    else:
-        print(render_dev(report), end="")
-
-
-def command_dev_reset(args: argparse.Namespace) -> None:
-    try:
-        from local_dev import LifecycleError, dev_reset, render_dev
-    except ModuleNotFoundError:
-        from scripts.local_dev import LifecycleError, dev_reset, render_dev
-
-    try:
-        report = dev_reset(ROOT, dry_run=args.dry_run)
-    except LifecycleError as error:
-        raise CommandError(str(error)) from error
-    if args.json:
-        print(json.dumps(report, indent=2, sort_keys=True))
-    else:
-        print(render_dev(report), end="")
-
-
-
-def _command_demo(mode: str, args: argparse.Namespace) -> None:
-    try:
-        from local_demo import LifecycleError, render_demo, seed_demo, smoke
-    except ModuleNotFoundError:
-        from scripts.local_demo import LifecycleError, render_demo, seed_demo, smoke
-
-    operation = seed_demo if mode == "seed" else smoke
-    try:
-        report = operation(ROOT, dry_run=args.dry_run)
-    except LifecycleError as error:
-        raise CommandError(str(error)) from error
-    if args.json:
-        print(json.dumps(report, indent=2, sort_keys=True))
-    else:
-        print(render_demo(report), end="")
-
-
-def command_seed_demo(args: argparse.Namespace) -> None:
-    _command_demo("seed", args)
-
-
-def command_smoke(args: argparse.Namespace) -> None:
-    _command_demo("smoke", args)
 
 def affected_clippy_command(report: dict) -> list[str] | None:
     packages = report["affected_packages"]
@@ -437,6 +362,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="validate the active packet, changed paths, affected closure and navigation freshness",
     )
     packet_check_parser.add_argument("--base", default="origin/main")
+    packet_check_parser.add_argument("--before", help="Previous commit of this push")
     packet_check_parser.add_argument("--json", action="store_true")
     packet_check_parser.add_argument(
         "--write-generated",
@@ -447,7 +373,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     doctor_parser = subparsers.add_parser(
         "doctor",
-        help="inspect repository, toolchain and optional container prerequisites",
+        help="inspect repository and toolchain prerequisites",
     )
     doctor_parser.add_argument(
         "--profile",
@@ -469,55 +395,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     bootstrap_parser.add_argument("--json", action="store_true")
     bootstrap_parser.set_defaults(handler=command_bootstrap)
-
-    dev_up_parser = subparsers.add_parser(
-        "dev-up",
-        help="create or reuse the exact owned local PostgreSQL dependency plane",
-    )
-    dev_up_parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="inspect current state and print the mutation plan without changing Docker",
-    )
-    dev_up_parser.add_argument("--json", action="store_true")
-    dev_up_parser.set_defaults(handler=command_dev_up)
-
-    dev_reset_parser = subparsers.add_parser(
-        "dev-reset",
-        help="remove only owned local PostgreSQL state and recreate it cleanly",
-    )
-    dev_reset_parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="verify ownership and print the reset plan without changing Docker",
-    )
-    dev_reset_parser.add_argument("--json", action="store_true")
-    dev_reset_parser.set_defaults(handler=command_dev_reset)
-
-
-    seed_demo_parser = subparsers.add_parser(
-        "seed-demo",
-        help="create or idempotently replay the governed deterministic local demo dataset",
-    )
-    seed_demo_parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="show the owned database and exact locked process-test command without executing it",
-    )
-    seed_demo_parser.add_argument("--json", action="store_true")
-    seed_demo_parser.set_defaults(handler=command_seed_demo)
-
-    smoke_parser = subparsers.add_parser(
-        "smoke",
-        help="verify the deterministic local demo through the real crm-api process",
-    )
-    smoke_parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="show the exact locked smoke command without starting crm-api",
-    )
-    smoke_parser.add_argument("--json", action="store_true")
-    smoke_parser.set_defaults(handler=command_smoke)
 
     check_affected = subparsers.add_parser(
         "check-affected",

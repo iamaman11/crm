@@ -4,17 +4,21 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "test": "node --test test/native-runtime.test.mjs",
-    "doctor": "node scripts/doctor.mjs",
-    "locate": "node scripts/doctor.mjs"
+    "test": "node --test test/native-runtime.test.mjs test/typed-presentation.test.mjs test/release.test.mjs scripts/release-readback.test.mjs",
+    "architecture:check": "node scripts/architecture-gate.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "react": "19.2.0",
-    "react-dom": "19.2.0"
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "@ultimate-crm/client": "workspace:*",
+    "@ultimate-crm/ui": "workspace:*"
   },
   "devDependencies": {
-    "vite": "7.2.2",
-    "wrangler": "4.45.3",
-    "playwright": "1.57.0"
+    "vite": "8.3.8",
+    "wrangler": "4.165.0",
+    "playwright": "1.65.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0"
   }
 }

@@ -24,36 +24,181 @@ provides:
       binding:
         kind: protobuf_rpc
         rpc: crm.sales.v1.DealService.CreateDeal
-        request: crm.sales.v1.CreateDealRequest
-        response: crm.sales.v1.CreateDealResponse
     - id: sales.deal.update
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.sales.v1.DealService.UpdateDeal
-        request: crm.sales.v1.UpdateDealRequest
-        response: crm.sales.v1.UpdateDealResponse
     - id: sales.deal.advance_stage
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.sales.v1.DealService.AdvanceStage
-        request: crm.sales.v1.AdvanceStageRequest
-        response: crm.sales.v1.AdvanceStageResponse
     - id: sales.deal.get
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.sales.v1.DealService.GetDeal
-        request: crm.sales.v1.GetDealRequest
-        response: crm.sales.v1.GetDealResponse
     - id: sales.deal.list
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.sales.v1.DealService.ListDeals
-        request: crm.sales.v1.ListDealsRequest
-        response: crm.sales.v1.ListDealsResponse
+    - id: sales.deal.create
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.CreateDeal
+    - id: sales.deal.update
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.UpdateDeal
+    - id: sales.deal.advance_stage
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.AdvanceStage
+    - id: sales.deal.close
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.CloseDeal
+    - id: sales.deal.reopen
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.ReopenDeal
+    - id: sales.deal.history
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.ListDealEvents
+    - id: sales.deal.get
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.GetDeal
+    - id: sales.deal.list
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.ListDeals
+    - id: sales.pipeline.create
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.CreatePipeline
+    - id: sales.pipeline.update
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.UpdatePipeline
+    - id: sales.pipeline.get
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.GetPipeline
+    - id: sales.pipeline.list
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.ListPipelines
+    - id: sales.deal.list_by_stage
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.ListStageDeals
+    - id: sales.pipeline.metrics
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.GetPipelineMetrics
+    - id: sales.view.create
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.CreateSalesView
+    - id: sales.view.update
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.UpdateSalesView
+    - id: sales.view.get
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.GetSalesView
+    - id: sales.view.list
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.ListSalesViews
+    - id: sales.territory.create
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.CreateTerritory
+    - id: sales.territory.update
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.UpdateTerritory
+    - id: sales.territory.get
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.GetTerritory
+    - id: sales.territory.list
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.ListTerritories
+    - id: sales.account_assignment.create
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.CreateSalesAccountAssignment
+    - id: sales.account_assignment.update
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.UpdateSalesAccountAssignment
+    - id: sales.account_assignment.get
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.GetSalesAccountAssignment
+    - id: sales.account_assignment.list
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.ListSalesAccountAssignments
+    - id: sales.routing_rule.create
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.CreateSalesRoutingRule
+    - id: sales.routing_rule.update
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.UpdateSalesRoutingRule
+    - id: sales.routing_rule.get
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.GetSalesRoutingRule
+    - id: sales.routing_rule.list
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.ListSalesRoutingRules
+    - id: sales.routing_rule.preview
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.PreviewSalesRouting
   events:
     - id: sales.deal.created
       version: 1.0.0
@@ -74,6 +219,9 @@ provides:
     - sales.lead
     - sales.deal
     - sales.quote
+    - sales.territory
+    - sales.account_assignment
+    - sales.routing_rule
   ui_extensions:
     - id: sales.pipeline.navigation
       type: navigation.item
@@ -93,6 +241,9 @@ storage:
     - sales.lead
     - sales.deal
     - sales.quote
+    - sales.territory
+    - sales.account_assignment
+    - sales.routing_rule
   private_state_namespaces:
     - crm.sales
 security:
@@ -114,3 +265,6 @@ lifecycle:
     - sales.lead
     - sales.deal
     - sales.quote
+    - sales.territory
+    - sales.account_assignment
+    - sales.routing_rule

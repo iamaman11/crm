@@ -1,117 +1,111 @@
-# Cloudflare CRM — operating contract for ChatGPT development
+> **ПРИОРИТЕТНОЕ РЕШЕНИЕ ВЛАДЕЛЬЦА · 23.11.2026 — ENTERPRISE-PLUS, НЕ MVP.** Цель — полнофункциональная CRM с проверяемым превосходством над Salesforce/Dynamics/HubSpot по конкретным сценариям; [#484](https://github.com/iamaman11/crm/issues/484) — единственный живой продуктовый план и расширенная конкурентная матрица, [#487](https://github.com/iamaman11/crm/issues/487) — один текущий исполнительный курсор. **554 требований и 20 семейств — нижняя граница охвата, не предел.** Запрещено объявлять продукт готовым по узкому bounded-срезу или откладывать функции по причине «достаточно для MVP». C разрешён только при зафиксированной предметной зависимости/условии возврата; A сохраняет доказанные функции, B реализует полную полезную семантику, D относится только к ненужной legacy-инфраструктуре. **Один code slice — несколько связанных операций пользователя с полным Protobuf/Connect/Rust owner/D1/React/test путём, штатным Gate A и независимым LIVE Gate B; никаких микрокоммитов ради полей.** Сохранить строгую централизованную типизированную схему, compiled fail-closed Rust policy и единственный CI. Любые последующие исторические упоминания «малый MVP», «C для MVP», LATER/END или старых Markdown-планов не меняют этот курс; детали и актуальные статусы — только в Issues.
 
-This file applies to **apps/cloudflare-crm/**. The sole canonical source of truth is
-**iamaman11/crm**: issue #338 (единственный актуальный план Rust/Cloudflare и диагностики), #310 (product/acceptance), #321 (Cloudflare architecture),
-#322 (chat delivery), and the active PR/commit. Consult root AGENTS.md for
-repository-wide governance; this guide describes the native Cloudflare application.
-When instructions conflict, do not quietly weaken the repository gate: resolve
-the conflict transparently in the canonical issue and exact-source tests.
+# Cloudflare CRM — инструкции разработки
 
-## End state — complex product, simple engineering
-
-The CRM must become **expert, functionally powerful and industrial**. Do not
-constrain business capability to keep code small. Instead isolate complexity:
-each business feature has one owner, defined inputs/outputs, local invariants,
-explicit data ownership, correlated errors, and targeted tests. Keep cross-feature
-flows explicit. Share mechanisms only after demonstrated reuse; no speculative
-framework, service or parallel data/auth stack.
-
-**Developer workflow is exclusively this ChatGPT conversation → GitHub code,
-issues and PR → GitHub Actions → Cloudflare deployed readback and real Chromium
-E2E.** ChatGPT owns diagnosis, implementation and acceptance; never delegate
-ordinary work to a local Windows agent or require users to run developer commands.
-GitHub Actions may run those commands. No new app or connector is a prerequisite.
-
-## First five actions in every new chat or development slice
-
-1. Read the latest #338 (and related #310), current PR/branch HEAD, this scoped AGENTS.md, and the
-   affected code in iamaman11/crm (not another similarly named CRM repository).
-2. Use the existing registry, `npm run locate -- <module-or-error-code>`,
-   and `npm run doctor` through GitHub Actions. Do not scan unrelated Rust code.
-3. Locate the owning feature; trace real API error code + x-request-id to Worker
-   log, then verify reproducibility. Never label guesses as diagnosed causes.
-4. Change only owned files, necessary published contracts, migration and tests;
-   do not weaken security, tenant isolation, or existing CI to obtain green.
-5. Check fast targeted tests → complete CRM CI/build → protected Cloudflare
-   deployment readback → real Chromium E2E → monorepo required checks.
-   Record exact SHA and honest PASS/FAIL/NOT_TESTED evidence in #338/PR.
-
-## Feature ownership and growth
-
-- The current visible owner-source list is `shared/catalog.mjs:modules`. Rust domain contracts, not this UI locator, determine business validity.
-- `implementationOwners` maps each feature to its *source-code location*;
-  `ownerFiles` maps that location to UI, API, validation, migration, unit and E2E.
-  `npm run locate` must use these maps, not a hardcoded universal file list.
-- Existing screens use the original `crm-customer-accounts`, `crm-contact-points`,
-  `crm-sales` and `crm-activities` domain crates. The temporary `pilot.rs`
-  backend and its duplicate business rules are removed in integration PR #345.
-  New capabilities must reuse original crate owners, not invent a new pilot
-  master, registry or microservice. Five still-unconnected crates are declared
-  as NOT_CONNECTED rather than represented as working CRUD.
-- The one Worker composes original module commands and existing typed contracts.
-  Rust owner code alone decides transitions; the UI may display forms and
-  transport IDs/versions, but must not duplicate domain validation.
-- The Worker/React entrypoints coordinate/auth/transport; domain-specific
-  decisions belong to their feature. Feature A must not mutate B's D1 rows
-  without an explicit reviewed cross-feature contract.
-- New/changed D1 tables or fields require additive ordered migrations and
-  appropriate tenant/isolation negative tests. No implicit prod migrations
-  or destructive assumptions. Existing accepted tests remain applicable.
-
-## Developer observability and honest speed
-
-- Browser errors show a stable error code and x-request-id; the Worker logs
-  code, request_id, HTTP status, and measured duration. Never log Access tokens,
-  secrets, personal data or raw request bodies.
-- Protected GET /api/doctor is read-only and reports the actual native runtime, exact deployed SHA/version, Access, D1 schema, tenant-scoped reads and D1 request-ID audit capability. It never claims a CI/browser probe it did not execute;
-  internal traces, SQL, credentials and user data stay out of responses.
-- `npm run doctor` verifies registry ↔ migration and source ownership;
-  `npm run locate -- deals` and `-- INVALID_INPUT` print exact owner paths.
-  These local in-process lookups can take milliseconds. GitHub CI, network calls,
-  D1 queries, browser workflows and actual root-cause diagnosis cannot be
-  promised in milliseconds.
-- At every feature slice, demonstrate a locator hit, targeted test and one
-  real useful behavior, including relevant failure/rollback and tenant cases.
-  No documentation-only acceptance.
-
-## Preserve simplicity as scope grows
-
-Keep one Cloudflare Worker + Static Assets + D1 + existing Cloudflare Access
-until a **measured business requirement** proves another component necessary.
-Industrial quality means real correctness, usable behavior, sound tenancy,
-backups/recovery when needed, observability and verified acceptance; it does
-not mean adding infrastructure by default. Per owner decision, optional extra
-hardening is deferred until **after real production**, not merely until launch.
-
-Do not assert full industrial readiness or human interactive login without
-physical proof. PR stays Draft until its stated acceptance criteria are met.
-
-### Visual evidence for every deployed release
-
-The **existing** protected `deploy-crm-dev` job runs real Chromium against the
-published URL (only after main-only guarded release). Its `crm-dev-release-<git-sha>` artifact contains
-`e2e-evidence/manifest.json` and screenshots of desktop home, Rust Party,
-original Accounts, ContactPoints, Sales, Activities, Account Overview, pipeline, linked records,
-and mobile UI. The manifest records the exact live Worker SHA, actions, API
-readbacks and PASS/FAIL without tokens, cookies, tenant IDs or raw customer data.
-Failure screenshots and relevant Actions job logs remain available. This is
-**headless reproducible UI interaction**, not an always-open interactive browser
-that ChatGPT can directly control from this conversation. Keep this in the
-existing E2E and release artifact; do not create a second dashboard or service.
+**Текущая работа только через Issues:** [#484](https://github.com/iamaman11/crm/issues/484) — **единственный действующий полный продуктовый план** (20 семейств, актуальные статусы и очередь); [#487](https://github.com/iamaman11/crm/issues/487) — **единственный текущий исполнительный курсор** с A/B/C/D, Gate A и независимым Gate B. **Не обновлять статус/приоритеты в Markdown и не создавать второй план.** Архивные полные 554 требований и матрица Rust исходников сохранены в [docs/archive](../../docs/archive/), используются **только как исходные данные и проверка недостающих операций**. Единственная техническая схема — [ARCHITECTURE.md](ARCHITECTURE.md), строгий Buf → Protobuf → generated Connect → Rust owner → D1, без обходов.
 
 
-**Принцип функциональной приёмки:** исходные модули не обязаны повторять
-пилотные CRUD. У Party и Account нет фиктивного Delete; Task завершается
-оригинальной командой Complete, Deal продвигается через Advance с явной
-версией, а деньги представлены точным целым числом минимальных единиц.
-Любая проверка должна вызывать именно оригинальный command/query,
-не маскировать несовместимость и не вводить JS-подстановки.
+Канонический source — [iamaman11/crm](https://github.com/iamaman11/crm), ветка `dev`.
+[ARCHITECTURE.md](ARCHITECTURE.md) задаёт устойчивую схему приложения.
+[#484](https://github.com/iamaman11/crm/issues/484) задаёт очередь и критерии приёмки. В начале задачи указана ссылка на текущий курсор, где фиксируют решения и результаты проверок. #338 хранит архитектурные решения;
+#350 — историю cutover. Не восстанавливать текущий статус по старым документам.
 
-В PR #345 отметка REACT_CONNECTED_NOT_LIVE означает только wiring в ветке:
-Cloudflare deploy, настоящий Access A/B, фактические D1 и Logs остаются
-NOT_TESTED до main-only защищённой публикации. Не превращать успешную
-локальную workerd/Chromium проверку в утверждение об опубликованном продукте.
+## Обязательный приоритет: полный продуктовый скелет, а не очередь остаточных crates
 
-## Нативная приёмка — единственная действующая модель
+**Сверить SK-00…SK-09** в [единой функциональной матрице](../../docs/crm-functional-execution-matrix.md), сверив [20 продуктовых групп](../../docs/CRM_CAPABILITY_COVERAGE.md) и [полный продуктовый план](../../docs/PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md) с работающим Cloudflare Worker/D1/React, правами и Gate A/B. **39 MVP ID и 93 historical crates не покрывают весь продукт**. Уже принятый клиентский/сделочный/задачный фундамент A не переписывать; порядок реализации брать из раздела «Очередь по зависимостям» основного продуктового плана. Командное назначение и двухпользовательская приёмка SK-09 завершают эту очередь. R1 overdue уже принят; **R2 большие import jobs, R3…R7 остаются условными расширениями, НЕ очередью до готовности скелета**. Код из старой версии сохранять и сопоставлять по операциям. Старые документы о PostgreSQL/main product readiness не доказывают active Cloudflare app.
 
-Публикуемый `wrangler.jsonc.main` всегда `./rust-party/build/index.js`. JS API-router и дублированные JS домены запрещены. Единственный штатный `deploy-crm-dev` после публикации выполняет реальный Chromium E2E; `native-functional-cycle.json` содержит все UI-мутации и идентификаторы HTTP-запросов, `verify-data` сверяет каждую с D1 audit и Cloudflare Logs. Без полного PASS активный Worker откатывается и релиз не считается принятым. `GET /api/doctor` не подменяет эту приёмку статическим PASS. Результат обязательно фиксировать в Issue #338.
+## Обязательная очередь функций и историческое сопоставление
+
+Перед любым изменением продуктового поведения **сначала** открыть [упорядоченную функциональную матрицу](../../docs/crm-functional-execution-matrix.md) и текущий курсор из #484. **Не выбирать функцию механически по статусу `OPEN`**. Сначала проверить принятые результаты, действующие typed owner/RPC/UI/tests и обнаружить конкретный ещё не закрытый пользовательский сценарий. Только затем рассмотреть соответствующий ID и открыть **все старые Rust-источники и тесты из его строки**, сверить бизнес-инварианты, вызовы и потребителей с текущими `proto`/owner/handler/policy/D1/UI. Разделять: A — эквивалентно доказано, B — нужен конкретный перенос, C — сознательно не нужно, D — legacy-инфраструктура после доказанных инвариантов/consumer check; иначе OPEN. **Нельзя начать реализацию или объявить DONE, сославшись только на название crate**. В текущем курсоре фиксировать ID, source/tests, что изменено, exact CI/live/browser evidence и остаток. `LATER/END` не блокируют MVP и не должны становиться новым приоритетом по умолчанию. Это правило фиксирует работу между чатами, не является входом runtime/codegen и не создаёт новый процесс CI.
+
+## Продуктовая проверка полезности — до кода, а не механический перенос
+
+Наличие функции в одном из 93 старых crates **не доказывает, что её надо показывать пользователю в новой CRM**. Для каждой операции сначала определить: **кто** её применяет, **зачем** и в каком реальном рабочем сценарии; какие данные/права и соседние действия уже доступны; сможет ли человек без знания внутренних IDs, enum и типов ресурсов получить понятный результат; нет ли более простого решения через существующие typed owners и экраны. Проверить, не прячет ли предложенное упрощение полезный бизнес-инвариант или важную возможность. Записывать короткое обоснование выбора в текущем курсоре **перед реализацией**.
+
+**Решение по операции:** A — уже работает и доказана нужная семантика; B — нужное пользователю поведение отсутствует, реализовать весь конкретный путь; C — сценарий обоснованно не нужен в MVP (указать, при каких потребностях пересмотреть); D — только техническая legacy-инфраструктура после проверки потребителей. **Не переносить автоматически универсальные фильтры, внутренние идентификаторы, старые runtime и технические настройки в UI.** Не создавать фильтр по ответственному без понятного сценария назначения работы или ручную связь, которую owner не сохраняет. Старый полезный сценарий и его негативные инварианты не могут быть потеряны под видом C. Продуктовая оценка — часть подготовки среза, **не третий gate, не новый CI, не дополнительный реестр**; техническая приёмка по-прежнему требует оба Gate A и B.
+
+## Принятая модель видимости полей (M1; обязательна при каждом новом модуле)
+
+По решению владельца **все бизнес-поля доступной записи своего tenant видимы и
+`viewer`, и `admin` в рамках существующих Get/List/Customer360 контрактов**.
+Не создавать field-level ACL, field masks, отдельные роли чтения отдельных полей
+или копию исторического `QueryVisibilityAuthorizer`: это **C для MVP**.
+`viewer` остаётся без прав Write/AdminRead; signed Access, tenant isolation,
+cross-reference checks и ограничения операций сохраняются. Не переносить
+возможность видеть данные CRM на диагностические логи: JWT, secrets, PII и
+raw business payload там по-прежнему нельзя раскрывать. При разработке проверять
+одинаковые доступные бизнес-поля в read-ответах admin/viewer и отсутствие
+межтенантной утечки; использовать существующий native workerd/Chromium, а не
+новую систему тестирования. Ранее помеченная неопределённость о том, **какие
+поля скрывать от viewer, снята решением C**, но это не закрывает остальные
+инварианты и пользовательские карточки M1.
+
+## Обязательный размер среза и две последовательные приёмки
+
+Единица разработки — **крупный связанный пользовательский сценарий**, а не один RPC/экран/таблица. Точные границы **S-M1-A** (Party/Account/Contact/Relationship/pickers), **S-M1-B** (Deal/Task/stage/close/reload) и **S-M2** (Sales) заданы в [матрице](../../docs/crm-functional-execution-matrix.md). До полного CI согласованно подготовить все нужные `.proto`, owner/Rust, policy, D1, React и tests; локальные рабочие commits и не опубликованные blobs/tree допустимы. **GitHub Actions работает на каждом code push в `dev` (`cancel-in-progress: false`), поэтому не публиковать последовательность микрокоммитов в `dev`. Сформировать весь законченный кодовый срез и сделать один атомарный push/ref update в `dev` → один CI.** Повторить только при исправлении реального FAIL. Не смешивать несвязанные направления ради размера.
+
+Для каждого завершённого кодового среза на **одном и том же source SHA** обязательны оба независимых результата:
+1. **Gate A = PASS:** существующий GitHub Actions `cloudflare-crm-spike.yml` проверяет Buf/generated Rust+TS, policy/owner, D1 workerd, negative cases и встроенный Chromium; публикует тот же artifact с совпадающим SHA/Worker version, проверяет live Access/trace/audit. Не добавлять ещё один CI.
+2. **Gate B = PASS:** **после Gate A** через отдельный Universal Browser MCP выполнить действия пользователя **на реально опубликованной CRM**, проверить SHA/Worker version до/после, сохранение/связи/права/ошибки после reload и D1/readback. **CI Chromium и live-тест внутри Gate A не заменяют Gate B.** Нельзя засчитать service identity за подписанного human. `MCP_FAIL` инструмента → исправить Browser MCP и повторить только Gate B для того же CRM SHA; реальный `CRM_FAIL` → исправить код и повторить оба gate.
+
+Статус `DONE` допустим **только при Gate A PASS + Gate B PASS** и всех применимых дополнительных security/human prerequisites. Оба статуса, exact source SHA, artifact/Worker version, CI link, независимые действия/ожидаемые результаты и оставшийся gap должны попасть в текущем курсоре. При любом FAIL/UNCERTAIN — `NO-GO`, не закрывать срез.
+
+**Если код для функции уже существует и работает (A):** не писать его повторно и не запускать новый CI только из-за `OPEN`. Использовать существующий PASS Gate A на exact опубликованном SHA; проверить, есть ли достаточный независимый Gate B для данного сценария, и выполнить только отсутствующий proof. При наличии обоих и сверки legacy семантики зафиксировать ACCEPTED в текущем курсоре без code push. C оформляется без кода; только доказанный бизнес-gap B требует кодового среза и новой A→B приёмки.
+
+**Нулевая потеря старой функциональности как обязательство проверки, НЕ как уже доказанный факт:** [полная 93/93 crosswalk-таблица](../../docs/crm-functional-execution-matrix.md) связывает все 532 исходных файла и их 6 633 найденные функции с функциональными ID либо с `X-01` (незакрытая legacy-infrastructure review). Сохранить source/tests. До изменения функции — изучить её nested исторические методы/негативные тесты и current owner; если выявлен неизвестный нужный кейс, добавить B в существующий ID или отдельный пакет. До **любого удаления crate** и заявления полной parity разрешение дают только рассмотренные **по операциям** A/B/C/D, проверенные consumers и соответствующие доказательства, не один ярлык по имени crate. `X-01` не блокирует MVP, но блокирует массовое удаление и заявление 93/93 behavior DONE.
+
+## Рабочий процесс
+
+1. Прочитать [функциональную матрицу](../../docs/crm-functional-execution-matrix.md), текущий курсор из #484 и архитектуру; **сначала** сверить принятые сценарии, действующие owner/RPC/UI и имеющееся evidence, затем проверить ещё не решённую пользовательскую задачу и соответствующие legacy Rust-операции/тесты. Выбрать конкретный B-gap **только после** этой сверки; A/C не требуют реализации.
+2. Изменять канонический GitHub `dev`. PR допустим для обсуждения, но не обязателен.
+   Не включать branch protection, обязательные reviews или второй CI перед push.
+3. Сборки и тесты выполняет GitHub Actions. Не просить пользователя запускать команды.
+   Локальное чтение, редактирование и генерация документов допустимы.
+4. Один code push запускает существующий workflow: контракты/типы → Rust/TS/тесты → сборка →
+   workerd/D1/Chromium → публикация готового artifact → live-приёмка.
+   При FAIL штатный deployment не разрешён. Наличие commit в dev не означает приёмку.
+5. Изменения только `**/*.md` не запускают сборку или deployment. Markdown не должен быть
+   входом runtime/codegen. Смешанные изменения документации и кода проходят полный CI.
+   Редактор проверяет смысл и ссылки; тесты документации выполняются при следующем code CI.
+6. Выполняющийся запуск заканчивается; GitHub concurrency оставляет последнюю ожидающую версию.
+   Не прерывать deployment каждым новым push. Промежуточные commits не обязаны публиковаться.
+7. Результаты записывать в issue: source SHA, ссылка на CI, результат live-приёмки, версия Worker
+   и остаток работы. Не коммитить эти чекпойнты, номера запусков и текущие статусы в Markdown
+   приложения. Документация меняется при изменении правил, а не после каждого релиза.
+
+## Обязательные границы
+
+- Protobuf — единственный wire contract; generated Rust/TS, оригинальные Rust owners и typed mappings. **Обхода нет:** нельзя создавать альтернативные ручные DTO/типы или транспорт, исполнять RPC без canonical `module.yaml`/compiled policy/owner, писать бизнес-правила в React/JS handler или обращаться к D1 в обход оригинального Rust owner. Любое новое поведение проходит существующие descriptor/router/policy/TS/AST/native evidence checks; `OPEN` не разрешает архитектурное исключение.
+- Собственный CRM API не обещает совместимость со старыми тестовыми клиентами. Менять контракт,
+  обработчик, UI и тесты согласованно. Не вводить accepted SHA, поиск last-green или сравнения
+  с прошлыми ветками ради приёмки текущей схемы. Общие контракты других потребителей сохраняют
+  свои обязательства. Legacy PostgreSQL process runtime (`services/crm-api`,
+  `crates/crm-application-runtime`) выведен из активного workspace и CI; не восстанавливать
+  и не расширять его как альтернативный backend без нового прямого решения владельца.
+- Один Worker, Connect router, `packages/client/cloudflare`, `packages/ui` и одна D1. Никаких
+  второго транспорта, business REST, JS backend, generic CRUD/ORM или копии domain rules.
+- Identity, tenant, role и request_id проверяет Rust; одна явная fail-closed policy.
+- Buf descriptors, compiled router/policy и TypeScript compiler/AST проверяют структуру.
+  Не разбирать Rust/Protobuf semantic regex и не доказывать тесты строками в исходниках.
+- Новый RPC расширяет проверяемую область. Обязательны owner, policy, handler и исполненные
+  сценарии. Количество RPC/модулей не фиксируется константой.
+- Сохранять auth, tenant, CAS, replay, audit, domain и browser tests. Ошибочная команда оставляет
+  агрегат неизменным; audit отражает фактическую операцию. UI не копирует бизнес-валидацию.
+- Нельзя получать PASS исключением неудобного метода или ослаблением инварианта. Исправление
+  ошибочной проверки сохраняет её назначение и подтверждается регрессионным тестом.
+- Обычное изменение D1 — следующая миграция. Редактирование применённого SQL не обновит live D1.
+  Намеренное пересоздание тестовых данных оформляется явно; Access/учётные данные не удаляются.
+- Никакого нового crate, реестра, генератора метаданных, workflow или doctor для обычной функции.
+  Существующие модули и стандартные средства остаются основным путём расширения.
+
+## Приёмка
+
+Code CI проверяет текущий контракт, владельцев, типы, реальные права и поведение.
+Production `native` и test-only `native-ci` различаются; тестовые ключи не попадают в release.
+Cargo cache ускоряет компиляцию, но не заменяет проверки текущего source. Артефакт публикуется
+без пересборки, с проверкой SHA/checksum и live Access/UI/D1/Logs. Отсутствие обязательного evidence
+после выполненного сценария — FAIL; ранняя ошибка не создаёт вторичную ошибку загрузки скриншота.
+
+DONE функции означает законченный пользовательский сценарий и применимые CI/live assertions,
+зафиксированные в issue. Типизация не доказывает всю бизнес-семантику, а зелёный CI не означает
+промышленную готовность. Продуктовые ограничения и будущие этапы зафиксированы в #484.

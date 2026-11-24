@@ -7,15 +7,13 @@ from scripts.contract_bindings import RpcDescriptor, build_registry, descriptor_
 from scripts.module_manifest_projection import runtime_manifest_projection
 
 
-def capability(contract_id: str, rpc: str, request: str, response: str) -> dict:
+def capability(contract_id: str, rpc: str) -> dict:
     return {
         "id": contract_id,
         "version": "1.0.0",
         "binding": {
             "kind": "protobuf_rpc",
             "rpc": rpc,
-            "request": request,
-            "response": response,
         },
     }
 
@@ -56,8 +54,6 @@ class ContractBindingTests(unittest.TestCase):
                         capability(
                             "example.create",
                             "crm.example.v1.ExampleService.CreateExample",
-                            "crm.example.v1.CreateExampleRequest",
-                            "crm.example.v1.CreateExampleResponse",
                         )
                     ],
                     "events": [event("example.created", "crm.example.v1.ExampleCreatedEvent")],
@@ -73,14 +69,23 @@ class ContractBindingTests(unittest.TestCase):
         self.assertEqual(registry["modules"][0]["capabilities"], [])
         self.assertTrue(render_registry(registry).endswith(b"\n"))
 
-    def test_descriptor_input_output_drift_fails(self) -> None:
+    def test_descriptor_wire_types_are_derived_not_redeclared(self) -> None:
         messages, methods = descriptor_index(self.descriptor())
         methods["crm.example.v1.ExampleService.CreateExample"] = RpcDescriptor(
             request="crm.example.v1.CreateExampleResponse",
             response="crm.example.v1.CreateExampleRequest",
         )
+        registry, errors = build_registry(self.manifests(), messages, methods)
+        self.assertEqual(errors, [])
+        output = registry["modules"][1]["capabilities"][0]
+        self.assertEqual(output["request"], "crm.example.v1.CreateExampleResponse")
+        self.assertEqual(output["response"], "crm.example.v1.CreateExampleRequest")
+
+    def test_missing_rpc_descriptor_fails_closed(self) -> None:
+        messages, methods = descriptor_index(self.descriptor())
+        del methods["crm.example.v1.ExampleService.CreateExample"]
         _, errors = build_registry(self.manifests(), messages, methods)
-        self.assertTrue(any("resolves to" in error for error in errors))
+        self.assertTrue(any("RPC does not exist" in error for error in errors))
 
     def test_runtime_projection_removes_only_build_time_bindings(self) -> None:
         authoring = self.manifests()[1]

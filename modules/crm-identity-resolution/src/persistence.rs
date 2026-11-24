@@ -33,15 +33,41 @@ pub fn encode_duplicate_candidate_case_state(
     Ok(bytes)
 }
 
+// Diagnostics only: these trusted literal labels do not define another state schema.
+const IDENTITY_JSON_DIAGNOSTIC_FIELDS: &[&str] = &[
+    "case_id",
+    "left_party_id",
+    "right_party_id",
+    "evidence_history",
+    "left_party_version",
+    "right_party_version",
+    "matcher_profile",
+    "score_basis_points",
+    "signals",
+    "kind",
+    "source",
+    "evidence_ref",
+    "contribution_basis_points",
+    "generated_at_unix_nanos",
+    "status",
+    "decision_reason",
+    "created_at_unix_nanos",
+    "updated_at_unix_nanos",
+    "version",
+];
+
 pub fn decode_duplicate_candidate_case_state(
     bytes: &[u8],
 ) -> Result<DuplicateCandidateCase, SdkError> {
     validate_size(bytes)?;
-    let state: DuplicateCandidateCaseStateV1 = serde_json::from_slice(bytes).map_err(|error| {
-        persisted_error(format!(
-            "Identity Resolution candidate state JSON is invalid: {error}"
-        ))
-    })?;
+    let state: DuplicateCandidateCaseStateV1 =
+        crm_module_sdk::decode_json(bytes, IDENTITY_JSON_DIAGNOSTIC_FIELDS).map_err(
+            |diagnostic| {
+                persisted_error(format!(
+                    "Identity Resolution candidate state JSON is invalid: {diagnostic}"
+                ))
+            },
+        )?;
     DuplicateCandidateCase::rehydrate(state.try_into()?)
         .map_err(|error| persisted_error(format!("{}: {}", error.code, error.safe_message)))
 }
@@ -298,6 +324,17 @@ fn persisted_error(message: impl Into<String>) -> SdkError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn persisted_json_diagnostics_never_echo_private_keys_or_values() {
+        let invalid = br#"{"private-471-key":"secret-471-payload","version":"secret-471-value"}"#;
+        let error = decode_duplicate_candidate_case_state(invalid).unwrap_err();
+        assert_eq!(error.code, "IDENTITY_RESOLUTION_PERSISTED_STATE_INVALID");
+        let diagnostic = format!("{error:?}");
+        for sensitive in ["private-471-key", "secret-471-payload", "secret-471-value"] {
+            assert!(!diagnostic.contains(sensitive));
+        }
+    }
+
     use crate::domain::{
         CreateDuplicateCandidateCase, DecideDuplicateCandidateCase,
         RefreshDuplicateCandidateEvidence,

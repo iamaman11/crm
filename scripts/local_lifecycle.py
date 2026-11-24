@@ -20,6 +20,8 @@ MINIMUM_PYTHON = (3, 11)
 REQUIRED_REPOSITORY_FILES = (
     "Cargo.toml",
     "Cargo.lock",
+    "apps/cloudflare-crm/rust-party/Cargo.toml",
+    "apps/cloudflare-crm/rust-party/Cargo.lock",
     "package.json",
     "pnpm-lock.yaml",
     "requirements-dev.txt",
@@ -269,36 +271,6 @@ def doctor(
         ]
     )
 
-    if profile == "full":
-        checks.extend(
-            [
-                _command_check(
-                    check_id="docker",
-                    executable="docker",
-                    command=("docker", "--version"),
-                    which=which,
-                    capture=capture,
-                    remediation="install Docker Desktop or Docker Engine",
-                ),
-                _command_check(
-                    check_id="docker-compose",
-                    executable="docker",
-                    command=("docker", "compose", "version"),
-                    which=which,
-                    capture=capture,
-                    remediation="install the Docker Compose v2 plugin",
-                ),
-                _command_check(
-                    check_id="docker-daemon",
-                    executable="docker",
-                    command=("docker", "info", "--format", "{{.ServerVersion}}"),
-                    which=which,
-                    capture=capture,
-                    remediation="start the Docker daemon",
-                ),
-            ]
-        )
-
     ok = all(check.ok for check in checks if check.required)
     return {
         "schema_version": DOCTOR_SCHEMA,
@@ -343,9 +315,9 @@ def bootstrap_plan(root: Path = ROOT) -> list[list[str]]:
                 "--requirement",
                 "requirements-dev.txt",
             ],
-            ["cargo", "fetch", "--locked"],
+            ["cargo", "fetch", "--locked", "--manifest-path", "apps/cloudflare-crm/rust-party/Cargo.toml"],
             ["pnpm", "install", "--frozen-lockfile"],
-            ["cargo", "metadata", "--locked", "--format-version", "1", "--no-deps"],
+            ["cargo", "metadata", "--locked", "--manifest-path", "apps/cloudflare-crm/rust-party/Cargo.toml", "--format-version", "1", "--no-deps"],
             [
                 str(venv_python),
                 "scripts/generate_repository_navigation.py",

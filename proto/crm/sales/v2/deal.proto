@@ -1,0 +1,776 @@
+syntax = "proto3";
+
+package crm.sales.v2;
+
+import "crm/core/v2/operation.proto";
+import "google/protobuf/timestamp.proto";
+
+// Original crm-sales alone validates amounts, stage transitions, CAS and the
+// sales->activities atomic delivery. No caller-supplied bypass policy.
+enum DealStatus {
+  DEAL_STATUS_UNSPECIFIED = 0;
+  DEAL_STATUS_OPEN = 1;
+  DEAL_STATUS_WON = 2;
+  DEAL_STATUS_LOST = 3;
+}
+
+enum ProbabilitySource {
+  PROBABILITY_SOURCE_UNSPECIFIED = 0;
+  PROBABILITY_SOURCE_MANUAL = 1;
+  PROBABILITY_SOURCE_STAGE_DEFAULT = 2;
+}
+
+enum ForecastCategory {
+  FORECAST_CATEGORY_UNSPECIFIED = 0;
+  FORECAST_CATEGORY_PIPELINE = 1;
+  FORECAST_CATEGORY_BEST_CASE = 2;
+  FORECAST_CATEGORY_COMMIT = 3;
+  FORECAST_CATEGORY_OMITTED = 4;
+}
+
+message DealStage {
+  string pipeline_id = 1;
+  string stage_id = 2;
+  uint32 ordinal = 3;
+}
+
+message Deal {
+  string deal_id = 1;
+  string name = 2;
+  string account_id = 3;
+  DealStage stage = 4;
+  DealStatus status = 5;
+  crm.core.v2.ExactMoney amount = 6;
+  uint32 probability_basis_points = 7;
+  int64 version = 8;
+  google.protobuf.Timestamp closed_at = 9;
+  string primary_contact_id = 10;
+  crm.core.v2.CalendarDate expected_close_date = 11;
+  string close_reason_code = 12;
+  google.protobuf.Timestamp created_at = 13;
+  google.protobuf.Timestamp updated_at = 14;
+  ProbabilitySource probability_source = 15;
+  ForecastCategory forecast_category = 16;
+  crm.core.v2.ActorOrTeamOwner owner = 17;
+  SalesRoutingDecision initial_routing = 18;
+}
+
+message CreateDealRequest {
+  string deal_id = 1;
+  string name = 2;
+  string account_id = 3;
+  DealStage stage = 4;
+  crm.core.v2.ExactMoney amount = 5;
+  // Absent copies the stage default; explicit zero is a manual estimate.
+  optional uint32 probability_basis_points = 6;
+  crm.core.v2.MutationPrecondition precondition = 7;
+  optional string primary_contact_id = 8;
+  crm.core.v2.CalendarDate expected_close_date = 9;
+  optional ForecastCategory forecast_category = 10;
+  crm.core.v2.ActorOrTeamOwner owner = 11;
+  AutomaticSalesRouting automatic_routing = 12;
+}
+
+message CreateDealResponse {
+  Deal deal = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+message UpdateDealRequest {
+  string deal_id = 1;
+  crm.core.v2.StringPatch name = 2;
+  crm.core.v2.MoneyPatch amount = 3;
+  optional uint32 probability_basis_points = 4;
+  crm.core.v2.MutationPrecondition precondition = 5;
+  crm.core.v2.StringPatch primary_contact_id = 6;
+  crm.core.v2.CalendarDatePatch expected_close_date = 7;
+  // Mutually exclusive with probability_basis_points. False means Keep.
+  bool use_stage_probability = 8;
+  optional ForecastCategory forecast_category = 9;
+  crm.core.v2.ActorOrTeamOwner owner = 10;
+}
+
+message UpdateDealResponse {
+  Deal deal = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+message AdvanceStageRequest {
+  string deal_id = 1;
+  DealStage target_stage = 2;
+  DealStatus target_status = 3;
+  optional string close_reason_code = 4;
+  crm.core.v2.MutationPrecondition precondition = 5;
+}
+
+message AdvanceStageResponse {
+  Deal deal = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+// Explicit lifecycle commands: moving a stage never means closing a Deal.
+message CloseDealRequest {
+  string deal_id = 1;
+  DealStatus outcome = 2; // WON or LOST, never OPEN
+  string reason_code = 3;
+  crm.core.v2.MutationPrecondition precondition = 4;
+}
+message CloseDealResponse {
+  Deal deal = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+message ReopenDealRequest {
+  string deal_id = 1;
+  string reason_code = 2;
+  crm.core.v2.MutationPrecondition precondition = 3;
+  // Optional reassignment in the same reopening CAS. Absent keeps an
+  // eligible current owner; archived/inactive owners require replacement.
+  crm.core.v2.ActorOrTeamOwner owner = 4;
+}
+message ReopenDealResponse {
+  Deal deal = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+// Immutable, tenant-scoped original Deal event stream. One event per version,
+// written atomically by D1 with the mutation receipt and signed audit.
+enum DealEventKind {
+  DEAL_EVENT_KIND_UNSPECIFIED = 0;
+  DEAL_EVENT_KIND_CREATED = 1;
+  DEAL_EVENT_KIND_UPDATED = 2;
+  DEAL_EVENT_KIND_MOVED = 3;
+  DEAL_EVENT_KIND_CLOSED = 4;
+  DEAL_EVENT_KIND_REOPENED = 5;
+}
+message DealEvent {
+  int64 deal_version = 1;
+  DealEventKind kind = 2;
+  string pipeline_id = 3;
+  string previous_stage_id = 4;
+  string stage_id = 5;
+  DealStatus previous_status = 6;
+  DealStatus status = 7;
+  string reason_code = 8;
+  string actor = 9;
+  string request_id = 10;
+  google.protobuf.Timestamp occurred_at = 11;
+  int64 catalog_version = 12;
+  string linked_task_id = 13;
+  SalesRoutingDecision initial_routing = 14;
+}
+message ListDealEventsRequest {
+  string deal_id = 1;
+  crm.core.v2.PageRequest page = 2;
+}
+message ListDealEventsResponse {
+  repeated DealEvent events = 1;
+  crm.core.v2.PageInfo page_info = 2;
+}
+
+message GetDealRequest {
+  string deal_id = 1;
+  // Optional opaque key of the original command; never re-executes it.
+  optional string receipt_idempotency_key = 2;
+}
+
+message GetDealResponse {
+  Deal deal = 1;
+  // Positive proof for this tenant, record and key only. Absence is not
+  // proof that a previously uncertain command was rejected or rolled back.
+  crm.core.v2.MutationCommitEvidence confirmed_mutation = 2;
+}
+
+message ListDealsRequest {
+  crm.core.v2.PageRequest page = 1;
+  optional string pipeline_id = 2;
+  optional DealStatus status = 3;
+  optional string account_id = 4;
+  // Literal, case-sensitive name/ID fragment; user search is separate from
+  // saved views, Kanban inventory and pipeline-wide forecasting.
+  string search = 5;
+  crm.core.v2.ActorOrTeamOwner owner_filter = 6;
+}
+
+message ListDealsResponse {
+  repeated Deal deals = 1;
+  crm.core.v2.PageInfo page_info = 2;
+}
+
+// User-managed tenant pipeline. Stage rank is assigned only by the Rust owner.
+message PipelineStageInput {
+  string stage_id = 1;
+  string name = 2;
+  uint32 probability_basis_points = 3;
+  bool archived = 4;
+}
+
+message PipelineStage {
+  string stage_id = 1;
+  string name = 2;
+  uint32 ordinal = 3;
+  uint32 probability_basis_points = 4;
+  bool archived = 5;
+}
+
+message SalesPipeline {
+  string pipeline_id = 1;
+  string name = 2;
+  int64 version = 3;
+  bool archived = 4;
+  repeated PipelineStage stages = 5;
+}
+
+message CreatePipelineRequest {
+  string pipeline_id = 1;
+  string name = 2;
+  repeated PipelineStageInput stages = 3;
+  crm.core.v2.MutationPrecondition precondition = 4;
+}
+
+message CreatePipelineResponse {
+  SalesPipeline pipeline = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+message UpdatePipelineRequest {
+  string pipeline_id = 1;
+  string name = 2;
+  repeated PipelineStageInput stages = 3;
+  bool archived = 4;
+  crm.core.v2.MutationPrecondition precondition = 5;
+}
+
+message UpdatePipelineResponse {
+  SalesPipeline pipeline = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+message GetPipelineRequest {
+  string pipeline_id = 1;
+  // Optional opaque key of the original command; never re-executes it.
+  optional string receipt_idempotency_key = 2;
+}
+
+message GetPipelineResponse {
+  SalesPipeline pipeline = 1;
+  // Positive proof for this tenant, pipeline and key only.
+  crm.core.v2.MutationCommitEvidence confirmed_mutation = 2;
+}
+
+message ListPipelinesRequest {
+  crm.core.v2.PageRequest page = 1;
+  bool include_archived = 2;
+}
+
+message ListPipelinesResponse {
+  repeated SalesPipeline pipelines = 1;
+  crm.core.v2.PageInfo page_info = 2;
+  // Complete currency reference data on the first page only.
+  repeated crm.core.v2.CurrencyDefinition currencies = 3;
+}
+
+message ListStageDealsRequest {
+  string pipeline_id = 1;
+  string stage_id = 2;
+  crm.core.v2.PageRequest page = 3;
+  optional DealStatus status = 4;
+  optional string account_id = 5;
+  crm.core.v2.ActorOrTeamOwner owner_filter = 6;
+}
+
+// Exact unconverted minor-unit sum for the whole filtered stage, never the
+// visible page. A decimal string supports totals greater than int64 without
+// floating point conversion or silently combining distinct currencies.
+message StageCurrencyTotal {
+  string currency_code = 1;
+  string total_minor_units = 2;
+  uint64 amount_deal_count = 3;
+}
+
+message ListStageDealsResponse {
+  repeated Deal deals = 1;
+  crm.core.v2.PageInfo page_info = 2;
+  uint64 total_count = 3;
+  repeated StageCurrencyTotal currency_totals = 4;
+}
+
+// Tenant-scoped named filters are presentation state, not a second Deal
+// read/mutation owner. Applying a view uses existing ListDeals,
+// ListStageDeals and GetPipelineMetrics with exactly these typed filters.
+message SalesDealView {
+  string view_id = 1;
+  string name = 2;
+  optional string pipeline_id = 3;
+  optional DealStatus status = 4;
+  optional string account_id = 5;
+  int64 version = 6;
+  bool archived = 7;
+  crm.core.v2.ActorOrTeamOwner owner_filter = 8;
+}
+message CreateSalesViewRequest {
+  string view_id = 1;
+  string name = 2;
+  optional string pipeline_id = 3;
+  optional DealStatus status = 4;
+  optional string account_id = 5;
+  crm.core.v2.MutationPrecondition precondition = 6;
+  crm.core.v2.ActorOrTeamOwner owner_filter = 7;
+}
+message CreateSalesViewResponse {
+  SalesDealView view = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+message UpdateSalesViewRequest {
+  string view_id = 1;
+  string name = 2;
+  optional string pipeline_id = 3;
+  optional DealStatus status = 4;
+  optional string account_id = 5;
+  bool archived = 6;
+  crm.core.v2.MutationPrecondition precondition = 7;
+  crm.core.v2.ActorOrTeamOwner owner_filter = 8;
+}
+message UpdateSalesViewResponse {
+  SalesDealView view = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+message GetSalesViewRequest {
+  string view_id = 1;
+  // Optional opaque key of the original command; never re-executes it.
+  optional string receipt_idempotency_key = 2;
+}
+message GetSalesViewResponse {
+  SalesDealView view = 1;
+  // Positive proof for this tenant, view and key only.
+  crm.core.v2.MutationCommitEvidence confirmed_mutation = 2;
+}
+message ListSalesViewsRequest {
+  crm.core.v2.PageRequest page = 1;
+  bool include_archived = 2;
+}
+message ListSalesViewsResponse {
+  repeated SalesDealView views = 1;
+  crm.core.v2.PageInfo page_info = 2;
+}
+
+// Read-only full-pipeline statistics. No currency mixing, page-size leakage,
+// float money or predictive accuracy claims. Weighted numerator is exact:
+// sum(minor_units * individual_probability_basis_points).
+// Inclusive UTC calendar dates; scopes analytics, not the board inventory.
+message SalesAnalysisPeriod {
+  crm.core.v2.CalendarDate start_date = 1;
+  crm.core.v2.CalendarDate end_date = 2;
+}
+message GetPipelineMetricsRequest {
+  string pipeline_id = 1;
+  optional DealStatus status = 2;
+  optional string account_id = 3;
+  SalesAnalysisPeriod analysis_period = 4;
+  crm.core.v2.ActorOrTeamOwner owner_filter = 5;
+}
+message PipelineStatusMetric {
+  string stage_id = 1;
+  DealStatus status = 2;
+  uint64 deal_count = 3;
+}
+message PipelineCurrencyMetric {
+  string stage_id = 1;
+  DealStatus status = 2;
+  string currency_code = 3;
+  string total_minor_units = 4;
+  string weighted_minor_units_times_basis_points = 5;
+  uint64 amount_deal_count = 6;
+}
+
+// Operational measures are evaluated as of one UTC instant. Only OPEN Deals
+// enter due-date and active-stage-age buckets. The stage clock starts at the
+// latest immutable Created/Moved event (never an ordinary edit or reopen).
+// A legacy Deal with no corresponding entry event has unknown stage age.
+message PipelineOperationalMetric {
+  string stage_id = 1;
+  DealStatus status = 2;
+  uint64 overdue_expected_close_count = 3;
+  uint64 due_next_30_days_count = 4;
+  uint64 due_later_count = 5;
+  uint64 no_expected_close_count = 6;
+  uint64 known_stage_age_count = 7;
+  string total_stage_age_seconds = 8;
+  // Counts Deals with at least one overdue OPEN Task linked to a stage move.
+  // Not all Activities under the Account are implicitly Deal-related.
+  uint64 overdue_linked_task_count = 9;
+}
+
+// Disjoint prospective buckets, only OPEN Deals. OMITTED is explicitly
+// excluded from forecasts; show its facts separately for reconciliation.
+message ForecastCategoryMetric {
+  ForecastCategory category = 1;
+  uint64 deal_count = 2;
+  uint64 stage_default_count = 3;
+  uint64 manual_count = 4;
+}
+message ForecastCurrencyMetric {
+  ForecastCategory category = 1;
+  string currency_code = 2;
+  string total_minor_units = 3;
+  string weighted_minor_units_times_basis_points = 4;
+  uint64 amount_deal_count = 5;
+}
+
+// Currently closed deals with a recorded final close outcome in the period.
+// Reopened deals and unknown close dates are excluded from the denominator.
+message SalesClosedOutcomeMetric {
+  uint64 won_count = 1;
+  uint64 lost_count = 2;
+  uint64 unknown_close_count = 3;
+  uint64 denominator = 4;
+  // Truncated to basis points; absent if the denominator is zero.
+  optional uint32 win_rate_basis_points = 5;
+}
+message GetPipelineMetricsResponse {
+  string pipeline_id = 1;
+  uint64 total_deal_count = 2;
+  repeated PipelineStatusMetric statuses = 3;
+  repeated PipelineCurrencyMetric currencies = 4;
+  repeated PipelineOperationalMetric operational = 5;
+  int64 as_of_unix_seconds = 6;
+  repeated ForecastCategoryMetric forecast_categories = 7;
+  repeated ForecastCurrencyMetric forecast_currencies = 8;
+  // Undated deals are a subset of the all-time forecast; they are outside
+  // every explicit dated period, and must never be assigned an invented date.
+  repeated ForecastCategoryMetric undated_forecast_categories = 9;
+  repeated ForecastCurrencyMetric undated_forecast_currencies = 10;
+  // Absent when a single status is selected (biased denominator).
+  SalesClosedOutcomeMetric closed_outcomes = 11;
+  SalesAnalysisPeriod analysis_period = 12;
+}
+
+// Sales coverage is independent of customer identity and Access roles.
+message TerritoryConfiguration {
+  string name = 1;
+  optional string parent_id = 2;
+  crm.core.v2.ActorOrTeamOwner default_owner = 3;
+  bool archived = 4;
+}
+
+message SalesTerritory {
+  string territory_id = 1;
+  TerritoryConfiguration configuration = 2;
+  int64 version = 3;
+}
+
+enum SalesOverlayRole {
+  SALES_OVERLAY_ROLE_UNSPECIFIED = 0;
+  SALES_OVERLAY_ROLE_SPECIALIST = 1;
+  SALES_OVERLAY_ROLE_ACCOUNT_SUPPORT = 2;
+  SALES_OVERLAY_ROLE_EXECUTIVE_SPONSOR = 3;
+}
+
+message SalesAccountOverlay {
+  SalesOverlayRole role = 1;
+  crm.core.v2.ActorOrTeamOwner owner = 2;
+}
+
+message SalesAccountAssignmentConfiguration {
+  optional string territory_id = 1;
+  crm.core.v2.ActorOrTeamOwner primary_owner = 2;
+  repeated SalesAccountOverlay overlays = 3;
+  bool archived = 4;
+}
+
+message SalesAccountAssignment {
+  string account_id = 1;
+  SalesAccountAssignmentConfiguration configuration = 2;
+  int64 version = 3;
+}
+
+message CreateTerritoryRequest {
+  string territory_id = 1;
+  TerritoryConfiguration configuration = 2;
+  crm.core.v2.MutationPrecondition precondition = 3;
+}
+
+message CreateTerritoryResponse {
+  SalesTerritory territory = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+message UpdateTerritoryRequest {
+  string territory_id = 1;
+  TerritoryConfiguration configuration = 2;
+  crm.core.v2.MutationPrecondition precondition = 3;
+}
+
+message UpdateTerritoryResponse {
+  SalesTerritory territory = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+message GetTerritoryRequest {
+  string territory_id = 1;
+  optional string receipt_idempotency_key = 2;
+}
+
+message GetTerritoryResponse {
+  SalesTerritory territory = 1;
+  crm.core.v2.MutationCommitEvidence confirmed_mutation = 2;
+}
+
+message ListTerritoriesRequest {
+  crm.core.v2.PageRequest page = 1;
+  bool include_archived = 2;
+}
+
+message ListTerritoriesResponse {
+  repeated SalesTerritory territories = 1;
+  crm.core.v2.PageInfo page_info = 2;
+}
+
+message CreateSalesAccountAssignmentRequest {
+  string account_id = 1;
+  SalesAccountAssignmentConfiguration configuration = 2;
+  crm.core.v2.MutationPrecondition precondition = 3;
+}
+
+message CreateSalesAccountAssignmentResponse {
+  SalesAccountAssignment assignment = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+message UpdateSalesAccountAssignmentRequest {
+  string account_id = 1;
+  SalesAccountAssignmentConfiguration configuration = 2;
+  crm.core.v2.MutationPrecondition precondition = 3;
+}
+
+message UpdateSalesAccountAssignmentResponse {
+  SalesAccountAssignment assignment = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+message GetSalesAccountAssignmentRequest {
+  string account_id = 1;
+  optional string receipt_idempotency_key = 2;
+}
+
+message GetSalesAccountAssignmentResponse {
+  SalesAccountAssignment assignment = 1;
+  crm.core.v2.MutationCommitEvidence confirmed_mutation = 2;
+}
+
+message ListSalesAccountAssignmentsRequest {
+  crm.core.v2.PageRequest page = 1;
+  bool include_archived = 2;
+  optional string territory_id = 3;
+  crm.core.v2.ActorOrTeamOwner primary_owner_filter = 4;
+}
+
+message ListSalesAccountAssignmentsResponse {
+  repeated SalesAccountAssignment assignments = 1;
+  crm.core.v2.PageInfo page_info = 2;
+}
+
+// Closed, typed routing vocabulary. All criteria are conjunctive.
+// Absence of criteria is an explicitly configured catch-all.
+message SalesRoutingCriteria {
+  optional string territory_id = 1;
+  optional string pipeline_id = 2;
+  optional string stage_id = 3;
+  optional string currency_code = 4;
+  optional int64 minimum_minor_units = 5;
+  optional int64 maximum_minor_units = 6;
+}
+enum SalesDispatchMode {
+  SALES_DISPATCH_MODE_UNSPECIFIED = 0;
+  SALES_DISPATCH_MODE_DIRECT = 1;
+  SALES_DISPATCH_MODE_LEAST_OPEN_DEALS = 2;
+}
+enum SalesCapacityOverflow {
+  SALES_CAPACITY_OVERFLOW_UNSPECIFIED = 0;
+  SALES_CAPACITY_OVERFLOW_REJECT = 1;
+  SALES_CAPACITY_OVERFLOW_TEAM_QUEUE = 2;
+}
+message SalesRoutingRuleConfiguration {
+  string name = 1;
+  uint32 priority = 2;
+  SalesRoutingCriteria criteria = 3;
+  crm.core.v2.ActorOrTeamOwner target = 4;
+  SalesDispatchMode dispatch = 5;
+  optional uint32 maximum_open_deals = 6;
+  SalesCapacityOverflow overflow = 7;
+  bool archived = 8;
+}
+message SalesRoutingRule {
+  string rule_id = 1;
+  SalesRoutingRuleConfiguration configuration = 2;
+  int64 version = 3;
+}
+enum SalesRoutingSource {
+  SALES_ROUTING_SOURCE_UNSPECIFIED = 0;
+  SALES_ROUTING_SOURCE_RULE = 1;
+  SALES_ROUTING_SOURCE_ACCOUNT = 2;
+  SALES_ROUTING_SOURCE_TERRITORY = 3;
+  SALES_ROUTING_SOURCE_MANUAL = 4;
+  SALES_ROUTING_SOURCE_CREATOR = 5;
+}
+message SalesRoutingDecision {
+  SalesRoutingSource source = 1;
+  crm.core.v2.ActorOrTeamOwner selected_owner = 2;
+  crm.core.v2.ActorOrTeamOwner target = 3;
+  optional string rule_id = 4;
+  optional int64 rule_version = 5;
+  optional string rule_name = 6;
+  optional string territory_id = 7;
+  optional int64 territory_version = 8;
+  optional int64 assignment_version = 9;
+  SalesDispatchMode dispatch = 10;
+  optional uint64 selected_open_deals = 11;
+  optional uint32 maximum_open_deals = 12;
+  bool capacity_overflow = 13;
+  optional string territory_name = 14;
+}
+message AutomaticSalesRouting {
+  optional string territory_id = 1;
+  // Optional server-generated decision fingerprint from preview.
+  optional string expected_decision = 2;
+}
+message CreateSalesRoutingRuleRequest {
+  string rule_id = 1;
+  SalesRoutingRuleConfiguration configuration = 2;
+  crm.core.v2.MutationPrecondition precondition = 3;
+}
+message CreateSalesRoutingRuleResponse {
+  SalesRoutingRule rule = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+message UpdateSalesRoutingRuleRequest {
+  string rule_id = 1;
+  SalesRoutingRuleConfiguration configuration = 2;
+  crm.core.v2.MutationPrecondition precondition = 3;
+}
+message UpdateSalesRoutingRuleResponse {
+  SalesRoutingRule rule = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+message GetSalesRoutingRuleRequest {
+  string rule_id = 1;
+  optional string receipt_idempotency_key = 2;
+}
+message GetSalesRoutingRuleResponse {
+  SalesRoutingRule rule = 1;
+  crm.core.v2.MutationCommitEvidence confirmed_mutation = 2;
+}
+message ListSalesRoutingRulesRequest {
+  crm.core.v2.PageRequest page = 1;
+  bool include_archived = 2;
+}
+message ListSalesRoutingRulesResponse {
+  repeated SalesRoutingRule rules = 1;
+  crm.core.v2.PageInfo page_info = 2;
+}
+message PreviewSalesRoutingRequest {
+  string account_id = 1;
+  DealStage stage = 2;
+  crm.core.v2.ExactMoney amount = 3;
+  optional string territory_id = 4;
+}
+message PreviewSalesRoutingResponse {
+  SalesRoutingDecision decision = 1;
+  string expected_decision = 2;
+}
+
+service DealService {
+  rpc CreateSalesRoutingRule(CreateSalesRoutingRuleRequest) returns (CreateSalesRoutingRuleResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc UpdateSalesRoutingRule(UpdateSalesRoutingRuleRequest) returns (UpdateSalesRoutingRuleResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc GetSalesRoutingRule(GetSalesRoutingRuleRequest) returns (GetSalesRoutingRuleResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListSalesRoutingRules(ListSalesRoutingRulesRequest) returns (ListSalesRoutingRulesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc PreviewSalesRouting(PreviewSalesRoutingRequest) returns (PreviewSalesRoutingResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc CreateTerritory(CreateTerritoryRequest) returns (CreateTerritoryResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc UpdateTerritory(UpdateTerritoryRequest) returns (UpdateTerritoryResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc GetTerritory(GetTerritoryRequest) returns (GetTerritoryResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListTerritories(ListTerritoriesRequest) returns (ListTerritoriesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc CreateSalesAccountAssignment(CreateSalesAccountAssignmentRequest) returns (CreateSalesAccountAssignmentResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc UpdateSalesAccountAssignment(UpdateSalesAccountAssignmentRequest) returns (UpdateSalesAccountAssignmentResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc GetSalesAccountAssignment(GetSalesAccountAssignmentRequest) returns (GetSalesAccountAssignmentResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListSalesAccountAssignments(ListSalesAccountAssignmentsRequest) returns (ListSalesAccountAssignmentsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  rpc CreateSalesView(CreateSalesViewRequest) returns (CreateSalesViewResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc UpdateSalesView(UpdateSalesViewRequest) returns (UpdateSalesViewResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc GetSalesView(GetSalesViewRequest) returns (GetSalesViewResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListSalesViews(ListSalesViewsRequest) returns (ListSalesViewsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc CreatePipeline(CreatePipelineRequest) returns (CreatePipelineResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc UpdatePipeline(UpdatePipelineRequest) returns (UpdatePipelineResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc GetPipeline(GetPipelineRequest) returns (GetPipelineResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListPipelines(ListPipelinesRequest) returns (ListPipelinesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListStageDeals(ListStageDealsRequest) returns (ListStageDealsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc GetPipelineMetrics(GetPipelineMetricsRequest) returns (GetPipelineMetricsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc CreateDeal(CreateDealRequest) returns (CreateDealResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc UpdateDeal(UpdateDealRequest) returns (UpdateDealResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc AdvanceStage(AdvanceStageRequest) returns (AdvanceStageResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc CloseDeal(CloseDealRequest) returns (CloseDealResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc ReopenDeal(ReopenDealRequest) returns (ReopenDealResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc ListDealEvents(ListDealEventsRequest) returns (ListDealEventsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc GetDeal(GetDealRequest) returns (GetDealResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListDeals(ListDealsRequest) returns (ListDealsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}

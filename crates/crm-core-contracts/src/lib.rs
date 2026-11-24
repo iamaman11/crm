@@ -1,7 +1,8 @@
 #![forbid(unsafe_code)]
 
-use std::error::Error;
 use std::fmt;
+
+pub use rust_decimal::{Decimal, RoundingStrategy};
 
 /// Architecture marker for `crm-core-contracts`.
 pub const CRATE_NAME: &str = "crm-core-contracts";
@@ -10,7 +11,16 @@ pub const MAX_CURSOR_BYTES: usize = 1024;
 pub const MAX_PAGE_SIZE: u16 = 200;
 pub const DEFAULT_PAGE_SIZE: u16 = 50;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// NFC for human-language comparison keys only, never for entity identity,
+/// credentials, local parts of email addresses or opaque provider identifiers.
+/// The owner must retain the original display text and enforce its own bounds.
+pub fn nfc_text_key(value: &str) -> String {
+    use unicode_normalization::UnicodeNormalization as _;
+    value.nfc().collect()
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("{code}: {message}")]
 pub struct ContractError {
     pub code: &'static str,
     pub message: String,
@@ -25,32 +35,48 @@ impl ContractError {
     }
 }
 
-impl fmt::Display for ContractError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "{}: {}", self.code, self.message)
-    }
-}
-
-impl Error for ContractError {}
-
-/// ISO 4217 alphabetic currency code.
+/// Current ISO 4217 currency with an assigned decimal minor unit.
+/// Source: iso4217-static's embedded SIX List One. Reject non-monetary codes.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct CurrencyCode(String);
+pub struct CurrencyCode {
+    code: String,
+    exponent: u8,
+}
 
 impl CurrencyCode {
     pub fn try_new(value: impl Into<String>) -> Result<Self, ContractError> {
-        let value = value.into();
-        if value.len() != 3 || !value.bytes().all(|byte| byte.is_ascii_uppercase()) {
-            return Err(ContractError::new(
+        let code = value.into();
+        let invalid = || {
+            ContractError::new(
                 "CONTRACT_CURRENCY_INVALID",
-                "currency must be a three-letter uppercase ISO 4217 code",
-            ));
+                "currency must be a current ISO 4217 code with an assigned minor unit",
+            )
+        };
+        if code.len() != 3 || !code.bytes().all(|byte| byte.is_ascii_uppercase()) {
+            return Err(invalid());
         }
-        Ok(Self(value))
+        let currency = iso4217_static::Currency::try_from(code.as_str()).map_err(|_| invalid())?;
+        let exponent = currency.minor_unit().ok_or_else(invalid)?;
+        Ok(Self { code, exponent })
     }
 
     pub fn as_str(&self) -> &str {
-        &self.0
+        &self.code
+    }
+
+    pub const fn exponent(&self) -> u8 {
+        self.exponent
+    }
+
+    /// Enumerate assigned ISO 4217 numeric codes from the same pinned dataset.
+    /// No duplicated alphabetic table or browser currency authority.
+    pub fn catalog() -> Vec<Self> {
+        let mut currencies: Vec<_> = (1..=999)
+            .filter_map(|numeric| iso4217_static::Currency::from_u16(numeric).ok())
+            .filter_map(|currency| Self::try_new(currency.as_str()).ok())
+            .collect();
+        currencies.sort_unstable();
+        currencies
     }
 }
 
@@ -85,6 +111,50 @@ impl Money {
         &self.currency
     }
 
+    /// Optional decimal view for pricing; never narrow canonical Money implicitly.
+    pub fn try_decimal(&self) -> Result<Decimal, ContractError> {
+        Decimal::try_from_i128_with_scale(self.minor_units, u32::from(self.currency.exponent()))
+            .map_err(|_| {
+                ContractError::new("CONTRACT_DECIMAL_RANGE", "amount exceeds decimal range")
+            })
+    }
+
+    /// Convert decimal major units to exact minor units, rejecting fractional minor units.
+    pub fn from_decimal_exact(
+        value: Decimal,
+        currency: CurrencyCode,
+    ) -> Result<Self, ContractError> {
+        let exponent = u32::from(currency.exponent());
+        let scale = value.scale();
+        let mantissa = value.mantissa();
+        let range =
+            || ContractError::new("CONTRACT_MONEY_RANGE", "amount exceeds minor-unit range");
+        let minor_units = if scale <= exponent {
+            let factor = 10_i128.checked_pow(exponent - scale).ok_or_else(range)?;
+            mantissa.checked_mul(factor).ok_or_else(range)?
+        } else {
+            let factor = 10_i128.checked_pow(scale - exponent).ok_or_else(range)?;
+            if mantissa % factor != 0 {
+                return Err(ContractError::new(
+                    "CONTRACT_MONEY_PRECISION",
+                    "amount has fractional minor units",
+                ));
+            }
+            mantissa / factor
+        };
+        Ok(Self::new(minor_units, currency))
+    }
+
+    /// The original commercial owner chooses the rounding policy explicitly.
+    pub fn from_decimal_rounded(
+        value: Decimal,
+        currency: CurrencyCode,
+        strategy: RoundingStrategy,
+    ) -> Result<Self, ContractError> {
+        let rounded = value.round_dp_with_strategy(u32::from(currency.exponent()), strategy);
+        Self::from_decimal_exact(rounded, currency)
+    }
+
     pub fn non_negative(self) -> Result<Self, ContractError> {
         if self.minor_units < 0 {
             return Err(ContractError::new(
@@ -116,25 +186,21 @@ impl BasisPoints {
     }
 }
 
-/// Time-zone-independent Gregorian calendar date.
+/// A Gregorian date in CRM's 1..=9999 civil calendar, without a time zone.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct CalendarDate {
-    year: i32,
-    month: u8,
-    day: u8,
-}
+pub struct CalendarDate(jiff::civil::Date);
 
 impl CalendarDate {
-    pub const fn year(self) -> i32 {
-        self.year
+    pub fn year(self) -> i32 {
+        i32::from(self.0.year())
     }
 
-    pub const fn month(self) -> u8 {
-        self.month
+    pub fn month(self) -> u8 {
+        self.0.month() as u8
     }
 
-    pub const fn day(self) -> u8 {
-        self.day
+    pub fn day(self) -> u8 {
+        self.0.day() as u8
     }
 
     pub fn try_new(year: i32, month: u8, day: u8) -> Result<Self, ContractError> {
@@ -150,28 +216,161 @@ impl CalendarDate {
                 "month must be between 1 and 12",
             ));
         }
-        let maximum_day = days_in_month(year, month);
+        let invalid = || ContractError::new("CONTRACT_DATE_DAY_INVALID", "invalid calendar day");
+        let first = jiff::civil::Date::new(year as i16, month as i8, 1).map_err(|_| invalid())?;
+        let maximum_day = first.days_in_month() as u8;
         if day == 0 || day > maximum_day {
             return Err(ContractError::new(
                 "CONTRACT_DATE_DAY_INVALID",
                 format!("day must be between 1 and {maximum_day}"),
             ));
         }
-        Ok(Self { year, month, day })
+        jiff::civil::Date::new(year as i16, month as i8, day as i8)
+            .map(Self)
+            .map_err(|_| invalid())
+    }
+
+    pub fn days_until(self, other: Self) -> i64 {
+        self.0.duration_until(other.0).as_secs() / 86_400
+    }
+
+    pub fn from_utc_unix_nanos(nanos: i64) -> Result<Self, ContractError> {
+        Ok(UtcInstant::from_unix_nanos(nanos).utc_date())
+    }
+
+    pub fn last_of_month(self) -> Self {
+        Self(self.0.last_of_month())
+    }
+
+    pub fn weekday(self) -> jiff::civil::Weekday {
+        self.0.weekday()
+    }
+
+    /// Apply an exact civil day offset through the canonical Jiff calendar.
+    /// This is date-only arithmetic: no time zone or UTC duration is implied.
+    pub fn checked_add_days(self, days: i32) -> Result<Self, ContractError> {
+        let invalid = || ContractError::new("CONTRACT_DATE_RANGE", "date arithmetic exceeds range");
+        let span = jiff::Span::new().try_days(days).map_err(|_| invalid())?;
+        let date = self.0.checked_add(span).map_err(|_| invalid())?;
+        if !(1..=9999).contains(&i32::from(date.year())) {
+            return Err(invalid());
+        }
+        Ok(Self(date))
+    }
+
+    pub fn checked_add_months_clamped(self, months: i16) -> Result<Self, ContractError> {
+        let invalid = || ContractError::new("CONTRACT_DATE_RANGE", "date arithmetic exceeds range");
+        let date = self
+            .0
+            .checked_add(jiff::Span::new().months(months))
+            .map_err(|_| invalid())?;
+        if date.year() < 1 {
+            return Err(invalid());
+        }
+        Ok(Self(date))
     }
 }
 
-const fn is_leap_year(year: i32) -> bool {
-    year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
+/// Explicit choice for a skipped or repeated civil time.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LocalTimeResolution {
+    Reject,
+    Earlier,
+    Later,
 }
 
-const fn days_in_month(year: i32, month: u8) -> u8 {
-    match month {
-        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
-        4 | 6 | 9 | 11 => 30,
-        2 if is_leap_year(year) => 29,
-        2 => 28,
-        _ => 0,
+/// Exact UTC instant constrained to the existing signed Unix-nanosecond boundary.
+/// Every i64 nanosecond value fits Jiff's much wider supported instant range.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct UtcInstant(i64);
+
+impl UtcInstant {
+    pub const fn from_unix_nanos(nanos: i64) -> Self {
+        Self(nanos)
+    }
+
+    pub const fn unix_nanos(self) -> i64 {
+        self.0
+    }
+
+    pub fn from_proto_parts(seconds: i64, nanos: i32) -> Result<Self, ContractError> {
+        if !(0..1_000_000_000).contains(&nanos) {
+            return Err(ContractError::new(
+                "CONTRACT_INSTANT_NANOS_INVALID",
+                "invalid timestamp nanos",
+            ));
+        }
+        // Widen first: i64::MIN is a valid result even though its whole
+        // seconds component multiplied by 1e9 does not fit an i64.
+        let total = i128::from(seconds) * 1_000_000_000 + i128::from(nanos);
+        i64::try_from(total)
+            .map(Self)
+            .map_err(|_| Self::range_error())
+    }
+
+    pub fn proto_parts(self) -> (i64, i32) {
+        (
+            self.0.div_euclid(1_000_000_000),
+            self.0.rem_euclid(1_000_000_000) as i32,
+        )
+    }
+
+    fn range_error() -> ContractError {
+        ContractError::new("CONTRACT_INSTANT_RANGE", "timestamp outside domain range")
+    }
+
+    fn timestamp(self) -> jiff::Timestamp {
+        jiff::Timestamp::from_nanosecond(i128::from(self.0))
+            .expect("all signed i64 Unix nanoseconds fit Jiff")
+    }
+
+    fn from_timestamp(timestamp: jiff::Timestamp) -> Result<Self, ContractError> {
+        i64::try_from(timestamp.as_nanosecond())
+            .map(Self)
+            .map_err(|_| Self::range_error())
+    }
+
+    pub fn utc_date(self) -> CalendarDate {
+        CalendarDate(self.timestamp().to_zoned(jiff::tz::TimeZone::UTC).date())
+    }
+
+    pub fn duration_until(self, other: Self) -> jiff::SignedDuration {
+        self.timestamp().duration_until(other.timestamp())
+    }
+
+    pub fn checked_add_elapsed(
+        self,
+        duration: jiff::SignedDuration,
+    ) -> Result<Self, ContractError> {
+        let timestamp = self
+            .timestamp()
+            .checked_add(duration)
+            .map_err(|_| Self::range_error())?;
+        Self::from_timestamp(timestamp)
+    }
+
+    /// Use only the lockfile-pinned bundled IANA database, never host settings.
+    pub fn resolve_local(
+        local: jiff::civil::DateTime,
+        zone_name: &str,
+        resolution: LocalTimeResolution,
+    ) -> Result<Self, ContractError> {
+        let zone = jiff::tz::TimeZoneDatabase::bundled()
+            .get(zone_name)
+            .map_err(|_| ContractError::new("CONTRACT_TIME_ZONE_INVALID", "unknown time zone"))?;
+        let ambiguous = zone.to_ambiguous_timestamp(local);
+        let timestamp = match resolution {
+            LocalTimeResolution::Reject => ambiguous.unambiguous(),
+            LocalTimeResolution::Earlier => ambiguous.earlier(),
+            LocalTimeResolution::Later => ambiguous.later(),
+        }
+        .map_err(|_| {
+            ContractError::new(
+                "CONTRACT_LOCAL_TIME_AMBIGUOUS",
+                "local time requires explicit resolution",
+            )
+        })?;
+        Self::from_timestamp(timestamp)
     }
 }
 
@@ -258,6 +457,75 @@ pub struct Page<T> {
 mod tests {
     use super::*;
 
+    use proptest::prelude::*;
+
+    proptest! {
+        #![proptest_config(proptest::test_runner::Config {
+            cases: 256,
+            rng_seed: proptest::test_runner::RngSeed::Fixed(471_2026),
+            ..proptest::test_runner::Config::default()
+        })]
+
+        #[test]
+        fn property_money_round_trip_and_explicit_fraction_rejection(
+            units in any::<i64>(), index in 0usize..5, fraction in 1i64..10,
+        ) {
+            let code = ["JPY", "USD", "KWD", "CLF", "PLN"][index];
+            let currency = CurrencyCode::try_new(code).unwrap();
+            let original = Money::new(i128::from(units), currency.clone());
+            let restored = Money::from_decimal_exact(original.try_decimal().unwrap(), currency.clone()).unwrap();
+            prop_assert_eq!(restored, original);
+            let fractional = Decimal::from_i128_with_scale(i128::from(units) * 10 + i128::from(fraction),
+                u32::from(currency.exponent()) + 1);
+            prop_assert!(Money::from_decimal_exact(fractional, currency.clone()).is_err());
+            prop_assert!(Money::from_decimal_rounded(fractional, currency, RoundingStrategy::MidpointNearestEven).is_ok());
+        }
+
+        #[test]
+        fn property_utc_proto_roundtrip_and_elapsed_overflow(a in any::<i64>(), b in any::<i64>()) {
+            let instant = UtcInstant::from_unix_nanos(a);
+            let (s, ns) = instant.proto_parts();
+            prop_assert!((0..1_000_000_000).contains(&ns));
+            prop_assert_eq!(UtcInstant::from_proto_parts(s, ns).unwrap(), instant);
+            let target = UtcInstant::from_unix_nanos(b);
+            prop_assert_eq!(instant.checked_add_elapsed(instant.duration_until(target)).unwrap(), target);
+            let delta = jiff::SignedDuration::from_nanos(b);
+            prop_assert_eq!(instant.checked_add_elapsed(delta).ok().map(UtcInstant::unix_nanos), a.checked_add(b));
+        }
+
+        #[test]
+        fn property_calendar_distance_and_month_clamp(
+            y in 2i32..9998, m in 1u8..=12, d in 1u8..=31,
+            other_y in 1i32..=9999, other_m in 1u8..=12, offset in -12i16..=12,
+        ) {
+            let start = CalendarDate::try_new(y, m, 1).unwrap();
+            let date = CalendarDate::try_new(y, m, d.min(start.last_of_month().day())).unwrap();
+            let other = CalendarDate::try_new(other_y, other_m, 1).unwrap();
+            prop_assert_eq!(date.days_until(other), -other.days_until(date));
+            prop_assert_eq!(date.days_until(other), date.days_until(start) + start.days_until(other));
+            let shifted = date.checked_add_months_clamped(offset).unwrap();
+            let shifted_first = start.checked_add_months_clamped(offset).unwrap();
+            prop_assert_eq!(shifted.year(), shifted_first.year());
+            prop_assert_eq!(shifted.month(), shifted_first.month());
+            prop_assert_eq!(shifted.day(), date.day().min(shifted_first.last_of_month().day()));
+        }
+
+        #[test]
+        fn property_nfc_is_idempotent(text in proptest::collection::vec(any::<char>(), 0..128)) {
+            let raw: String = text.into_iter().collect();
+            let key = nfc_text_key(&raw);
+            prop_assert_eq!(nfc_text_key(&key), key);
+        }
+    }
+
+    #[test]
+    fn contract_error_preserves_code_message_and_standard_error() {
+        let error = ContractError::new("CONTRACT_TEST", "safe detail");
+        assert_eq!(error.code, "CONTRACT_TEST");
+        assert_eq!(error.to_string(), "CONTRACT_TEST: safe detail");
+        assert!(std::error::Error::source(&error).is_none());
+    }
+
     #[test]
     fn money_is_exact_and_currency_is_strict() {
         let money = Money::new(12_345, CurrencyCode::try_new("USD").unwrap())
@@ -274,10 +542,219 @@ mod tests {
     }
 
     #[test]
+    fn currency_data_rejects_non_current_and_non_monetary_codes() {
+        for (code, exponent) in [
+            ("JPY", 0),
+            ("EUR", 2),
+            ("PLN", 2),
+            ("KWD", 3),
+            ("CLF", 4),
+            ("XCG", 2),
+        ] {
+            assert_eq!(CurrencyCode::try_new(code).unwrap().exponent(), exponent);
+        }
+        for code in [
+            "ZZZ", "XXX", "XAU", "BGN", "HRK", "CUC", "SLL", "ZWL", "usd",
+        ] {
+            assert!(CurrencyCode::try_new(code).is_err(), "{code}");
+        }
+    }
+
+    #[test]
+    fn catalog_contains_exactly_the_pinned_six_monetary_codes() {
+        let catalog = CurrencyCode::catalog();
+        // SIX List One 2026-09-17: 178 codes, 165 assigned minor units.
+        assert_eq!(catalog.len(), 165);
+        assert!(catalog.windows(2).all(|pair| pair[0] < pair[1]));
+        for entry in &catalog {
+            assert_eq!(CurrencyCode::try_new(entry.as_str()).unwrap(), *entry);
+        }
+        for code in ["USD", "EUR", "PLN", "JPY", "KWD", "CLF", "XCG"] {
+            assert!(catalog.contains(&CurrencyCode::try_new(code).unwrap()));
+        }
+    }
+
+    #[test]
+    fn exact_decimal_pricing_never_narrows_canonical_money() {
+        let eur = CurrencyCode::try_new("EUR").unwrap();
+        let quantity = Decimal::from_str_exact("2.5").unwrap();
+        let price = Decimal::from_str_exact("19.99").unwrap();
+        let subtotal = quantity.checked_mul(price).unwrap();
+        assert_eq!(subtotal, Decimal::from_str_exact("49.975").unwrap());
+        assert!(Money::from_decimal_exact(subtotal, eur.clone()).is_err());
+        let rounded = Money::from_decimal_rounded(
+            subtotal,
+            eur.clone(),
+            RoundingStrategy::MidpointNearestEven,
+        )
+        .unwrap();
+        assert_eq!(rounded.minor_units(), 4_998);
+        assert_eq!(
+            rounded.try_decimal().unwrap(),
+            Decimal::from_str_exact("49.98").unwrap()
+        );
+        let tax = rounded
+            .try_decimal()
+            .unwrap()
+            .checked_mul(Decimal::from_str_exact("0.23").unwrap())
+            .unwrap();
+        let tax_money =
+            Money::from_decimal_rounded(tax, eur.clone(), RoundingStrategy::MidpointAwayFromZero)
+                .unwrap();
+        assert_eq!(tax_money.minor_units(), 1_150);
+        let half_cent = Decimal::from_str_exact("0.005").unwrap();
+        assert_eq!(
+            Money::from_decimal_rounded(
+                half_cent,
+                eur.clone(),
+                RoundingStrategy::MidpointNearestEven
+            )
+            .unwrap()
+            .minor_units(),
+            0
+        );
+        assert_eq!(
+            Money::from_decimal_rounded(
+                half_cent,
+                eur.clone(),
+                RoundingStrategy::MidpointAwayFromZero
+            )
+            .unwrap()
+            .minor_units(),
+            1
+        );
+        assert_eq!(
+            Money::from_decimal_exact(Decimal::from_str_exact("-1.2500").unwrap(), eur.clone())
+                .unwrap()
+                .minor_units(),
+            -125
+        );
+        assert!(Decimal::MAX.checked_mul(Decimal::from(2)).is_none());
+        let huge = Money::new(i128::MAX, eur);
+        assert_eq!(huge.minor_units(), i128::MAX);
+        assert!(huge.try_decimal().is_err());
+    }
+
+    #[test]
     fn calendar_date_uses_gregorian_leap_year_rules() {
         assert!(CalendarDate::try_new(2024, 2, 29).is_ok());
         assert!(CalendarDate::try_new(2100, 2, 29).is_err());
         assert!(CalendarDate::try_new(2000, 2, 29).is_ok());
+    }
+
+    #[test]
+    fn checked_civil_day_arithmetic_handles_bounds_without_panics() {
+        let feb = CalendarDate::try_new(2024, 2, 28).unwrap();
+        assert_eq!(
+            feb.checked_add_days(1).unwrap(),
+            CalendarDate::try_new(2024, 2, 29).unwrap()
+        );
+        assert_eq!(
+            feb.checked_add_days(2).unwrap(),
+            CalendarDate::try_new(2024, 3, 1).unwrap()
+        );
+        assert_eq!(feb.checked_add_days(0).unwrap(), feb);
+        assert_eq!(
+            feb.checked_add_days(-1).unwrap(),
+            CalendarDate::try_new(2024, 2, 27).unwrap()
+        );
+        // The public method accepts all i32 values; extreme offsets must
+        // return an error, never panic inside Jiff's infallible Span setters.
+        assert!(feb.checked_add_days(i32::MIN).is_err());
+        assert!(feb.checked_add_days(i32::MAX).is_err());
+        assert!(
+            CalendarDate::try_new(1, 1, 1)
+                .unwrap()
+                .checked_add_days(-1)
+                .is_err()
+        );
+        assert!(
+            CalendarDate::try_new(9999, 12, 31)
+                .unwrap()
+                .checked_add_days(1)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn civil_calendar_month_end_and_utc_date_use_jiff() {
+        let jan = CalendarDate::try_new(2024, 1, 31).unwrap();
+        let feb = CalendarDate::try_new(2024, 2, 29).unwrap();
+        assert_eq!(jan.checked_add_months_clamped(1).unwrap(), feb);
+        assert_eq!(feb.last_of_month(), feb);
+        assert_eq!(jan.days_until(feb), 29);
+        assert_eq!(feb.days_until(jan), -29);
+        assert_eq!(
+            CalendarDate::from_utc_unix_nanos(-1).unwrap(),
+            CalendarDate::try_new(1969, 12, 31).unwrap()
+        );
+        assert_eq!(
+            CalendarDate::from_utc_unix_nanos(0).unwrap(),
+            CalendarDate::try_new(1970, 1, 1).unwrap()
+        );
+        assert!(
+            CalendarDate::try_new(1, 1, 1)
+                .unwrap()
+                .checked_add_months_clamped(-1)
+                .is_err()
+        );
+        assert!(
+            CalendarDate::try_new(9999, 12, 31)
+                .unwrap()
+                .checked_add_months_clamped(1)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn utc_round_trip_is_lossless_at_storage_and_wire_boundaries() {
+        for nanos in [i64::MIN, -1, 0, 1, i64::MAX] {
+            let instant = UtcInstant::from_unix_nanos(nanos);
+            let (seconds, part) = instant.proto_parts();
+            assert_eq!(
+                UtcInstant::from_proto_parts(seconds, part).unwrap(),
+                instant
+            );
+        }
+        assert_eq!(
+            UtcInstant::from_unix_nanos(-1).proto_parts(),
+            (-1, 999_999_999)
+        );
+        assert!(UtcInstant::from_proto_parts(0, -1).is_err());
+        assert!(UtcInstant::from_proto_parts(0, 1_000_000_000).is_err());
+        assert!(UtcInstant::from_proto_parts(i64::MAX, 0).is_err());
+        assert!(
+            UtcInstant::from_unix_nanos(i64::MAX)
+                .checked_add_elapsed(jiff::SignedDuration::from_nanos(1))
+                .is_err()
+        );
+        assert_eq!(
+            UtcInstant::from_unix_nanos(0)
+                .checked_add_elapsed(jiff::SignedDuration::from_secs(1))
+                .unwrap()
+                .unix_nanos(),
+            1_000_000_000
+        );
+    }
+
+    #[test]
+    fn bundled_zone_requires_explicit_dst_resolution() {
+        for value in ["2024-03-10T02:30:00", "2024-11-03T01:30:00"] {
+            let local: jiff::civil::DateTime = value.parse().unwrap();
+            let zone = "America/New_York";
+            assert!(UtcInstant::resolve_local(local, zone, LocalTimeResolution::Reject).is_err());
+            let earlier =
+                UtcInstant::resolve_local(local, zone, LocalTimeResolution::Earlier).unwrap();
+            let later = UtcInstant::resolve_local(local, zone, LocalTimeResolution::Later).unwrap();
+            assert_eq!(earlier.duration_until(later).as_secs(), 3600);
+        }
+        let local: jiff::civil::DateTime = "2024-01-01T12:00:00".parse().unwrap();
+        let warsaw =
+            UtcInstant::resolve_local(local, "Europe/Warsaw", LocalTimeResolution::Reject).unwrap();
+        assert_eq!(warsaw.proto_parts(), (1_704_106_800, 0));
+        assert!(
+            UtcInstant::resolve_local(local, "Invalid/Zone", LocalTimeResolution::Reject).is_err()
+        );
     }
 
     #[test]

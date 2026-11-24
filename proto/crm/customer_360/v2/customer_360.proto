@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package crm.customer_360.v2;
+
+import "crm/accounts/v2/account.proto";
+import "crm/activities/v2/task.proto";
+import "crm/contact_points/v2/contact_point.proto";
+import "crm/parties/v3/party.proto";
+import "crm/party_relationships/v2/relationship.proto";
+import "crm/sales/v2/deal.proto";
+
+// Read-only composition. Every aggregate and D1 row remains owned by its
+// original module; tenant-scoped card NEVER grants consent or writes copies.
+message CollectionTruncation {
+  bool contact_points = 1;
+  bool relationships = 2;
+  bool deals = 3;
+  bool tasks = 4;
+}
+
+message AccountOverview {
+  crm.accounts.v2.Account account = 1;
+  crm.parties.v3.Party primary_party = 2;
+  repeated crm.contact_points.v2.ContactPoint contact_points = 3;
+  repeated crm.party_relationships.v2.PartyRelationship relationships = 4;
+  repeated crm.sales.v2.Deal deals = 5;
+  repeated crm.activities.v2.Task tasks = 6;
+  CollectionTruncation truncated = 7;
+  uint32 per_collection_limit = 8;
+}
+
+message GetAccountOverviewRequest {
+  string account_id = 1;
+}
+
+message GetAccountOverviewResponse {
+  AccountOverview overview = 1;
+}
+
+service Customer360Service {
+  rpc GetAccountOverview(GetAccountOverviewRequest) returns (GetAccountOverviewResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}

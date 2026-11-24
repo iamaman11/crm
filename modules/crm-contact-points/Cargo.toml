@@ -2,6 +2,7 @@
 name = "crm-contact-points"
 version = "0.1.0"
 edition = "2024"
+rust-version.workspace = true
 publish = false
 
 [dependencies]
@@ -11,4 +12,12 @@ idna = "1"
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
-url = "2"
+url = "=2.5.9" # Patched RUSTSEC-2026-0592; same original ContactPoint owner.
+email_address = { workspace = true }
+phonenumber = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+
+[lints]
+workspace = true

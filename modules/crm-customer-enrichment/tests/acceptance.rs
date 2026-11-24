@@ -122,9 +122,18 @@ fn production_acceptance_is_bound_to_exact_inventory_and_real_process_evidence()
     assert_eq!(enrichment_scope["version"], "1.0.0");
     assert_eq!(owner_scope["state"], "contract_only_non_runtime");
 
-    let workflow = read_text(&root.join(".github/workflows/application-runtime.yml"));
-    assert!(workflow.contains("customer_enrichment_process_e2e"));
-    assert!(workflow.contains("prepare_customer_enrichment_consent_policy_database.sh"));
+    // The accepted process evidence below is historical and remains reviewable.
+    // Active CRM acceptance now runs the real Rust Worker against D1 in one CI.
+    assert!(
+        !root
+            .join(".github/workflows/application-runtime.yml")
+            .exists(),
+        "retired PostgreSQL process CI must remain absent"
+    );
+    let workflow = read_text(&root.join(".github/workflows/cloudflare-crm-spike.yml"));
+    assert!(workflow.contains("node rust-party/test/native.mjs"));
+    assert!(workflow.contains("CRM_RPC_RUNTIME_PROOF: /tmp/crm-rpc-runtime.json"));
+    assert!(!workflow.contains("cargo check --locked -p crm-api"));
 
     let process =
         read_text(&root.join("services/crm-api/tests/customer_enrichment_process_e2e.rs"));

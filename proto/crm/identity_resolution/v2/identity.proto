@@ -1,0 +1,125 @@
+syntax = "proto3";
+
+package crm.identity_resolution.v2;
+
+import "crm/core/v2/operation.proto";
+import "crm/parties/v3/party.proto";
+
+// Observations are NOT proof of identity; no Merge, Confirm or mutating
+// candidate-case RPC is connected in the current CRM.
+message SharedEmailCandidate {
+  crm.parties.v3.Party first_party = 1;
+  crm.parties.v3.Party second_party = 2;
+  string first_contact_point_id = 3;
+  string second_contact_point_id = 4;
+  bool both_contacts_verified = 5;
+}
+
+message FindSharedEmailCandidatesRequest {
+  crm.core.v2.PageRequest page = 1;
+}
+
+message FindSharedEmailCandidatesResponse {
+  repeated SharedEmailCandidate candidates = 1;
+  crm.core.v2.PageInfo page_info = 2;
+}
+
+message ComparePartiesRequest {
+  string first_party_id = 1;
+  string second_party_id = 2;
+}
+
+message ComparePartiesResponse {
+  crm.parties.v3.Party first_party = 1;
+  crm.parties.v3.Party second_party = 2;
+  bool same_party_id = 3;
+  bool identity_confirmed = 4;
+}
+
+/** A merge records canonical identity, NEVER deletes/reparents original owners. */
+message MergeOperation {
+  string operation_id = 1;
+  string source_party_id = 2;
+  string survivor_party_id = 3;
+  int64 source_party_version = 4;
+  int64 survivor_party_version = 5;
+  string reason = 6;
+  bool active = 7;
+  int64 version = 8;
+  optional string unmerge_reason = 9;
+  string decided_by = 10;
+}
+
+message MergePartyRequest {
+  string operation_id = 1;
+  string source_party_id = 2;
+  int64 source_party_version = 3;
+  string survivor_party_id = 4;
+  int64 survivor_party_version = 5;
+  string reason = 6;
+  crm.core.v2.MutationPrecondition precondition = 7;
+}
+message MergePartyResponse {
+  MergeOperation operation = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+message UnmergePartyRequest {
+  string operation_id = 1;
+  int64 source_party_version = 2;
+  int64 survivor_party_version = 3;
+  string reason = 4;
+  crm.core.v2.MutationPrecondition precondition = 5;
+}
+message UnmergePartyResponse {
+  MergeOperation operation = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+message GetMergeOperationRequest {
+  string operation_id = 1;
+  optional string receipt_idempotency_key = 2;
+}
+message GetMergeOperationResponse {
+  MergeOperation operation = 1;
+  crm.core.v2.MutationCommitEvidence confirmed_mutation = 2;
+}
+message ListMergeOperationsByPartyRequest {
+  string party_id = 1;
+  crm.core.v2.PageRequest page = 2;
+}
+message ListMergeOperationsByPartyResponse {
+  repeated MergeOperation operations = 1;
+  crm.core.v2.PageInfo page_info = 2;
+}
+message ResolveCanonicalPartyRequest {
+  string party_id = 1;
+}
+message ResolveCanonicalPartyResponse {
+  string requested_party_id = 1;
+  string canonical_party_id = 2;
+  repeated string party_path = 3;
+  repeated string merge_operation_path = 4;
+}
+
+service IdentityResolutionService {
+  rpc MergeParty(MergePartyRequest) returns (MergePartyResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc UnmergeParty(UnmergePartyRequest) returns (UnmergePartyResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc GetMergeOperation(GetMergeOperationRequest) returns (GetMergeOperationResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListMergeOperationsByParty(ListMergeOperationsByPartyRequest) returns (ListMergeOperationsByPartyResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ResolveCanonicalParty(ResolveCanonicalPartyRequest) returns (ResolveCanonicalPartyResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc FindSharedEmailCandidates(FindSharedEmailCandidatesRequest) returns (FindSharedEmailCandidatesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc CompareParties(ComparePartiesRequest) returns (ComparePartiesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}

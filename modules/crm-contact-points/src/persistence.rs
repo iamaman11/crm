@@ -24,11 +24,30 @@ pub fn encode_contact_point_state(contact_point: &ContactPoint) -> Result<Vec<u8
     Ok(bytes)
 }
 
+// Static diagnostic labels only; Serde remains the sole schema validator.
+const CONTACT_DIAGNOSTIC_FIELDS: &[&str] = &[
+    "contact_point_id",
+    "party_id",
+    "kind",
+    "normalized_value",
+    "display_value",
+    "status",
+    "preferred",
+    "valid_from_unix_nanos",
+    "valid_until_unix_nanos",
+    "verification",
+    "state",
+    "evidence_ref",
+    "verified_at_unix_nanos",
+    "created_at_unix_nanos",
+    "updated_at_unix_nanos",
+    "version",
+];
+
 pub fn decode_contact_point_state(bytes: &[u8]) -> Result<ContactPoint, SdkError> {
     validate_size(bytes)?;
-    let state: ContactPointStateV1 = serde_json::from_slice(bytes).map_err(|error| {
-        persisted_error(format!("Contact Point state JSON is invalid: {error}"))
-    })?;
+    let state: ContactPointStateV1 = crm_module_sdk::decode_json(bytes, CONTACT_DIAGNOSTIC_FIELDS)
+        .map_err(|error| persisted_error(error.to_string()))?;
     ContactPoint::rehydrate(state.try_into()?)
         .map_err(|error| persisted_error(format!("{}: {}", error.code, error.safe_message)))
 }
@@ -251,6 +270,31 @@ mod tests {
             r#"{"contact_point_id":"contact-point-persisted-1","party_id":"party-1","kind":"email","normalized_value":"Ada@example.com","display_value":"Ada@EXAMPLE.COM","status":"active","preferred":true,"valid_from_unix_nanos":10,"valid_until_unix_nanos":1000,"verification":{"state":"verified","evidence_ref":"verification-42","verified_at_unix_nanos":42},"created_at_unix_nanos":10,"updated_at_unix_nanos":42,"version":2}"#
         );
         assert_ne!(contact_point_state_descriptor_hash(), [0; 32]);
+    }
+
+    #[test]
+    fn malformed_contact_json_never_echoes_private_values() {
+        let mut json: serde_json::Value =
+            serde_json::from_slice(&encode_contact_point_state(&verified_contact_point()).unwrap())
+                .unwrap();
+        json["preferred"] = serde_json::json!("private-contact-value");
+        let error = decode_contact_point_state(&serde_json::to_vec(&json).unwrap()).unwrap_err();
+        assert_eq!(error.code, "CONTACT_POINTS_PERSISTED_STATE_INVALID");
+        assert_eq!(error.category, ErrorCategory::Internal);
+        assert!(
+            error
+                .internal_reference
+                .as_deref()
+                .unwrap()
+                .contains("$.preferred")
+        );
+        assert!(!format!("{error:?}").contains("private-contact-value"));
+        assert!(!format!("{error:?}").contains("Ada@"));
+        json["preferred"] = serde_json::json!(true);
+        json["private-key"] = serde_json::json!("private-value");
+        let error = decode_contact_point_state(&serde_json::to_vec(&json).unwrap()).unwrap_err();
+        assert!(!format!("{error:?}").contains("private-key"));
+        assert!(!format!("{error:?}").contains("private-value"));
     }
 
     #[test]

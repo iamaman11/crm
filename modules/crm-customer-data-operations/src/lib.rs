@@ -20,6 +20,8 @@
 //! owner-domain query composition with live authorization; the pure domain owns only lifecycle,
 //! checkpoint, artifact-reference and reconciliation invariants.
 
+pub const MODULE_ID: &str = "crm.customer-data-operations";
+
 pub mod domain;
 pub mod execution;
 pub mod export;

@@ -2,6 +2,7 @@ use crm_core_contracts::{BasisPoints, CalendarDate, Money, PageRequest, Patch};
 use crm_module_sdk::{
     ActorId, ErrorCategory, FieldName, FieldViolation, RecordId, ResourceRef, SdkError,
 };
+use serde::{Deserialize, Serialize};
 
 const MAX_NAME_BYTES: usize = 240;
 const MAX_IDENTIFIER_BYTES: usize = 180;
@@ -77,11 +78,61 @@ impl DealStage {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum DealStatus {
     Open,
     Won,
     Lost,
+}
+
+/// An exact probability with explicit provenance, not an inferred value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProbabilityEstimate {
+    Manual(BasisPoints),
+    StageDefault(BasisPoints),
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProbabilitySource {
+    #[default]
+    Manual,
+    StageDefault,
+}
+
+impl ProbabilityEstimate {
+    pub const fn from_parts(source: ProbabilitySource, value: BasisPoints) -> Self {
+        match source {
+            ProbabilitySource::Manual => Self::Manual(value),
+            ProbabilitySource::StageDefault => Self::StageDefault(value),
+        }
+    }
+
+    pub const fn basis_points(self) -> BasisPoints {
+        match self {
+            Self::Manual(value) | Self::StageDefault(value) => value,
+        }
+    }
+
+    pub const fn source(self) -> ProbabilitySource {
+        match self {
+            Self::Manual(_) => ProbabilitySource::Manual,
+            Self::StageDefault(_) => ProbabilitySource::StageDefault,
+        }
+    }
+}
+
+/// Explicit operator assessment; closed Deals retain it for reopening but
+/// do not enter prospective forecast totals.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ForecastCategory {
+    #[default]
+    Pipeline,
+    BestCase,
+    Commit,
+    Omitted,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -110,13 +161,15 @@ pub struct Deal {
     deal_id: RecordId,
     name: String,
     owner: DealOwner,
+    initial_routing: Option<crate::SalesRoutingDecision>,
     account: Option<ResourceRef>,
     primary_contact: Option<ResourceRef>,
     stage: DealStage,
     status: DealStatus,
     amount: Option<Money>,
     expected_close_date: Option<CalendarDate>,
-    probability: BasisPoints,
+    probability: ProbabilityEstimate,
+    forecast_category: ForecastCategory,
     close_outcome: Option<DealCloseOutcome>,
     created_at_unix_nanos: i64,
     updated_at_unix_nanos: i64,
@@ -128,13 +181,15 @@ pub struct DealSnapshot {
     pub deal_id: RecordId,
     pub name: String,
     pub owner: DealOwner,
+    pub initial_routing: Option<crate::SalesRoutingDecision>,
     pub account: Option<ResourceRef>,
     pub primary_contact: Option<ResourceRef>,
     pub stage: DealStage,
     pub status: DealStatus,
     pub amount: Option<Money>,
     pub expected_close_date: Option<CalendarDate>,
-    pub probability: BasisPoints,
+    pub probability: ProbabilityEstimate,
+    pub forecast_category: ForecastCategory,
     pub close_outcome: Option<DealCloseOutcomeSnapshot>,
     pub created_at_unix_nanos: i64,
     pub updated_at_unix_nanos: i64,
@@ -158,7 +213,8 @@ pub struct CreateDeal {
     pub stage: DealStage,
     pub amount: Option<Money>,
     pub expected_close_date: Option<CalendarDate>,
-    pub probability: BasisPoints,
+    pub probability: ProbabilityEstimate,
+    pub forecast_category: ForecastCategory,
     pub occurred_at_unix_nanos: i64,
 }
 
@@ -171,7 +227,8 @@ pub struct UpdateDeal {
     pub primary_contact: Patch<ResourceRef>,
     pub amount: Patch<Money>,
     pub expected_close_date: Patch<CalendarDate>,
-    pub probability: Patch<BasisPoints>,
+    pub probability: Patch<ProbabilityEstimate>,
+    pub forecast_category: Option<ForecastCategory>,
     pub occurred_at_unix_nanos: i64,
 }
 
@@ -194,10 +251,26 @@ impl Default for StageTransitionPolicy {
 pub struct AdvanceDealStage {
     pub expected_version: i64,
     pub target_stage: DealStage,
+    pub target_stage_probability: Option<BasisPoints>,
     pub target_status: DealStatus,
     pub close_reason_code: Option<ReasonCode>,
     pub occurred_at_unix_nanos: i64,
     pub policy: StageTransitionPolicy,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CloseDeal {
+    pub expected_version: i64,
+    pub outcome: DealStatus,
+    pub reason_code: ReasonCode,
+    pub occurred_at_unix_nanos: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReopenDeal {
+    pub expected_version: i64,
+    pub reason_code: ReasonCode,
+    pub occurred_at_unix_nanos: i64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -226,6 +299,9 @@ impl Deal {
     pub fn owner(&self) -> &DealOwner {
         &self.owner
     }
+    pub fn initial_routing(&self) -> Option<&crate::SalesRoutingDecision> {
+        self.initial_routing.as_ref()
+    }
     pub fn account(&self) -> Option<&ResourceRef> {
         self.account.as_ref()
     }
@@ -245,7 +321,13 @@ impl Deal {
         self.expected_close_date
     }
     pub const fn probability(&self) -> BasisPoints {
-        self.probability
+        self.probability.basis_points()
+    }
+    pub const fn probability_source(&self) -> ProbabilitySource {
+        self.probability.source()
+    }
+    pub const fn forecast_category(&self) -> ForecastCategory {
+        self.forecast_category
     }
     pub fn close_outcome(&self) -> Option<&DealCloseOutcome> {
         self.close_outcome.as_ref()
@@ -282,6 +364,16 @@ impl Deal {
             ));
         }
 
+        if let Some(decision) = &snapshot.initial_routing {
+            decision.validate()?;
+            if snapshot.version == 1 && decision.selected_owner.domain_owner()? != snapshot.owner {
+                return Err(invalid(
+                    "SALES_ROUTING_OWNER_MISMATCH",
+                    "deal.owner",
+                    "initial owner must match routing",
+                ));
+            }
+        }
         let close_outcome = match (snapshot.status, snapshot.close_outcome) {
             (DealStatus::Open, None) => None,
             (DealStatus::Open, Some(_)) => {
@@ -331,6 +423,7 @@ impl Deal {
             deal_id: snapshot.deal_id,
             name: snapshot.name,
             owner: snapshot.owner,
+            initial_routing: snapshot.initial_routing,
             account: snapshot.account,
             primary_contact: snapshot.primary_contact,
             stage: snapshot.stage,
@@ -338,6 +431,7 @@ impl Deal {
             amount: snapshot.amount,
             expected_close_date: snapshot.expected_close_date,
             probability: snapshot.probability,
+            forecast_category: snapshot.forecast_category,
             close_outcome,
             created_at_unix_nanos: snapshot.created_at_unix_nanos,
             updated_at_unix_nanos: snapshot.updated_at_unix_nanos,
@@ -350,6 +444,7 @@ impl Deal {
             deal_id: self.deal_id.clone(),
             name: self.name.clone(),
             owner: self.owner.clone(),
+            initial_routing: self.initial_routing.clone(),
             account: self.account.clone(),
             primary_contact: self.primary_contact.clone(),
             stage: self.stage.clone(),
@@ -357,6 +452,7 @@ impl Deal {
             amount: self.amount.clone(),
             expected_close_date: self.expected_close_date,
             probability: self.probability,
+            forecast_category: self.forecast_category,
             close_outcome: self
                 .close_outcome
                 .as_ref()
@@ -385,6 +481,7 @@ impl Deal {
             deal_id: command.deal_id,
             name: command.name,
             owner: command.owner,
+            initial_routing: None,
             account: command.account,
             primary_contact: command.primary_contact,
             stage: command.stage,
@@ -392,6 +489,7 @@ impl Deal {
             amount: command.amount,
             expected_close_date: command.expected_close_date,
             probability: command.probability,
+            forecast_category: command.forecast_category,
             close_outcome: None,
             created_at_unix_nanos: command.occurred_at_unix_nanos,
             updated_at_unix_nanos: command.occurred_at_unix_nanos,
@@ -399,7 +497,40 @@ impl Deal {
         })
     }
 
+    pub fn create_with_routing(
+        command: CreateDeal,
+        decision: crate::SalesRoutingDecision,
+    ) -> Result<Self, SdkError> {
+        decision.validate()?;
+        if command.owner != decision.selected_owner.domain_owner()? {
+            return Err(invalid(
+                "SALES_ROUTING_OWNER_MISMATCH",
+                "deal.owner",
+                "initial owner must match routing",
+            ));
+        }
+        let mut deal = Self::create(command)?;
+        deal.initial_routing = Some(decision);
+        Ok(deal)
+    }
+
     pub fn apply_update(&mut self, command: UpdateDeal) -> Result<(), SdkError> {
+        self.require_version(command.expected_version)?;
+        if self.status != DealStatus::Open {
+            return Err(conflict(
+                "SALES_DEAL_ALREADY_CLOSED",
+                "a closed deal cannot be edited before explicit reopening",
+            ));
+        }
+        // Validate every patch against a candidate before changing authoritative
+        // aggregate state. A later invalid patch must not leave an earlier edit.
+        let mut candidate = self.clone();
+        candidate.apply_update_checked(command)?;
+        *self = candidate;
+        Ok(())
+    }
+
+    fn apply_update_checked(&mut self, command: UpdateDeal) -> Result<(), SdkError> {
         self.require_version(command.expected_version)?;
         self.require_monotonic_time(command.occurred_at_unix_nanos)?;
 
@@ -464,6 +595,9 @@ impl Deal {
             }
         }
 
+        if let Some(category) = command.forecast_category {
+            self.forecast_category = category;
+        }
         self.updated_at_unix_nanos = command.occurred_at_unix_nanos;
         self.version += 1;
         Ok(())
@@ -486,27 +620,50 @@ impl Deal {
                 "stage advancement cannot change the deal pipeline",
             ));
         }
-        if self.stage.stage_id == command.target_stage.stage_id
-            || self.stage.ordinal == command.target_stage.ordinal
+        // Domain operations are distinct. The stage transition cannot imply
+        // a terminal outcome; callers must use CloseDeal.
+        if command.target_status != DealStatus::Open {
+            return Err(invalid(
+                "SALES_CLOSE_SEPARATE_ACTION_REQUIRED",
+                "deal.target_status",
+                "use CloseDeal to finish the current stage",
+            ));
+        }
+        // A terminal outcome is independent of pipeline progression: closing
+        // must preserve the actual current stage, not invent a synthetic one.
+        // Open-stage transitions still require a distinct stage and obey policy.
+        if command.target_status == DealStatus::Open {
+            if self.stage.stage_id == command.target_stage.stage_id
+                || self.stage.ordinal == command.target_stage.ordinal
+            {
+                return Err(invalid(
+                    "SALES_STAGE_UNCHANGED",
+                    "deal.target_stage",
+                    "target stage must differ from the current stage",
+                ));
+            }
+            if command.target_stage.ordinal < self.stage.ordinal && !command.policy.allow_regression
+            {
+                return Err(conflict(
+                    "SALES_STAGE_REGRESSION_FORBIDDEN",
+                    "stage regression requires an explicit transition policy",
+                ));
+            }
+            if command.target_stage.ordinal > self.stage.ordinal.saturating_add(1)
+                && !command.policy.allow_skip
+            {
+                return Err(conflict(
+                    "SALES_STAGE_SKIP_FORBIDDEN",
+                    "skipping intermediate stages is not permitted by the transition policy",
+                ));
+            }
+        } else if self.stage.stage_id != command.target_stage.stage_id
+            || self.stage.ordinal != command.target_stage.ordinal
         {
             return Err(invalid(
-                "SALES_STAGE_UNCHANGED",
+                "SALES_CLOSE_STAGE_MISMATCH",
                 "deal.target_stage",
-                "target stage must differ from the current stage",
-            ));
-        }
-        if command.target_stage.ordinal < self.stage.ordinal && !command.policy.allow_regression {
-            return Err(conflict(
-                "SALES_STAGE_REGRESSION_FORBIDDEN",
-                "stage regression requires an explicit transition policy",
-            ));
-        }
-        if command.target_stage.ordinal > self.stage.ordinal.saturating_add(1)
-            && !command.policy.allow_skip
-        {
-            return Err(conflict(
-                "SALES_STAGE_SKIP_FORBIDDEN",
-                "skipping intermediate stages is not permitted by the transition policy",
+                "closing a deal must preserve the current stage",
             ));
         }
 
@@ -537,9 +694,82 @@ impl Deal {
             }
         };
 
+        let probability = match self.probability {
+            ProbabilityEstimate::Manual(_) => self.probability,
+            ProbabilityEstimate::StageDefault(_) => {
+                let value = command.target_stage_probability.ok_or_else(|| {
+                    invalid(
+                        "SALES_STAGE_PROBABILITY_REQUIRED",
+                        "deal.target_stage",
+                        "stage-derived probability requires the authoritative target default",
+                    )
+                })?;
+                ProbabilityEstimate::StageDefault(value)
+            }
+        };
         self.stage = command.target_stage;
+        self.probability = probability;
         self.status = command.target_status;
         self.close_outcome = close_outcome;
+        self.updated_at_unix_nanos = command.occurred_at_unix_nanos;
+        self.version += 1;
+        Ok(())
+    }
+
+    pub fn close(&mut self, command: CloseDeal) -> Result<(), SdkError> {
+        self.require_version(command.expected_version)?;
+        self.require_monotonic_time(command.occurred_at_unix_nanos)?;
+        if self.status != DealStatus::Open {
+            return Err(conflict(
+                "SALES_DEAL_ALREADY_CLOSED",
+                "a closed deal requires explicit reopening",
+            ));
+        }
+        if !matches!(command.outcome, DealStatus::Won | DealStatus::Lost) {
+            return Err(invalid(
+                "SALES_CLOSE_OUTCOME_REQUIRED",
+                "deal.outcome",
+                "close outcome must be Won or Lost",
+            ));
+        }
+        self.status = command.outcome;
+        self.close_outcome = Some(DealCloseOutcome {
+            status: command.outcome,
+            reason_code: command.reason_code,
+            closed_at_unix_nanos: command.occurred_at_unix_nanos,
+        });
+        self.updated_at_unix_nanos = command.occurred_at_unix_nanos;
+        self.version += 1;
+        Ok(())
+    }
+
+    pub fn reopen(&mut self, command: ReopenDeal) -> Result<(), SdkError> {
+        self.reopen_with_owner(command, None)
+    }
+
+    /// Reopen and optionally reassign in one domain version, not a second
+    /// UpdateDeal mutation. The application owner validates live eligibility.
+    pub fn reopen_with_owner(
+        &mut self,
+        command: ReopenDeal,
+        owner: Option<DealOwner>,
+    ) -> Result<(), SdkError> {
+        self.require_version(command.expected_version)?;
+        self.require_monotonic_time(command.occurred_at_unix_nanos)?;
+        if self.status == DealStatus::Open {
+            return Err(conflict(
+                "SALES_DEAL_ALREADY_OPEN",
+                "only closed deals can reopen",
+            ));
+        }
+        // ReasonCode is a validated, bounded domain identifier; the D1 event
+        // persists it with the same CAS/audit/receipt mutation.
+        let _reason = command.reason_code;
+        if let Some(owner) = owner {
+            self.owner = owner;
+        }
+        self.status = DealStatus::Open;
+        self.close_outcome = None;
         self.updated_at_unix_nanos = command.occurred_at_unix_nanos;
         self.version += 1;
         Ok(())
@@ -553,6 +783,12 @@ impl Deal {
                     "expected deal version {expected_version}, found {}",
                     self.version
                 ),
+            ));
+        }
+        if self.version == i64::MAX {
+            return Err(conflict(
+                "SALES_DEAL_VERSION_EXHAUSTED",
+                "deal version cannot be incremented",
             ));
         }
         Ok(())
@@ -722,10 +958,68 @@ mod tests {
             stage: stage("qualification", 1),
             amount: Some(Money::new(1_250_000, CurrencyCode::try_new("USD").unwrap())),
             expected_close_date: Some(CalendarDate::try_new(2026, 12, 31).unwrap()),
-            probability: BasisPoints::try_new(2_500).unwrap(),
+            probability: ProbabilityEstimate::Manual(BasisPoints::try_new(2_500).unwrap()),
+            forecast_category: ForecastCategory::Pipeline,
             occurred_at_unix_nanos: 10,
         })
         .unwrap()
+    }
+
+    use proptest::prelude::*;
+
+    proptest! {
+        #![proptest_config(proptest::test_runner::Config {
+            cases: 256,
+            rng_seed: proptest::test_runner::RngSeed::Fixed(471_2026),
+            ..proptest::test_runner::Config::default()
+        })]
+
+        #[test]
+        fn property_failed_later_patch_and_stale_replay_are_atomic(
+            label in "[A-Za-z0-9]{1,32}", units in 1i64..=i64::MAX,
+            stale in 2i64..=i64::MAX, moment in 10i64..=i64::MAX,
+        ) {
+            let mut deal = open_deal();
+            let before = deal.clone();
+            let command = UpdateDeal {
+                expected_version: 1,
+                name: Patch::Set(label),
+                owner: Patch::Keep,
+                account: Patch::Clear,
+                primary_contact: Patch::Keep,
+                amount: Patch::Set(Money::new(-i128::from(units), CurrencyCode::try_new("USD").unwrap())),
+                expected_close_date: Patch::Keep,
+                probability: Patch::Keep,
+                forecast_category: None,
+                occurred_at_unix_nanos: moment,
+            };
+            prop_assert!(deal.apply_update(command.clone()).is_err());
+            prop_assert_eq!(&deal, &before);
+            let valid = UpdateDeal {
+                amount: Patch::Set(Money::new(i128::from(units), CurrencyCode::try_new("USD").unwrap())),
+                ..command
+            };
+            let stale_result = deal.apply_update(UpdateDeal { expected_version: stale, ..valid.clone() });
+            prop_assert!(stale_result.is_err());
+            prop_assert_eq!(&deal, &before);
+            let mut exhausted_snapshot = before.snapshot();
+            exhausted_snapshot.version = i64::MAX;
+            let mut exhausted = Deal::rehydrate(exhausted_snapshot).unwrap();
+            let exhausted_before = exhausted.clone();
+            let error = exhausted.apply_update(UpdateDeal {
+                expected_version: i64::MAX,
+                ..valid.clone()
+            }).unwrap_err();
+            prop_assert_eq!(error.code, "SALES_DEAL_VERSION_EXHAUSTED");
+            prop_assert_eq!(exhausted, exhausted_before);
+            deal.apply_update(valid.clone()).unwrap();
+            prop_assert_eq!(deal.version(), 2);
+            let committed = deal.clone();
+            prop_assert!(deal.apply_update(valid).is_err());
+            prop_assert_eq!(&deal, &committed);
+            let bytes = crate::encode_deal_state(&deal).unwrap();
+            prop_assert_eq!(crate::decode_deal_state(&bytes).unwrap(), committed);
+        }
     }
 
     #[test]
@@ -734,6 +1028,49 @@ mod tests {
         assert_eq!(deal.version, 1);
         assert_eq!(deal.status, DealStatus::Open);
         assert_eq!(deal.amount().unwrap().minor_units(), 1_250_000);
+    }
+
+    #[test]
+    fn forecast_source_and_stage_change_are_atomic() {
+        let mut deal = open_deal();
+        deal.apply_update(UpdateDeal {
+            expected_version: 1,
+            name: Patch::Keep,
+            owner: Patch::Keep,
+            account: Patch::Keep,
+            primary_contact: Patch::Keep,
+            amount: Patch::Keep,
+            expected_close_date: Patch::Keep,
+            probability: Patch::Set(ProbabilityEstimate::StageDefault(
+                BasisPoints::try_new(1_000).unwrap(),
+            )),
+            forecast_category: Some(ForecastCategory::Commit),
+            occurred_at_unix_nanos: 20,
+        })
+        .unwrap();
+        let command = AdvanceDealStage {
+            expected_version: 2,
+            target_stage: stage("proposal", 2),
+            target_stage_probability: None,
+            target_status: DealStatus::Open,
+            close_reason_code: None,
+            occurred_at_unix_nanos: 30,
+            policy: StageTransitionPolicy::default(),
+        };
+        let before = deal.clone();
+        assert_eq!(
+            deal.advance_stage(command.clone()).unwrap_err().code,
+            "SALES_STAGE_PROBABILITY_REQUIRED"
+        );
+        assert_eq!(deal, before);
+        deal.advance_stage(AdvanceDealStage {
+            target_stage_probability: Some(BasisPoints::try_new(6_000).unwrap()),
+            ..command
+        })
+        .unwrap();
+        assert_eq!(deal.probability_source(), ProbabilitySource::StageDefault);
+        assert_eq!(deal.probability().get(), 6_000);
+        assert_eq!(deal.forecast_category(), ForecastCategory::Commit);
     }
 
     #[test]
@@ -747,13 +1084,16 @@ mod tests {
             primary_contact: Patch::Keep,
             amount: Patch::Keep,
             expected_close_date: Patch::Clear,
-            probability: Patch::Set(BasisPoints::try_new(5_000).unwrap()),
+            probability: Patch::Set(ProbabilityEstimate::Manual(
+                BasisPoints::try_new(5_000).unwrap(),
+            )),
+            forecast_category: None,
             occurred_at_unix_nanos: 20,
         })
         .unwrap();
         assert!(deal.account.is_none());
         assert!(deal.expected_close_date.is_none());
-        assert_eq!(deal.probability.get(), 5_000);
+        assert_eq!(deal.probability().get(), 5_000);
         assert_eq!(deal.version, 2);
 
         let error = deal
@@ -766,6 +1106,7 @@ mod tests {
                 amount: Patch::Keep,
                 expected_close_date: Patch::Keep,
                 probability: Patch::Keep,
+                forecast_category: None,
                 occurred_at_unix_nanos: 21,
             })
             .unwrap_err();
@@ -773,45 +1114,166 @@ mod tests {
     }
 
     #[test]
-    fn closes_only_with_reason_and_never_advances_after_close() {
+    fn close_and_reopen_have_separate_versioned_commands() {
         let mut deal = open_deal();
-        let missing_reason = deal
-            .advance_stage(AdvanceDealStage {
+        let stage = deal.stage().clone();
+        assert_eq!(
+            deal.advance_stage(AdvanceDealStage {
                 expected_version: 1,
-                target_stage: stage("closed_won", 4),
+                target_stage: stage.clone(),
+                target_stage_probability: None,
                 target_status: DealStatus::Won,
-                close_reason_code: None,
+                close_reason_code: Some(ReasonCode::try_new("won").unwrap()),
                 occurred_at_unix_nanos: 30,
                 policy: StageTransitionPolicy::default(),
             })
-            .unwrap_err();
-        assert_eq!(missing_reason.code, "SALES_CLOSE_REASON_REQUIRED");
+            .unwrap_err()
+            .code,
+            "SALES_CLOSE_SEPARATE_ACTION_REQUIRED"
+        );
 
-        deal.advance_stage(AdvanceDealStage {
+        assert_eq!(
+            deal.close(CloseDeal {
+                expected_version: 1,
+                outcome: DealStatus::Open,
+                reason_code: ReasonCode::try_new("won").unwrap(),
+                occurred_at_unix_nanos: 30,
+            })
+            .unwrap_err()
+            .code,
+            "SALES_CLOSE_OUTCOME_REQUIRED"
+        );
+        assert_eq!(deal.version(), 1);
+        deal.close(CloseDeal {
             expected_version: 1,
-            target_stage: stage("closed_won", 4),
-            target_status: DealStatus::Won,
-            close_reason_code: Some(ReasonCode::try_new("customer_selected_us").unwrap()),
+            outcome: DealStatus::Won,
+            reason_code: ReasonCode::try_new("won").unwrap(),
             occurred_at_unix_nanos: 30,
-            policy: StageTransitionPolicy::default(),
         })
         .unwrap();
-        assert_eq!(deal.status, DealStatus::Won);
+        assert_eq!(deal.status(), DealStatus::Won);
+        assert_eq!(deal.stage(), &stage);
+        assert_eq!(deal.version(), 2);
+        assert_eq!(deal.close_outcome().unwrap().reason_code().as_str(), "won");
+        assert_eq!(
+            deal.close(CloseDeal {
+                expected_version: 2,
+                outcome: DealStatus::Lost,
+                reason_code: ReasonCode::try_new("again").unwrap(),
+                occurred_at_unix_nanos: 40,
+            })
+            .unwrap_err()
+            .code,
+            "SALES_DEAL_ALREADY_CLOSED"
+        );
+        assert_eq!(
+            deal.reopen(ReopenDeal {
+                expected_version: 1,
+                reason_code: ReasonCode::try_new("revisit").unwrap(),
+                occurred_at_unix_nanos: 40,
+            })
+            .unwrap_err()
+            .code,
+            "SALES_DEAL_VERSION_CONFLICT"
+        );
+        deal.reopen(ReopenDeal {
+            expected_version: 2,
+            reason_code: ReasonCode::try_new("revisit").unwrap(),
+            occurred_at_unix_nanos: 40,
+        })
+        .unwrap();
+        assert_eq!(deal.status(), DealStatus::Open);
+        assert!(deal.close_outcome().is_none());
+        assert_eq!(deal.stage(), &stage);
+        assert_eq!(deal.version(), 3);
+        assert_eq!(
+            deal.reopen(ReopenDeal {
+                expected_version: 3,
+                reason_code: ReasonCode::try_new("again").unwrap(),
+                occurred_at_unix_nanos: 50,
+            })
+            .unwrap_err()
+            .code,
+            "SALES_DEAL_ALREADY_OPEN"
+        );
+        assert_eq!(deal.version(), 3);
+        deal.close(CloseDeal {
+            expected_version: 3,
+            outcome: DealStatus::Lost,
+            reason_code: ReasonCode::try_new("lost").unwrap(),
+            occurred_at_unix_nanos: 50,
+        })
+        .unwrap();
+        assert_eq!(deal.status(), DealStatus::Lost);
+        assert_eq!(deal.version(), 4);
+    }
 
-        let error = deal
-            .advance_stage(AdvanceDealStage {
+    #[test]
+    fn terminal_edit_and_move_are_forbidden() {
+        let mut deal = open_deal();
+        deal.close(CloseDeal {
+            expected_version: 1,
+            outcome: DealStatus::Won,
+            reason_code: ReasonCode::try_new("signed").unwrap(),
+            occurred_at_unix_nanos: 30,
+        })
+        .unwrap();
+        assert_eq!(
+            deal.apply_update(UpdateDeal {
+                expected_version: 2,
+                name: Patch::Set("Forbidden".into()),
+                owner: Patch::Keep,
+                account: Patch::Keep,
+                primary_contact: Patch::Keep,
+                amount: Patch::Keep,
+                expected_close_date: Patch::Keep,
+                probability: Patch::Keep,
+                forecast_category: None,
+                occurred_at_unix_nanos: 40,
+            })
+            .unwrap_err()
+            .code,
+            "SALES_DEAL_ALREADY_CLOSED"
+        );
+        assert_eq!(
+            deal.advance_stage(AdvanceDealStage {
                 expected_version: 2,
                 target_stage: stage("negotiation", 3),
+                target_stage_probability: None,
                 target_status: DealStatus::Open,
                 close_reason_code: None,
                 occurred_at_unix_nanos: 40,
-                policy: StageTransitionPolicy {
-                    allow_regression: true,
-                    allow_skip: true,
-                },
+                policy: StageTransitionPolicy::default(),
+            })
+            .unwrap_err()
+            .code,
+            "SALES_DEAL_ALREADY_CLOSED"
+        );
+        assert_eq!(deal.version(), 2);
+    }
+
+    #[test]
+    fn invalid_late_patch_does_not_partially_change_deal() {
+        let mut deal = open_deal();
+        let previous_name = deal.name().to_owned();
+        let previous_version = deal.version();
+        let error = deal
+            .apply_update(UpdateDeal {
+                expected_version: previous_version,
+                name: Patch::Set("Would corrupt earlier field".into()),
+                owner: Patch::Keep,
+                account: Patch::Keep,
+                primary_contact: Patch::Keep,
+                amount: Patch::Keep,
+                expected_close_date: Patch::Keep,
+                probability: Patch::Clear,
+                forecast_category: None,
+                occurred_at_unix_nanos: 20,
             })
             .unwrap_err();
-        assert_eq!(error.code, "SALES_DEAL_ALREADY_CLOSED");
+        assert_eq!(error.code, "SALES_DEAL_PROBABILITY_REQUIRED");
+        assert_eq!(deal.name(), previous_name);
+        assert_eq!(deal.version(), previous_version);
     }
 
     #[test]
@@ -820,6 +1282,7 @@ mod tests {
         deal.advance_stage(AdvanceDealStage {
             expected_version: 1,
             target_stage: stage("proposal", 3),
+            target_stage_probability: None,
             target_status: DealStatus::Open,
             close_reason_code: None,
             occurred_at_unix_nanos: 20,
@@ -831,6 +1294,7 @@ mod tests {
             .advance_stage(AdvanceDealStage {
                 expected_version: 2,
                 target_stage: stage("qualification", 1),
+                target_stage_probability: None,
                 target_status: DealStatus::Open,
                 close_reason_code: None,
                 occurred_at_unix_nanos: 30,

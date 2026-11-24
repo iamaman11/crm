@@ -2,6 +2,18 @@
 name = "crm-core-contracts"
 version = "0.1.0"
 edition = "2024"
+rust-version.workspace = true
 publish = false
 
 [dependencies]
+thiserror = { workspace = true }
+jiff = { workspace = true }
+iso4217-static = { workspace = true }
+rust_decimal = { workspace = true }
+unicode-normalization = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+
+[lints]
+workspace = true

@@ -23,10 +23,25 @@ pub fn encode_account_state(account: &Account) -> Result<Vec<u8>, SdkError> {
     Ok(bytes)
 }
 
+// Diagnostics only: these trusted literal labels do not define another state schema.
+const ACCOUNT_JSON_DIAGNOSTIC_FIELDS: &[&str] = &[
+    "account_id",
+    "name",
+    "status",
+    "party_associations",
+    "party_id",
+    "role",
+    "created_at_unix_nanos",
+    "updated_at_unix_nanos",
+    "version",
+];
+
 pub fn decode_account_state(bytes: &[u8]) -> Result<Account, SdkError> {
     validate_size(bytes)?;
-    let state: AccountStateV1 = serde_json::from_slice(bytes)
-        .map_err(|error| persisted_error(format!("Account state JSON is invalid: {error}")))?;
+    let state: AccountStateV1 = crm_module_sdk::decode_json(bytes, ACCOUNT_JSON_DIAGNOSTIC_FIELDS)
+        .map_err(|diagnostic| {
+            persisted_error(format!("Account state JSON is invalid: {diagnostic}"))
+        })?;
     Account::rehydrate(state.try_into()?)
         .map_err(|error| persisted_error(format!("{}: {}", error.code, error.safe_message)))
 }
@@ -182,6 +197,17 @@ fn persisted_error(message: impl Into<String>) -> SdkError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn persisted_json_diagnostics_never_echo_private_keys_or_values() {
+        let invalid = br#"{"private-471-key":"secret-471-payload","version":"secret-471-value"}"#;
+        let error = decode_account_state(invalid).unwrap_err();
+        assert_eq!(error.code, "CUSTOMER_ACCOUNTS_PERSISTED_STATE_INVALID");
+        let diagnostic = format!("{error:?}");
+        for sensitive in ["private-471-key", "secret-471-payload", "secret-471-value"] {
+            assert!(!diagnostic.contains(sensitive));
+        }
+    }
+
     use crate::domain::CreateAccount;
 
     fn account() -> Account {

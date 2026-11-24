@@ -330,6 +330,15 @@ impl Task {
     }
 
     pub fn apply_update(&mut self, command: UpdateTask) -> Result<(), SdkError> {
+        // Validate and mutate a candidate first. Any late rejection must leave
+        // the entire original aggregate (including timestamps/version) unchanged.
+        let mut candidate = self.clone();
+        candidate.apply_update_in_place(command)?;
+        *self = candidate;
+        Ok(())
+    }
+
+    fn apply_update_in_place(&mut self, command: UpdateTask) -> Result<(), SdkError> {
         self.require_version(command.expected_version)?;
         self.require_monotonic_time(command.occurred_at_unix_nanos)?;
 
@@ -759,6 +768,40 @@ mod tests {
         assert!(task.due_at_unix_nanos.is_none());
         assert_eq!(task.priority, TaskPriority::Urgent);
         assert_eq!(task.version, 2);
+    }
+
+    #[test]
+    fn rejected_late_update_preserves_the_complete_task_snapshot() {
+        let mut task = open_task();
+        let before = task.snapshot();
+        let error = task
+            .apply_update(UpdateTask {
+                expected_version: 1,
+                subject: Patch::Set("Changed before late error".to_owned()),
+                description: Patch::Clear,
+                owner: Patch::Set(TaskOwner::Team(TeamId::try_new("team.other").unwrap())),
+                priority: Patch::Set(TaskPriority::Low),
+                // The old reminder is 80: a late check must reject this due time.
+                due_at_unix_nanos: Patch::Set(79),
+                occurred_at_unix_nanos: 20,
+            })
+            .unwrap_err();
+        assert_eq!(error.code, "ACTIVITIES_REMINDER_AFTER_DUE");
+        assert_eq!(task.snapshot(), before);
+
+        let error = task
+            .apply_update(UpdateTask {
+                expected_version: 1,
+                subject: Patch::Set("Still original".to_owned()),
+                description: Patch::Set("invalid\0description".to_owned()),
+                owner: Patch::Keep,
+                priority: Patch::Keep,
+                due_at_unix_nanos: Patch::Keep,
+                occurred_at_unix_nanos: 21,
+            })
+            .unwrap_err();
+        assert_eq!(error.code, "ACTIVITIES_TASK_DESCRIPTION_INVALID");
+        assert_eq!(task.snapshot(), before);
     }
 
     #[test]

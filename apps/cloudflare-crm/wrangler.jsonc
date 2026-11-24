@@ -1,6 +1,8 @@
 {
   "name": "crm-dev",
   "main": "./rust-party/build/index.js",
+  "workers_dev": false,
+  "preview_urls": false,
   "account_id": "5bd5e1e1e813f061afc259e91334262d",
   "compatibility_date": "2026-11-07",
   "d1_databases": [
@@ -15,14 +17,15 @@
     "directory": "./dist",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": [
-      "/api/*"
-    ]
+    "run_worker_first": ["/api/*", "/crm.*/*"]
   },
   "version_metadata": {
     "binding": "CF_VERSION_METADATA"
   },
   "observability": {
-    "enabled": true
+    "enabled": true,
+    "redact_query_string": true,
+    "logs": {"enabled": true, "head_sampling_rate": 1, "invocation_logs": false},
+    "traces": {"enabled": true, "head_sampling_rate": 1}
   }
 }

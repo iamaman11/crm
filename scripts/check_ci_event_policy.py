@@ -67,22 +67,97 @@ def check_workflow(path: Path) -> WorkflowPolicyResult:
     event_start, event_end = events
     has_push = _contains_event(lines, event_start, event_end, "push")
     has_pull_request = _contains_event(lines, event_start, event_end, "pull_request")
-    if not (has_push and has_pull_request):
-        return WorkflowPolicyResult(path, ())
+    crm_dev_workflow = (
+        path.name == "cloudflare-crm-spike.yml"
+        and path.parent.name == "workflows"
+        and path.parent.parent.name == ".github"
+    )
+    if crm_dev_workflow:
+        if not has_push:
+            errors.append("CRM must run on push to dev")
+        if has_pull_request:
+            errors.append("CRM uses one dev pipeline, not duplicate pull_request builds")
+    if has_pull_request:
+        pr_section = _event_section(lines, event_start, event_end, "pull_request")
+        expected_pr = "dev" if crm_dev_workflow else "main"
+        branch_lines: list[str] = []
+        if "    branches:" in pr_section:
+            start = pr_section.index("    branches:") + 1
+            for line in pr_section[start:]:
+                if line.startswith("      - "):
+                    branch_lines.append(line.strip())
+                elif line.strip():
+                    break
+        # These branch filters are explicit, exact, and exclusive.
+        if ("    branches:" not in pr_section
+                or branch_lines != [f"- {expected_pr}"]
+                or "    branches-ignore:" in pr_section):
+            errors.append(f"pull_request must be restricted to branch {expected_pr}")
+    if not crm_dev_workflow and not (has_push and has_pull_request):
+        return WorkflowPolicyResult(path, tuple(errors))
 
     push_section = _event_section(lines, event_start, event_end, "push")
-    if "    branches:" not in push_section or "      - main" not in push_section:
-        errors.append("push must be restricted to branch main")
+    # A single, explicit exception for the one CRM development release job.
+    # All unrelated workflows retain their main-only policy.
+    expected = "dev" if crm_dev_workflow else "main"
+    branch_lines = []
+    if "    branches:" in push_section:
+        for line in push_section[push_section.index("    branches:") + 1:]:
+            if line.startswith("      - "):
+                branch_lines.append(line.strip())
+            elif line.strip():
+                break
+    if branch_lines != [f"- {expected}"] or "    branches-ignore:" in push_section:
+        errors.append(f"push must be restricted to branch {expected}")
+
+    # Fail closed on any CI workflow that treats .md documentation as a
+    # source of truth. GitHub Issues own the prose; only typed code and
+    # machine-readable contracts can select a workflow.
+    for event in ("push", "pull_request"):
+        section = _event_section(lines, event_start, event_end, event)
+        if "    paths:" in section:
+            for line in section[section.index("    paths:") + 1:]:
+                if line.startswith("      - "):
+                    path_pattern = line.strip()[2:].strip("\"'")
+                    if path_pattern.lower().endswith(".md") or path_pattern.startswith("docs/"):
+                        errors.append("CI must not select Markdown documentation inputs")
+                        break
+                elif line.strip():
+                    break
+    if crm_dev_workflow:
+        # Native GitHub path filtering only excludes documentation. YAML/SQL,
+        # tests, source, lockfiles and unknown non-Markdown inputs remain checked.
+        filters = []
+        if "    paths-ignore:" in push_section:
+            for line in push_section[push_section.index("    paths-ignore:") + 1:]:
+                if line.startswith("      - "):
+                    filters.append(line.strip()[2:].strip("\"'"))
+                elif line.strip():
+                    break
+        if filters != ["*.md", "**/*.md"] or "    paths:" in push_section:
+            errors.append("CRM may ignore only **/*.md documentation")
+        forbidden_document_gates = (
+            "tests.test_repository_navigation",
+            "tests.test_architecture_documentation_consistency",
+            "generate_repository_navigation.py --check",
+            "docs/ACTIVE_PACKET.md",
+            "docs/generated/REPOSITORY_MAP.md",
+        )
+        if any(gate in "\n".join(lines) for gate in forbidden_document_gates):
+            errors.append("CRM CI must not validate Markdown documentation")
 
     concurrency = _top_level_block(lines, "concurrency")
     if concurrency is None:
         errors.append("missing top-level concurrency block")
     else:
         concurrency_lines = [line.strip() for line in lines[concurrency[0] + 1 : concurrency[1]]]
-        if EXPECTED_GROUP not in concurrency_lines:
+        group = "group: ${{ github.workflow }}-${{ github.ref }}" if crm_dev_workflow else EXPECTED_GROUP
+        cancel = "cancel-in-progress: false" if crm_dev_workflow else EXPECTED_CANCEL
+        if group not in concurrency_lines:
             errors.append("concurrency group must be workflow + PR number/ref")
-        if EXPECTED_CANCEL not in concurrency_lines:
-            errors.append("cancel-in-progress must be enabled only for pull_request")
+        if cancel not in concurrency_lines:
+            errors.append("CRM must not cancel an active release" if crm_dev_workflow
+                          else "cancel-in-progress must be enabled only for pull_request")
 
     return WorkflowPolicyResult(path, tuple(errors))
 
@@ -101,7 +176,20 @@ def main() -> int:
     parser.add_argument("--root", type=Path, default=Path.cwd())
     args = parser.parse_args()
 
-    failures = [result for path in discover_workflows(args.root) if (result := check_workflow(path)).errors]
+    workflows = discover_workflows(args.root)
+    # The former main-only product-plane workflows are not part of CRM.
+    # Only the exact-SHA dev pipeline may build, test or publish this app.
+    canonical = {".github/workflows/cloudflare-crm-spike.yml"}
+    observed = {path.relative_to(args.root).as_posix() for path in workflows}
+    if observed != canonical:
+        print(
+            f"CRM requires exactly one workflow: missing={sorted(canonical - observed)}, "
+            f"unexpected={sorted(observed - canonical)}",
+            file=sys.stderr,
+        )
+        return 1
+
+    failures = [result for path in workflows if (result := check_workflow(path)).errors]
     if failures:
         for result in failures:
             for error in result.errors:

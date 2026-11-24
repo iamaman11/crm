@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "desired_runtime": "one workers-rs Rust/WASM Worker, embedded Axum 0.8 Connect-Rust/Buffa, one D1",
+  "browser_wire_format": "Connect binary Protobuf",
+  "integration_runtime": {
+    "owner": "Wrangler/createTestHarness(workerd)",
+    "fixture_binding": "DB",
+    "direct_sqlite": false,
+    "production_worker_count": 1,
+    "local_d1_count": 1
+  }
+}

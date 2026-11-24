@@ -26,36 +26,46 @@ provides:
       binding:
         kind: protobuf_rpc
         rpc: crm.accounts.v1.AccountService.CreateAccount
-        request: crm.accounts.v1.CreateAccountRequest
-        response: crm.accounts.v1.CreateAccountResponse
     - id: accounts.account.update
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.accounts.v1.AccountService.UpdateAccount
-        request: crm.accounts.v1.UpdateAccountRequest
-        response: crm.accounts.v1.UpdateAccountResponse
     - id: accounts.account.get
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.accounts.v1.AccountService.GetAccount
-        request: crm.accounts.v1.GetAccountRequest
-        response: crm.accounts.v1.GetAccountResponse
     - id: accounts.account.list
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.accounts.v1.AccountService.ListAccounts
-        request: crm.accounts.v1.ListAccountsRequest
-        response: crm.accounts.v1.ListAccountsResponse
     - id: customer_accounts.privacy.scope.contribute
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.customer_privacy.v1.CustomerAccountsPrivacyScopeContributionService.CustomerAccountsPrivacyScopeContribution
-        request: crm.customer_privacy.v1.CustomerAccountsPrivacyScopeContributionRequest
-        response: crm.customer_privacy.v1.CustomerAccountsPrivacyScopeContributionResponse
+    - id: accounts.account.create
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.accounts.v2.AccountService.CreateAccount
+    - id: accounts.account.update
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.accounts.v2.AccountService.UpdateAccount
+    - id: accounts.account.get
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.accounts.v2.AccountService.GetAccount
+    - id: accounts.account.list
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.accounts.v2.AccountService.ListAccounts
   events:
     - id: accounts.account.created
       version: 1.0.0

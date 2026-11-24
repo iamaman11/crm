@@ -1,45 +1,60 @@
-# CRM Dev — нативное приложение Cloudflare
+# Cloudflare CRM
 
-Единственный источник кода и состояния разработки — [iamaman11/crm](https://github.com/iamaman11/crm), актуальный план — [Issue #338](https://github.com/iamaman11/crm/issues/338).
-
-## Как устроено приложение
+Канонический source — [iamaman11/crm](https://github.com/iamaman11/crm), ветка `dev`.
+[ARCHITECTURE.md](ARCHITECTURE.md) описывает схему, [AGENTS.md](AGENTS.md) — правила разработки.
+**Единый полный продуктовый план и очередь — в [#484](https://github.com/iamaman11/crm/issues/484), единственный текущий исполнительный курсор, A/B/C/D и Gate A/B — в [#487](https://github.com/iamaman11/crm/issues/487). Статусы не обновляются в Markdown.** Архитектурные решения — #338,
+история cutover — #350. Markdown не является журналом релизов.
+Продолжение в другом чате: открыть **#484 → #487**, проверить актуальный код/принятые Gate, затем для конкретной функции сверить [сохранённую историческую Rust-матрицу](../../docs/archive/cloudflare-snapshots/crm-functional-execution-matrix.md) и исходные тесты. Архивный Markdown — только source evidence, **не второй план**.
 
 ```text
-React 19 / Vite (Cloudflare Static Assets)
-  → Cloudflare Access (подписанная личность)
-  → один Worker workers-rs (Rust/WASM; один HTTP entrypoint)
-  → исходные Rust-модули из modules/ (единственные владельцы бизнес-правил)
-  → нативный D1 binding DB → одна база crm-dev
+Protobuf → generated Rust/TypeScript
+React + packages/ui → packages/client/cloudflare → binary Connect
+→ Rust Access/policy → original Rust owner → owner SQL/CAS/receipt/audit → одна D1
 ```
 
-Без JS API-маршрутизатора, отдельного Worker, PostgreSQL, Docker и дополнительной базы данных. Worker проверяет подписанный Access JWT, сопоставляет пользователя с tenant/ролью в D1, маршрутизирует запросы и вызывает исходный Rust-домен. Только оператор с ролью admin изменяет данные, прочие зарегистрированные пользователи читают данные своего tenant. Никогда не доверяем клиентским заголовкам tenant или пользователя.
+Один workers-rs Worker и встроенный Connect router. Frontend находится в `web/src`;
+wire/domain mappings — в `rust-party/src/connect_sales.rs` и его handler modules;
+бизнес-инварианты — в исходных `modules/crm-*`. Не добавлять параллельные транспорт,
+backend, UI kit или domain model.
 
-### Границы ответственности
+Разработка идёт прямыми commits в `dev`; PR необязателен. Code push запускает один
+существующий GitHub Actions workflow. Изменения только Markdown не собирают и не публикуют
+приложение; code + Markdown проходят полный CI. Выполняющийся запуск заканчивается,
+следующим проверяется последнее ожидающее состояние.
 
-- **UI** — `web/src/main.jsx`, `Parties.jsx`, `Customer360.jsx`. `App` владеет списками Party/Account/ContactPoint/Deal/Task; дочерние экраны получают данные через props. Формы передают идентификаторы, версии и параметры API, но не выбирают конечный результат доменных переходов.
-- **HTTP, Access, диагностика** — `rust-party/src/lib.rs`, `access.rs`; **Party HTTP/D1** — `rust-party/src/parties.rs`. Стабильные `x-request-id`, `x-crm-module`, `x-crm-error-code` и `x-crm-source-sha`; облачные структурированные Logs без токенов и пользовательских данных.
-- **Адаптеры оригинальных модулей к D1** — `rust-party/src/accounts.rs`, `contact_points.rs`, `sales_deals.rs`, `activity_tasks.rs`, `party_relationships.rs`, `consents.rs`. Это **не второй бизнес-домен**: обработчики разбирают JSON в Rust-типы, вызывают исходные агрегаты и сохраняют их штатными D1-запросами.
-- **Оригинальные бизнес-правила** — `modules/crm-*`. Межмодульный `sales_activities_link.rs` использует исходный Rust link-модуль и типизированный Protobuf-адаптер, коммит Deal/Task/receipt выполняется одной атомарной операцией D1.
-- **Карточка клиента** — `account_overview.rs`, read-only композиция состояний владельцев; не отдельная клиентская таблица и не владелец изменений.
-- **База** — одна D1 из `wrangler.jsonc`; отдельные таблицы состояний и квитанций по владельцам, общая таблица аудита. Миграции `migrations/0001_*.sql`–`0010_*.sql`.
+Markdown-only commit не меняет опубликованный Worker. Его source SHA остаётся SHA последней
+прошедшей code-сборки, а не обязательно HEAD документации; опубликованную версию показывают
+`/api/version` и соответствующий запуск CI. Для изменения текста пересборка не требуется.
 
-## Что реализовано и что пока отсутствует
+Buf проверяет текущий контракт; генерация и компиляторы — Rust/TS; TypeScript AST — границы
+клиента. Compiled router/policy сверяются с descriptors и исполненными workerd-сценариями.
+Историческая совместимость собственного тестового CRM API не блокирует развитие.
+Контракт, сервер, UI и тесты меняются согласованно. Другие потребители общих контрактов
+сохраняют свои обязательства совместимости.
 
-В пользовательском интерфейсе: Parties (создать, изменить), Accounts (создать, изменить, карточка), ContactPoints (создать, изменить; пользователь не может присвоить себе `verified`), Sales Deals (создать, изменить, продвинуть этап, таблица/воронка), Activities Tasks (создать и завершить). Поиск и обновление списка; данные переживают перезагрузку. Действуют Access, tenant-разделение и контроль версии. **Универсального Delete для этих оригинальных агрегатов нет.**
+Зависимости устанавливаются с frozen lockfile; Rust — с --locked и Cargo cache.
+Domain/workerd/D1/Chromium проверяют результат, права, tenant, CAS/replay/audit.
+`rust-party/test/typed-browser.mjs` выполняет реальные действия через generated client;
+`e2e/live.mjs` проверяет опубликованное приложение через Access. Doctor — только read-only
+диагностика, не замена приёмки.
 
-Оригинальные `crm-identity-resolution`, `crm-customer-data-operations`, `crm-data-quality`, `crm-customer-enrichment`, `crm-customer-privacy` пока присутствуют в WASM compile/link-проверках, но **не подключены как функциональные HTTP/D1/UI-процессы**. Consent Grant и доверенная верификация ContactPoint также ещё не подключены; не подменять их пользовательским флагом.
+Release использует artifact этого CI без пересборки. Production `native` и test-only
+`native-ci` различаются. SHA/checksum и live readback подтверждают опубликованную версию.
+Обычная эволюция D1 добавляет миграции через Wrangler ledger; reset тестовых данных выполняется
+явно. Без новых миграций release не останавливает вход ради D1 apply. Ошибка live-приёмки
+оставляет fail-closed; несовместимый старый Worker не откатывается автоматически.
 
-`pilot.rs`, JS backend и дублированный JS Customer360 удалены. Старые тестовые таблицы могут оставаться в единой D1 ради отката прежнего Worker; активные Rust API их не используют. Обратная совместимость тестовых сущностей не требуется.
+В issue записываются проверенный source, ссылка на CI, live result и остаток работы.
+Принятие функции требует содержательных тестов; строгие типы не доказывают все бизнес-правила.
 
-## Разработка, диагностика и публикация
+### Проверки по назначению
 
-- `npm run locate -- deals` / `contacts` / `INVALID_INPUT` определяет владеющий модуль и файлы по `shared/catalog.mjs`.
-- `npm run doctor` — быстрая локальная **проверка кода**, не доказательство живого браузера или D1.
-- Авторизованный `GET /api/doctor` — реальная версия Worker, источник сборки, Access, таблицы и tenant-readback. Внешнюю браузерную/Logs-приёмку он честно помечает как `EXTERNAL_PROTECTED_CI_CHECK_REQUIRED`.
-- **PR = полная регрессия**: проверка всех 13 оригинальных Rust-модулей и их WASM-контрактов, локальный `workerd`+D1, подписанный Access JWT, React/Chromium и отрицательные/tenant-сценарии. Собирается production-feature Worker, но ничего не публикуется.
-- **`main` = проверенная сборка PR → live-приёмка, без повторной компиляции**: успешный PR сохраняет нативный Rust/WASM Worker и React Static Assets с хешами SHA-256 и идентификатором дерева Git. После Squash Merge единственный workflow на `main` проверяет, что PR действительно объединён, его CI завершился `SUCCESS`, а **полное дерево файлов** принятого PR совпадает с деревом коммита `main` (`git rev-parse HEAD^{tree}`). Только при точном совпадении он скачивает артефакт из PR, проверяет SHA-256 каждого скомпилированного файла и меняет только метку SHA публикации, не компилируя ничего повторно. При несовпадении деревьев релиз останавливается, не подменяя бинарники. Затем тот же готовый артефакт (без пересборки) передаётся в защищённый `deploy-crm-dev` (GitHub Environment `crm-dev`). Публикация → реальный Chromium на `https://crm-dev.crm-5bd5e1e1.workers.dev` → D1 audit и Cloudflare Logs по тому же `request_id`. Успех фиксируется в `native-functional-accepted.json`. При ошибке Worker возвращается к прежней версии; **D1 автоматически не откатывается**.
-- `wasm-bindgen-cli` и `worker-build` закреплены по версии; GitHub Actions кеширует установленные инструменты. Релизный Rust/WASM и React не кешируются без проверки: это отдельный **артефакт успешного PR**, разрешённый к публикации исключительно при полном совпадении Git tree + SHA-256. `native-ci` тестовый WASM не становится релизом — восстанавливается сохранённый до него `native` без второй компиляции. В `main` заново устанавливаются только зависимости, необходимые браузерной live-приёмке после публикации; сборочных инструментов там больше нет.
+- `cloudflare-crm-spike`: все архитектурные правила, типизированные Rust RPC и полный
+  регрессионный сценарий `rust-party/test/typed-browser.mjs` на workerd/D1.
+- `deploy-crm-dev`: точный опубликованный SHA, реальные Cloudflare Access и D1,
+  короткий Chromium `e2e/published-smoke.mjs`, независимый audit/Trace readback.
+  Полный браузерный регрессионный сценарий **не повторяется** после публикации.
+- **Gate B — отдельная независимая приёмка новой пользовательской функции в
+  реальном браузере после попадания кода в dev**, не job и не CI smoke. Её
+  evidence публикуется в текущем курсоре; успешный CI сам по себе не значит Gate B ACCEPTED.
 
-Результат публикации определяется проверкой **активной версии, exact SHA и полной live-приёмкой**, а не названием ветки, локальным PASS или компиляцией всех 13 модулей.
-
-Общие принципы оригинального модульного Rust-монолита изложены в `docs/APPLICATION_ARCHITECTURE.md`: описанные там `services/crm-api` / PostgreSQL относятся к другому историческому runtime репозитория, **не** к развёрнутому `apps/cloudflare-crm`. Для текущего Cloudflare-приложения руководствоваться этим README и `AGENTS.md`, не строить параллельный runtime.

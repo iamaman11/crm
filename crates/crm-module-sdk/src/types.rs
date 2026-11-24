@@ -1,12 +1,12 @@
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::error::Error;
 use std::fmt;
 
 pub const MAX_IDENTIFIER_BYTES: usize = 180;
 pub const MAX_SAFE_PAYLOAD_BYTES: u64 = 64 * 1024 * 1024;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("{message}")]
 pub struct IdentifierError {
     message: String,
 }
@@ -18,14 +18,6 @@ impl IdentifierError {
         }
     }
 }
-
-impl fmt::Display for IdentifierError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(&self.message)
-    }
-}
-
-impl Error for IdentifierError {}
 
 fn validate_identifier(value: &str) -> Result<(), IdentifierError> {
     if value.is_empty() {
@@ -255,8 +247,9 @@ pub enum ErrorCategory {
     Internal,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, thiserror::Error)]
 #[serde(deny_unknown_fields)]
+#[error("{code}: {safe_message}")]
 pub struct SdkError {
     pub code: String,
     pub category: ErrorCategory,
@@ -317,17 +310,24 @@ impl SdkError {
     }
 }
 
-impl fmt::Display for SdkError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "{}: {}", self.code, self.safe_message)
-    }
-}
-
-impl Error for SdkError {}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sdk_errors_keep_standard_error_and_safe_display() {
+        let error = SdkError::invalid_argument("deal.name", "required")
+            .with_internal_reference("internal-only");
+        assert_eq!(
+            error.to_string(),
+            "SDK_INVALID_ARGUMENT: The request contains invalid data."
+        );
+        assert_eq!(error.field_violations.len(), 1);
+        assert!(std::error::Error::source(&error).is_none());
+        let identifier = IdentifierError::new("identifier test");
+        assert_eq!(identifier.to_string(), "identifier test");
+        assert!(std::error::Error::source(&identifier).is_none());
+    }
 
     #[test]
     fn identifier_constructor_rejects_empty_values() {

@@ -24,36 +24,53 @@ provides:
       binding:
         kind: protobuf_rpc
         rpc: crm.parties.v1.PartyService.CreateParty
-        request: crm.parties.v1.CreatePartyRequest
-        response: crm.parties.v1.CreatePartyResponse
     - id: parties.party.update
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.parties.v1.PartyService.UpdateParty
-        request: crm.parties.v1.UpdatePartyRequest
-        response: crm.parties.v1.UpdatePartyResponse
     - id: parties.party.get
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.parties.v1.PartyService.GetParty
-        request: crm.parties.v1.GetPartyRequest
-        response: crm.parties.v1.GetPartyResponse
+    # The Cloudflare Worker publishes v2 GetParty. Preserve the original v1
+    # contract for historical monorepo consumers; versions are separate APIs.
+    - id: parties.party.get
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.parties.v2.PartyService.GetParty
     - id: parties.party.list
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.parties.v1.PartyService.ListParties
-        request: crm.parties.v1.ListPartiesRequest
-        response: crm.parties.v1.ListPartiesResponse
     - id: parties.privacy.scope.contribute
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.customer_privacy.v1.PartiesPrivacyScopeContributionService.PartiesPrivacyScopeContribution
-        request: crm.customer_privacy.v1.PartiesPrivacyScopeContributionRequest
-        response: crm.customer_privacy.v1.PartiesPrivacyScopeContributionResponse
+    - id: parties.party.create
+      version: 3.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.parties.v3.PartyService.CreateParty
+    - id: parties.party.update
+      version: 3.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.parties.v3.PartyService.UpdateParty
+    - id: parties.party.get
+      version: 3.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.parties.v3.PartyService.GetParty
+    - id: parties.party.list
+      version: 3.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.parties.v3.PartyService.ListParties
   events:
     - id: parties.party.created
       version: 1.0.0

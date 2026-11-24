@@ -31,13 +31,37 @@ pub fn encode_consent_authorization_state(
     Ok(bytes)
 }
 
+// Diagnostics only: these trusted literal labels do not define another state schema.
+const CONSENT_JSON_DIAGNOSTIC_FIELDS: &[&str] = &[
+    "authorization_id",
+    "party_id",
+    "contact_point_id",
+    "purpose",
+    "channel",
+    "effect",
+    "legal_basis",
+    "jurisdiction",
+    "source",
+    "evidence_ref",
+    "effective_from_unix_nanos",
+    "expires_at_unix_nanos",
+    "status",
+    "withdrawn_at_unix_nanos",
+    "created_at_unix_nanos",
+    "updated_at_unix_nanos",
+    "version",
+];
+
 pub fn decode_consent_authorization_state(bytes: &[u8]) -> Result<ConsentAuthorization, SdkError> {
     validate_size(bytes)?;
-    let state: ConsentAuthorizationStateV1 = serde_json::from_slice(bytes).map_err(|error| {
-        persisted_error(format!(
-            "Consent Authorization state JSON is invalid: {error}"
-        ))
-    })?;
+    let state: ConsentAuthorizationStateV1 =
+        crm_module_sdk::decode_json(bytes, CONSENT_JSON_DIAGNOSTIC_FIELDS).map_err(
+            |diagnostic| {
+                persisted_error(format!(
+                    "Consent Authorization state JSON is invalid: {diagnostic}"
+                ))
+            },
+        )?;
     ConsentAuthorization::rehydrate(state.try_into()?)
         .map_err(|error| persisted_error(format!("{}: {}", error.code, error.safe_message)))
 }
@@ -254,6 +278,17 @@ fn persisted_error(message: impl Into<String>) -> SdkError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn persisted_json_diagnostics_never_echo_private_keys_or_values() {
+        let invalid = br#"{"private-471-key":"secret-471-payload","version":"secret-471-value"}"#;
+        let error = decode_consent_authorization_state(invalid).unwrap_err();
+        assert_eq!(error.code, "CONSENTS_PERSISTED_STATE_INVALID");
+        let diagnostic = format!("{error:?}");
+        for sensitive in ["private-471-key", "secret-471-payload", "secret-471-value"] {
+            assert!(!diagnostic.contains(sensitive));
+        }
+    }
+
     use crate::domain::{CreateConsentAuthorization, WithdrawConsentAuthorization};
 
     fn authorization() -> ConsentAuthorization {

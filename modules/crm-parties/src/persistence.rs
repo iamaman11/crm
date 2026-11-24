@@ -20,10 +20,22 @@ pub fn encode_party_state(party: &Party) -> Result<Vec<u8>, SdkError> {
     Ok(bytes)
 }
 
+// Approved field labels only: they control error paths, never the JSON schema.
+const PARTY_JSON_DIAGNOSTIC_FIELDS: &[&str] = &[
+    "party_id",
+    "kind",
+    "display_name",
+    "created_at_unix_nanos",
+    "updated_at_unix_nanos",
+    "version",
+];
+
 pub fn decode_party_state(bytes: &[u8]) -> Result<Party, SdkError> {
     validate_size(bytes)?;
-    let state: PartyStateV1 = serde_json::from_slice(bytes)
-        .map_err(|error| persisted_error(format!("Party state JSON is invalid: {error}")))?;
+    let state: PartyStateV1 = crm_module_sdk::decode_json(bytes, PARTY_JSON_DIAGNOSTIC_FIELDS)
+        .map_err(|diagnostic| {
+            persisted_error(format!("Party state JSON is invalid: {diagnostic}"))
+        })?;
     Party::rehydrate(state.try_into()?)
         .map_err(|error| persisted_error(format!("{}: {}", error.code, error.safe_message)))
 }
@@ -116,6 +128,17 @@ fn persisted_error(message: impl Into<String>) -> SdkError {
 mod tests {
     use super::*;
     use crate::domain::CreateParty;
+
+    #[test]
+    fn malformed_json_does_not_expose_untrusted_values_or_keys() {
+        let invalid = br#"{"party_id":"secret-471-value","private-471-key":"secret-471-payload"}"#;
+        let error = decode_party_state(invalid).unwrap_err();
+        assert_eq!(error.code, "PARTIES_PARTY_PERSISTED_STATE_INVALID");
+        let output = format!("{error:?}");
+        assert!(!output.contains("secret-471-value"));
+        assert!(!output.contains("private-471-key"));
+        assert!(!output.contains("secret-471-payload"));
+    }
 
     fn party() -> Party {
         Party::create(CreateParty {

@@ -1,132 +1,30 @@
-# Ultimate CRM Platform
+# Cloudflare CRM — разработка в каноническом GitHub
 
-Implementation repository for a universal modular, metadata-driven, production-grade CRM platform.
+**Репозиторий:** [iamaman11/crm](https://github.com/iamaman11/crm), единственная рабочая ветка `dev`. Разрабатывается Cloudflare CRM: **один Rust Worker, один бинарный типизированный Connect-транспорт, одна D1**. Не считать готовностью текущей CRM завершённость исторического PostgreSQL/main продукта.
 
-## Start here
+## Единственный рабочий вход
 
-For a new contributor or coding agent:
+| Задача | Источник истины |
+|---|---|
+| Полный продуктовый план, 20 семейств, 554 требования, очередь | [Issue #484 — единый продуктовый план](https://github.com/iamaman11/crm/issues/484) |
+| Единственный текущий функциональный курсор, A/B/C/D, доказательства Gate A/B | [Issue #487 — SK-06 «Рабочий день»](https://github.com/iamaman11/crm/issues/487) |
+| Техническая архитектура | [apps/cloudflare-crm/ARCHITECTURE.md](apps/cloudflare-crm/ARCHITECTURE.md) |
+| Инструкции исполнителя | [apps/cloudflare-crm/AGENTS.md](apps/cloudflare-crm/AGENTS.md), [корневой AGENTS.md](AGENTS.md) |
+| Объяснение архива и проверка исторической семантики | [docs/README.md](docs/README.md), [docs/archive](docs/archive/) |
 
-1. [`AGENTS.md`](AGENTS.md) — repository operating model and change workflow.
-2. [`docs/README.md`](docs/README.md) — task-oriented documentation map and source-of-truth hierarchy.
-3. [`docs/SYSTEM_INVARIANTS.md`](docs/SYSTEM_INVARIANTS.md) — absolute architecture rules.
-4. [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) — concise current merged state and next permitted packet.
-5. [`docs/ACTIVE_PACKET.md`](docs/ACTIVE_PACKET.md) — generated orientation for the active bounded packet.
-6. The active GitHub issue for executable scope and acceptance.
+**Никаких параллельных продуктовых дорожных карт в Markdown.** Исторические тексты сохранены в архиве как справочные снимки; их состояние, приоритеты, статус принятия и старые runtime/CI не управляют `dev`. Решения и изменения статусов вести **в Issues**.
 
-Use the documentation index and generated repository map instead of reading the repository linearly. Accepted ADRs and published contracts take precedence over descriptive prose unless they violate an absolute system invariant.
+## Строгая централизованная типизированная схема
 
-## Current state
-
-Live phase, runtime inventory, accepted evidence, product-completeness accounting and the next permitted packet are intentionally **not duplicated in this orientation file**. Read [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md), the normative roadmap/phase plan and the active issue.
-
-The cross-cutting architecture and developer-experience program is tracked by **issue #194** and [`docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md`](docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md). It preserves the modular architecture while reducing accidental crate proliferation, central manual composition, dependency drift, CI fan-out, local-environment friction and repository navigation cost.
-
-## Architectural model
-
-The target is a **modular monolith with independently governed owner and link modules**, not a collection of accidental microservices.
-
-Core invariants:
-
-- every mutable aggregate has one authoritative owner;
-- actors mutate state only through exact versioned governed capabilities;
-- business modules do not receive raw database, broker, object-storage, arbitrary HTTP, secret-store or LLM-provider clients;
-- business modules do not import or mutate another business module's internals;
-- cross-domain behavior uses versioned capabilities/events and optional link modules;
-- state mutations atomically persist required idempotency, outbox and audit evidence;
-- queries are permission-bound and structurally separate from mutation semantics;
-- search, analytics, caches, timelines and projections are rebuildable and non-authoritative;
-- live authorization runs immediately before side effects;
-- AI and marketplace extensions have no alternate mutation or data-access path.
-
-The complete normative rules are in [`docs/SYSTEM_INVARIANTS.md`](docs/SYSTEM_INVARIANTS.md).
-
-## Extension rule
-
-A normal capability added to an existing owner should create **zero new crates**. It belongs inside the existing owner application and production packages.
-
-A new business module is justified only by a new authoritative mutable domain. Screens, reports, tables, projections and convenience groupings do not create owner modules.
-
-Generic router and worker algorithms must not change merely to register one owner capability.
-
-## Repository layout
-
-- `proto/` — authoritative RPC, command and event contract sources.
-- `crates/` — platform runtimes, application packages and infrastructure/production adapters.
-- `modules/` — independently governed pure business owner/link modules.
-- `services/` — deployable composition roots; `services/crm-api` is the production process.
-- `database/` — authoritative migrations and PostgreSQL acceptance assets.
-- `schemas/` — strict authoring schemas compiled into typed runtime IR.
-- `docs/` — normative architecture, status, execution plans, generated navigation and historical evidence.
-- `scripts/` — architecture, contract, manifest, affected-scope and repository tooling.
-- `.github/workflows/` — permanent conformance and acceptance gates.
-
-Generated `build/` content and workflow artifacts are reproducible outputs and are not authoritative source files. Committed generated navigation is freshness-checked and remains orientation only.
-
-## Repository navigation
-
-Use exact machine-generated navigation instead of repository archaeology:
-
-```bash
-python scripts/repo.py explain crm.customer-privacy
-python scripts/repo.py explain customer_privacy.case.submit@1.0.0
-python scripts/repo.py packet-check --base origin/main
-python scripts/generate_repository_navigation.py --check
+```text
+versioned .proto → Buf → generated Protobuf Rust/TypeScript
+React strict TSX → packages/client/cloudflare → binary Connect
+→ verified Cloudflare Access → one fail-closed Rust RPC policy
+→ original Rust domain owner → one D1 with CAS/idempotency/receipt/audit
 ```
 
-- [`docs/ACTIVE_PACKET.md`](docs/ACTIVE_PACKET.md) describes the active bounded packet from `repository-packet.json`.
-- [`docs/generated/REPOSITORY_MAP.md`](docs/generated/REPOSITORY_MAP.md) inventories workspace packages, business manifests and route classifications.
-- `explain` resolves exact module or capability ownership and fails closed for unknown or ambiguous targets.
-- `packet-check` validates the declared baseline, changed-path policy, affected package closure, workflow selection and generated freshness.
+Нет отдельного business REST, JS backend, параллельных DTO, SQLx/PostgreSQL runtime, второго Worker/DB, второго CI или ручного обхода owner policy. Все бизнес-поля доступной записи одинаково читаются `viewer` и `admin`; запись ограничена ролью и tenant.
 
-## Local validation
+**Единица разработки:** реальный полезный крупный сценарий, сначала проверить уже принятый код и старые Rust source/tests, затем A/B/C/D. Только доказанный B требует код. **Gate A:** действующий GitHub Actions `cloudflare-crm-spike` с Buf/Rust/TS/workerd/D1/Chromium и публикацией exact SHA. **Gate B:** независимый реальный LIVE Universal Browser MCP на том же опубликованном SHA. Результат, оставшиеся пробелы и следующий шаг — только в [#487](https://github.com/iamaman11/crm/issues/487).
 
-Use the stable repository command surface:
-
-```bash
-python scripts/repo.py doctor
-python scripts/repo.py doctor --profile bootstrap
-python scripts/repo.py bootstrap --dry-run
-python scripts/repo.py bootstrap
-python scripts/repo.py dev-up --dry-run
-python scripts/repo.py dev-up
-python scripts/repo.py dev-reset --dry-run
-python scripts/repo.py dev-reset
-python scripts/repo.py seed-demo --dry-run
-python scripts/repo.py seed-demo
-python scripts/repo.py smoke --dry-run
-python scripts/repo.py smoke
-python scripts/repo.py architecture
-python scripts/repo.py manifests
-python scripts/repo.py contracts
-python scripts/repo.py conformance
-python scripts/repo.py lock
-python scripts/repo.py affected --base origin/main
-python scripts/repo.py check-affected --base origin/main
-python scripts/repo.py explain <module-or-coordinate>
-python scripts/repo.py packet-check --base origin/main
-python scripts/generate_repository_navigation.py --check
-python scripts/repo.py format --check
-python scripts/repo.py test --package <package>
-python scripts/repo.py test-all
-python scripts/repo.py quality
-```
-
-`doctor` inspects the repository-pinned Python, Rust, Node and pnpm prerequisites; its full profile also checks Docker CLI, Compose v2 and daemon availability. `bootstrap` creates an isolated `.venv`, installs committed Python constraints, fetches Cargo dependencies with `--locked`, installs pnpm dependencies with `--frozen-lockfile`, and verifies locked metadata and generated navigation. It does not silently install or globally switch system toolchains.
-
-`dev-up` creates or reuses one checkout-scoped PostgreSQL dependency plane from an immutable PostgreSQL 17 image digest, binds it only to `127.0.0.1`, applies every committed up migration and the accepted platform fixtures through Docker-native `psql`, and refuses partial, foreign or drifted resources. `dev-reset` verifies ownership before deleting only that checkout's container and volume and then recreates a clean ready database; use `--dry-run` before destructive reset.
-
-`seed-demo` reuses that owned database and creates or idempotently replays the versioned `local-demo-acme` organization through the governed production Party mutation gateway. `smoke` starts the real `crm-api`, proves an authenticated query is denied without a live grant, then verifies the bootstrap-granted Party read, missing-authentication denial and tenant-B non-disclosure. Both commands use one exact locked Rust process-test target; neither starts a frontend or writes business tables directly.
-
-Specialized contract, database, process, migration and product-plane gates remain mandatory when their scopes are affected. This implementation packet completes the command surface required by Repository Step 18, but Step 18 remains in progress until the implementation is merged and its exact acceptance evidence is synchronized separately.
-
-## Status synchronization rule
-
-README is stable orientation, not a second roadmap. Detailed progress belongs in:
-
-- `docs/PROJECT_STATUS.md`;
-- `docs/IMPLEMENTATION_ROADMAP.md`;
-- `docs/PHASE8_DELIVERY_PLAN.md`;
-- `docs/MODULE_CATALOG.md`;
-- active GitHub issues.
-
-When scope or completion changes, update those sources together and rerun applicable exact-head checks.
+Тестовые данные не являются основанием переносить устаревшие runtime или поддерживать прежние несовместимые API. Для исторических методик и архитектурных решений использовать [архив](docs/archive/) без восстановления старых планов как нормативных.

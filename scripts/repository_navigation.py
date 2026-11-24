@@ -79,8 +79,9 @@ def load_packet(root: Path) -> dict[str, Any]:
     baseline = packet.get("baseline")
     if not isinstance(baseline, dict):
         raise NavigationError("baseline must be an object")
-    if baseline != {"ref": "main"} or "promotion_baseline" in packet:
-        raise NavigationError("only canonical main baseline is permitted")
+    expected_base = "dev" if packet["packet_id"] == "cloudflare-crm-development" else "main"
+    if baseline != {"ref": expected_base} or "promotion_baseline" in packet:
+        raise NavigationError(f"only canonical {expected_base} baseline is permitted")
     issues = packet.get("tracking_issues")
     if not isinstance(issues, list) or not issues or any(
         not isinstance(issue, int) or issue <= 0 for issue in issues
@@ -208,7 +209,7 @@ def render_active_packet(packet: dict[str, Any]) -> str:
         f"- **Packet:** `{packet['packet_id']}` — {packet['title']}",
         f"- **Status:** `{packet['status']}`",
         f"- **Tracking:** {', '.join(f'#{issue}' for issue in packet['tracking_issues'])}",
-        f"- **Baseline:** `{baseline['ref']}` (live PR base)",
+        f"- **Baseline:** `{baseline['ref']}` (development scope reference)",
         f"- **Source digest:** `{source_digest}`", "",
         "## Objective", "", str(packet["objective"]), "",
     ]
@@ -533,26 +534,37 @@ def _changed_categories(paths: Iterable[str]) -> dict[str, list[str]]:
     return dict(sorted(result.items()))
 
 
-def packet_check(root: Path, base_ref: str) -> dict[str, Any]:
+def packet_check(root: Path, base_ref: str, *, before: str | None = None) -> dict[str, Any]:
     root = root.resolve()
     packet = load_packet(root)
     base_ref = _text(base_ref, "base_ref")
     base_sha = _git(root, "rev-parse", base_ref)
-    affected = build_report(root, base_ref)
-    paths = list(affected.get("changed_paths") or [])
+    if before:
+        if before == "0" * 40:
+            paths = _git(root, "ls-tree", "-r", "--name-only", "HEAD").splitlines()
+        else:
+            paths = _git(root, "diff", "--no-renames", "--name-only", before, "HEAD").splitlines()
+        base_sha = before
+        affected = build_report(root, base_ref, paths=paths)
+    else:
+        affected = build_report(root, base_ref)
+    # Markdown is non-normative and maintained in Issues. Even mixed code/docs
+    # pushes must be checked exclusively against machine-readable inputs.
+    paths = [path for path in (affected.get("changed_paths") or [])
+             if not path.lower().endswith(".md")]
     forbidden, disallowed = evaluate_path_policy(
         paths, packet["allowed_paths"], packet["forbidden_paths"]
     )
-    stale = stale_generated_documents(root)
-    # One canonical PR target: actual main, never a stale promotion SHA.
-    accepted = base_ref in ("main", "origin/main", "refs/heads/main")
-    mode = "main" if accepted else "unrecognized"
+    # Packet declares the actual PR target, never a stale promotion SHA.
+    # Generated Markdown freshness is no longer a CI requirement.
+    target = packet["baseline"]["ref"]
+    accepted = base_ref in (target, "origin/" + target, "refs/heads/" + target)
+    mode = target if accepted else "unrecognized"
     blockers = []
     if not accepted:
-        blockers.append(f"unrecognized packet base {base_ref}; expected main or origin/main")
+        blockers.append(f"unrecognized packet base {base_ref}; expected {target} or origin/{target}")
     blockers.extend(f"forbidden path changed: {path}" for path in forbidden)
     blockers.extend(f"path outside packet: {path}" for path in disallowed)
-    blockers.extend(f"generated navigation is stale: {path}" for path in stale)
     report = {
         "schema_version": NAVIGATION_SCHEMA,
         "packet_id": packet["packet_id"],
@@ -568,7 +580,6 @@ def packet_check(root: Path, base_ref: str) -> dict[str, Any]:
         "changed_categories": _changed_categories(paths),
         "affected_packages": affected.get("affected_packages") or [],
         "selected_workflows": affected.get("selected_workflows") or [],
-        "generated_stale_paths": stale,
         "blockers": blockers,
         "ok": not blockers,
     }

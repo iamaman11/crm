@@ -138,6 +138,7 @@ a:focus-visible,
 
 .crm-main {
   width: min(100%, 92rem);
+  min-width: 0;
   padding: clamp(1rem, 3vw, 2.5rem);
 }
 
@@ -246,7 +247,9 @@ a:focus-visible,
 
 @media (max-width: 760px) {
   .crm-shell-body {
-    grid-template-columns: 1fr;
+    /* A 1fr track has an auto min-content floor: a horizontally scrollable
+       Kanban can otherwise widen the entire mobile page instead of itself. */
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .crm-navigation {
@@ -350,3 +353,12 @@ a:focus-visible,
   color: var(--crm-text);
 }
 
+
+:root[data-theme="dark"]{color-scheme:dark;--crm-bg:#10151e;--crm-surface:#1a2230;--crm-surface-muted:#253146;--crm-text:#edf2fa;--crm-text-muted:#b8c5da;--crm-border:#42536c;--crm-accent:#9bb8ff;--crm-accent-strong:#b7ccff;--crm-success:#8ce0b5;--crm-warning:#ffd285;--crm-danger:#ffacb6;--crm-shadow:0 12px 30px rgb(0 0 0 / 25%);}
+@media(prefers-color-scheme:dark){:root[data-theme="system"]{color-scheme:dark;--crm-bg:#10151e;--crm-surface:#1a2230;--crm-surface-muted:#253146;--crm-text:#edf2fa;--crm-text-muted:#b8c5da;--crm-border:#42536c;--crm-accent:#9bb8ff;--crm-accent-strong:#b7ccff;--crm-success:#8ce0b5;--crm-warning:#ffd285;--crm-danger:#ffacb6;--crm-shadow:0 12px 30px rgb(0 0 0 / 25%);}}
+
+/* One feedback owner: while a native record panel is active, the in-panel
+   message is visible and the background duplicate is not exposed to users,
+   keyboard navigation or Playwright. After close the persistent notice returns. */
+body:has(dialog[open]) .crm-mutation-notice { display:none; }
+body:has(dialog[open]) dialog[open] .crm-mutation-notice { display:block; }

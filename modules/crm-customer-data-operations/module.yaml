@@ -26,134 +26,111 @@ provides:
       binding:
         kind: protobuf_rpc
         rpc: crm.customer_data_operations.v1.CustomerDataOperationsSourceService.CreatePartyImportSourceArtifact
-        request: crm.customer_data_operations.v1.CreatePartyImportSourceArtifactRequest
-        response: crm.customer_data_operations.v1.CreatePartyImportSourceArtifactResponse
     - id: customer_data.import.party.source.chunk.append
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.customer_data_operations.v1.CustomerDataOperationsSourceService.AppendPartyImportSourceChunk
-        request: crm.customer_data_operations.v1.AppendPartyImportSourceChunkRequest
-        response: crm.customer_data_operations.v1.AppendPartyImportSourceChunkResponse
     - id: customer_data.import.party.source.finalize
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.customer_data_operations.v1.CustomerDataOperationsSourceService.FinalizePartyImportSourceArtifact
-        request: crm.customer_data_operations.v1.FinalizePartyImportSourceArtifactRequest
-        response: crm.customer_data_operations.v1.FinalizePartyImportSourceArtifactResponse
     - id: customer_data.import.party.source.job.create
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.customer_data_operations.v1.CustomerDataOperationsSourceService.CreatePartyImportJobFromSourceArtifact
-        request: crm.customer_data_operations.v1.CreatePartyImportJobFromSourceArtifactRequest
-        response: crm.customer_data_operations.v1.CreatePartyImportJobFromSourceArtifactResponse
     - id: customer_data.import.party.source.rows.validate
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.customer_data_operations.v1.CustomerDataOperationsSourceService.ValidatePartyImportSourceBatch
-        request: crm.customer_data_operations.v1.ValidatePartyImportSourceBatchRequest
-        response: crm.customer_data_operations.v1.ValidatePartyImportSourceBatchResponse
     - id: customer_data.import.party.create
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.customer_data_operations.v1.CustomerDataOperationsService.CreatePartyImportJob
-        request: crm.customer_data_operations.v1.CreatePartyImportJobRequest
-        response: crm.customer_data_operations.v1.CreatePartyImportJobResponse
     - id: customer_data.import.party.rows.validate
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.customer_data_operations.v1.CustomerDataOperationsService.ValidatePartyImportRows
-        request: crm.customer_data_operations.v1.ValidatePartyImportRowsRequest
-        response: crm.customer_data_operations.v1.ValidatePartyImportRowsResponse
     - id: customer_data.import.party.validation.finalize
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.customer_data_operations.v1.CustomerDataOperationsService.FinalizePartyImportValidation
-        request: crm.customer_data_operations.v1.FinalizePartyImportValidationRequest
-        response: crm.customer_data_operations.v1.FinalizePartyImportValidationResponse
     - id: customer_data.import.party.execution.start
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.customer_data_operations.v1.CustomerDataOperationsService.StartPartyImportExecution
-        request: crm.customer_data_operations.v1.StartPartyImportExecutionRequest
-        response: crm.customer_data_operations.v1.StartPartyImportExecutionResponse
     - id: customer_data.import.party.cancel
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.customer_data_operations.v1.CustomerDataOperationsService.CancelPartyImportJob
-        request: crm.customer_data_operations.v1.CancelPartyImportJobRequest
-        response: crm.customer_data_operations.v1.CancelPartyImportJobResponse
     - id: customer_data.import.party.get
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.customer_data_operations.v1.CustomerDataOperationsService.GetPartyImportJob
-        request: crm.customer_data_operations.v1.GetPartyImportJobRequest
-        response: crm.customer_data_operations.v1.GetPartyImportJobResponse
     - id: customer_data.import.party.list
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.customer_data_operations.v1.CustomerDataOperationsService.ListPartyImportJobs
-        request: crm.customer_data_operations.v1.ListPartyImportJobsRequest
-        response: crm.customer_data_operations.v1.ListPartyImportJobsResponse
     - id: customer_data.import.party.rows.list
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.customer_data_operations.v1.CustomerDataOperationsService.ListPartyImportRows
-        request: crm.customer_data_operations.v1.ListPartyImportRowsRequest
-        response: crm.customer_data_operations.v1.ListPartyImportRowsResponse
     - id: customer_data.export.party.create
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.customer_data_operations.v1.CustomerDataExportService.CreatePartyExportJob
-        request: crm.customer_data_operations.v1.CreatePartyExportJobRequest
-        response: crm.customer_data_operations.v1.CreatePartyExportJobResponse
     - id: customer_data.export.party.execution.start
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.customer_data_operations.v1.CustomerDataExportService.StartPartyExportExecution
-        request: crm.customer_data_operations.v1.StartPartyExportExecutionRequest
-        response: crm.customer_data_operations.v1.StartPartyExportExecutionResponse
     - id: customer_data.export.party.cancel
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.customer_data_operations.v1.CustomerDataExportService.CancelPartyExportJob
-        request: crm.customer_data_operations.v1.CancelPartyExportJobRequest
-        response: crm.customer_data_operations.v1.CancelPartyExportJobResponse
     - id: customer_data.export.party.get
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.customer_data_operations.v1.CustomerDataExportService.GetPartyExportJob
-        request: crm.customer_data_operations.v1.GetPartyExportJobRequest
-        response: crm.customer_data_operations.v1.GetPartyExportJobResponse
     - id: customer_data.export.party.list
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.customer_data_operations.v1.CustomerDataExportService.ListPartyExportJobs
-        request: crm.customer_data_operations.v1.ListPartyExportJobsRequest
-        response: crm.customer_data_operations.v1.ListPartyExportJobsResponse
     - id: customer_data.privacy.scope.contribute
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.customer_privacy.v1.CustomerDataPrivacyScopeContributionService.CustomerDataPrivacyScopeContribution
-        request: crm.customer_privacy.v1.CustomerDataPrivacyScopeContributionRequest
-        response: crm.customer_privacy.v1.CustomerDataPrivacyScopeContributionResponse
+    - id: customer_data.csv.export.preview
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_data_operations.v2.PartyCsvService.PreviewPartyExport
+    - id: customer_data.csv.import.preview
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_data_operations.v2.PartyCsvService.PreviewPartyImport
+    - id: customer_data.csv.import.apply
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_data_operations.v2.PartyCsvService.ApplyPartyImport
   events:
     - id: customer_data.import.party.source.created
       version: 1.0.0

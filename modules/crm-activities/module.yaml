@@ -2,7 +2,7 @@ schema_version: crm.module/v1
 module_id: crm.activities
 version: 0.1.2
 display_name: CRM Activities
-description: Independent activities domain module owning tasks and reminder state.
+description: Independent activities owner for tasks, reminders and immutable interaction history.
 owner:
   team: activities-platform
   contact: crm-owner@example.com
@@ -24,43 +24,86 @@ provides:
       binding:
         kind: protobuf_rpc
         rpc: crm.activities.v1.TaskService.CreateTask
-        request: crm.activities.v1.CreateTaskRequest
-        response: crm.activities.v1.CreateTaskResponse
     - id: activities.task.update
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.activities.v1.TaskService.UpdateTask
-        request: crm.activities.v1.UpdateTaskRequest
-        response: crm.activities.v1.UpdateTaskResponse
     - id: activities.task.complete
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.activities.v1.TaskService.CompleteTask
-        request: crm.activities.v1.CompleteTaskRequest
-        response: crm.activities.v1.CompleteTaskResponse
     - id: activities.task.schedule_reminder
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.activities.v1.TaskService.ScheduleReminder
-        request: crm.activities.v1.ScheduleReminderRequest
-        response: crm.activities.v1.ScheduleReminderResponse
     - id: activities.task.get
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.activities.v1.TaskService.GetTask
-        request: crm.activities.v1.GetTaskRequest
-        response: crm.activities.v1.GetTaskResponse
     - id: activities.task.list
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.activities.v1.TaskService.ListTasks
-        request: crm.activities.v1.ListTasksRequest
-        response: crm.activities.v1.ListTasksResponse
+    - id: activities.task.create
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.activities.v2.TaskService.CreateTask
+    - id: activities.task.update
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.activities.v2.TaskService.UpdateTask
+    - id: activities.task.schedule_reminder
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.activities.v2.TaskService.ScheduleReminder
+    - id: activities.task.complete
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.activities.v2.TaskService.CompleteTask
+    - id: activities.task.get
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.activities.v2.TaskService.GetTask
+    - id: activities.task.list
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.activities.v2.TaskService.ListTasks
+    - id: activities.task.claim
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.activities.v2.TaskService.ClaimTask
+    - id: activities.task.workload.list
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.activities.v2.TaskService.ListTaskWorkload
+    - id: activities.interaction.create
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.activities.v2.InteractionService.CreateInteraction
+    - id: activities.interaction.get
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.activities.v2.InteractionService.GetInteraction
+    - id: activities.interaction.list
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.activities.v2.InteractionService.ListInteractions
   events:
     - id: activities.task.created
       version: 1.0.0
@@ -84,6 +127,7 @@ provides:
         message: crm.activities.v1.TaskReminderScheduledEvent
   objects:
     - activities.task
+    - activities.interaction
   ui_extensions:
     - id: activities.tasks.navigation
       type: navigation.item
@@ -101,6 +145,7 @@ consumes:
 storage:
   record_types:
     - activities.task
+    - activities.interaction
   private_state_namespaces:
     - crm.activities
 security:

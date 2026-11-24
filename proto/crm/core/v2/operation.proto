@@ -1,0 +1,118 @@
+syntax = "proto3";
+
+package crm.core.v2;
+
+import "google/protobuf/timestamp.proto";
+
+// Canonical units for NEW versioned CRM contracts. The historical
+// crm.core.v1.ExactMoney string representation remains unchanged for other
+// monorepo consumers. A currency's exponent is validated by the Rust owner.
+message ExactMoney {
+  int64 minor_units = 1;
+  string currency_code = 2;
+}
+
+// Authoritative Rust currency reference data; zero is a valid exponent.
+message CurrencyDefinition {
+  string currency_code = 1;
+  optional uint32 minor_unit_exponent = 2;
+}
+
+// Date-only values never carry an invented timezone or midnight instant.
+message CalendarDate {
+  int32 year = 1;
+  uint32 month = 2;
+  uint32 day = 3;
+}
+
+message PageRequest {
+  uint32 page_size = 1;
+  string page_token = 2;
+}
+
+message PageInfo {
+  string next_page_token = 1;
+}
+
+// Canonical owner selection for active contracts. No nullable or ambiguous
+// dual owner; the original domain validates the selected identifier.
+message ActorOrTeamOwner {
+  oneof owner {
+    // Business assignment target, NEVER the caller's authenticated identity.
+    // Write owners resolve it against the signed tenant's active human roster.
+    string assignee_identity = 1;
+    string team_id = 2;
+  }
+}
+
+message StringPatch {
+  oneof operation {
+    string set = 1;
+    bool clear = 2;
+  }
+}
+
+message MoneyPatch {
+  oneof operation {
+    ExactMoney set = 1;
+    bool clear = 2;
+  }
+}
+
+// Explicit Keep/Set/Clear calendar intent; a date never carries a timezone.
+message CalendarDatePatch {
+  oneof operation {
+    CalendarDate set = 1;
+    bool clear = 2;
+  }
+}
+
+message TimestampPatch {
+  oneof operation {
+    google.protobuf.Timestamp set = 1;
+    bool clear = 2;
+  }
+}
+
+// For create, expected_version is absent. Mutations must validate the
+// idempotency key, and updates must validate expected_version presence.
+message MutationPrecondition {
+  optional int64 expected_version = 1;
+  string idempotency_key = 2;
+}
+
+message MutationReceipt {
+  string request_id = 1;
+  int64 resource_version = 2;
+  bool replayed = 3;
+  // Immutable ID of the original committed request, absent for legacy receipts.
+  optional string original_request_id = 4;
+}
+
+// Read-only projection of an existing durable commit, not a mutation receipt.
+// The request ID identifies the verification read, not another write.
+message MutationCommitEvidence {
+  string request_id = 1;
+  int64 resource_version = 2;
+  string original_request_id = 3;
+}
+
+// An ErrorDetail is attached to a standard Connect error code; it is NOT
+// a parallel custom HTTP error envelope.
+message FieldViolation {
+  string field_path = 1;
+  string description = 2;
+}
+
+enum MutationCommitOutcome {
+  MUTATION_COMMIT_OUTCOME_UNSPECIFIED = 0;
+  MUTATION_COMMIT_OUTCOME_REJECTED = 1;
+  MUTATION_COMMIT_OUTCOME_UNCONFIRMED = 2;
+}
+
+message DomainErrorDetail {
+  string domain_code = 1;
+  repeated FieldViolation field_violations = 2;
+  string request_id = 3;
+  MutationCommitOutcome commit_outcome = 4;
+}

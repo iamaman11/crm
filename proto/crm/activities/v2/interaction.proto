@@ -1,0 +1,82 @@
+syntax = "proto3";
+
+package crm.activities.v2;
+
+import "crm/core/v2/operation.proto";
+import "google/protobuf/timestamp.proto";
+
+// A completed human interaction, not a planned Task or a Deal stage event.
+enum InteractionKind {
+  INTERACTION_KIND_UNSPECIFIED = 0;
+  INTERACTION_KIND_CALL = 1;
+  INTERACTION_KIND_MEETING = 2;
+  INTERACTION_KIND_NOTE = 3;
+}
+
+// Server supplies author, recorded_at and tenant; none are client inputs.
+message Interaction {
+  string interaction_id = 1;
+  string account_id = 2;
+  string deal_id = 3;
+  InteractionKind kind = 4;
+  string text = 5;
+  string author = 6;
+  google.protobuf.Timestamp occurred_at = 7;
+  google.protobuf.Timestamp recorded_at = 8;
+  int64 version = 9;
+}
+
+message CreateInteractionRequest {
+  string interaction_id = 1;
+  string account_id = 2;
+  // Empty means an Account-only event. A Deal must belong to this Account.
+  string deal_id = 3;
+  InteractionKind kind = 4;
+  string text = 5;
+  google.protobuf.Timestamp occurred_at = 6;
+  crm.core.v2.MutationPrecondition precondition = 7;
+}
+
+message CreateInteractionResponse {
+  Interaction interaction = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+message GetInteractionRequest {
+  string interaction_id = 1;
+  optional string receipt_idempotency_key = 2;
+}
+
+message GetInteractionResponse {
+  Interaction interaction = 1;
+  crm.core.v2.MutationCommitEvidence confirmed_mutation = 2;
+}
+
+message ListInteractionsRequest {
+  string account_id = 1;
+  // Empty lists both Account and linked Deal events. Nonempty only this Deal.
+  string deal_id = 2;
+  crm.core.v2.PageRequest page = 3;
+  // SK-06: request recent events across this authorized tenant only.
+  // Require an empty account_id and deal_id when true.
+  bool recent_across_accounts = 4;
+}
+
+message ListInteractionsResponse {
+  repeated Interaction interactions = 1;
+  crm.core.v2.PageInfo page_info = 2;
+  // Owner-resolved names, for the tenant-wide recent screen without N+1 reads.
+  map<string, string> account_names = 3;
+}
+
+service InteractionService {
+  rpc CreateInteraction(CreateInteractionRequest) returns (CreateInteractionResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc GetInteraction(GetInteractionRequest) returns (GetInteractionResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListInteractions(ListInteractionsRequest) returns (ListInteractionsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}

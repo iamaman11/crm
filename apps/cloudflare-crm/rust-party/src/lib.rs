@@ -1,33 +1,64 @@
 //! Sole native workers-rs CRM entrypoint, linked to the original crm-parties owner.
-//! ci-local is a strictly isolated workerd acceptance fixture, never a public
-//! authentication mechanism. No JS router, duplicate Party rules or second Worker.
+//! Signed native-ci keys are isolated to CI; production verifies Cloudflare Access.
 use serde::Deserialize;
 use serde_json::{Value, json};
 use wasm_bindgen::JsValue;
 use worker::*;
 
+#[cfg(feature = "native")]
 mod parties;
 
 #[cfg(feature = "native")]
 mod access;
 #[cfg(feature = "native")]
-mod accounts;
+mod access_members;
+#[cfg(feature = "native")]
+mod access_teams;
 #[cfg(feature = "native")]
 mod account_overview;
 #[cfg(feature = "native")]
-mod contact_points;
+mod accounts;
 #[cfg(feature = "native")]
-mod party_relationships;
+mod activity_interactions;
 #[cfg(feature = "native")]
 mod activity_tasks;
 #[cfg(feature = "native")]
-mod sales_deals;
+mod connect_sales;
 #[cfg(feature = "native")]
 mod consents;
 #[cfg(feature = "native")]
-mod sales_activities_link;
+mod contact_points;
+#[cfg(feature = "native")]
+mod customer_data_operations;
+#[cfg(feature = "native")]
+mod customer_enrichment;
+#[cfg(feature = "native")]
+mod customer_privacy;
+#[cfg(feature = "native")]
+mod d1_write;
+#[cfg(feature = "native")]
+mod data_quality;
+#[cfg(feature = "native")]
+mod diagnostics;
+#[cfg(feature = "native")]
+mod identity_resolution;
 #[cfg(feature = "native-ci")]
 mod original_domain_probe;
+#[cfg(feature = "native")]
+mod party_relationships;
+#[cfg(feature = "native")]
+mod sales_activities_link;
+#[cfg(feature = "native")]
+mod sales_contract;
+#[cfg(feature = "native")]
+mod sales_deals;
+#[cfg(feature = "native")]
+mod sales_pipelines;
+mod sales_routing;
+#[cfg(feature = "native")]
+mod sales_territories;
+#[cfg(feature = "native")]
+mod sales_views;
 
 fn native_request_id() -> Result<String> {
     use js_sys::{Function, Reflect};
@@ -38,7 +69,9 @@ fn native_request_id() -> Result<String> {
         .map_err(|_| worker::Error::RustError("randomUUID unavailable".into()))?
         .dyn_into::<Function>()
         .map_err(|_| worker::Error::RustError("crypto.randomUUID unavailable".into()))?;
-    func.call0(&crypto).map_err(|_| worker::Error::RustError("request_id generation failed".into()))?.as_string()
+    func.call0(&crypto)
+        .map_err(|_| worker::Error::RustError("request_id generation failed".into()))?
+        .as_string()
         .ok_or_else(|| worker::Error::RustError("invalid request_id".into()))
 }
 
@@ -50,46 +83,76 @@ fn error(code: &str, status: u16) -> Result<Response> {
     reply.headers_mut().set("x-crm-error-code", code)?;
     Ok(reply)
 }
+#[cfg(feature = "native")]
+fn rpc_error(error: connectrpc::ConnectError) -> Result<Response> {
+    // Unary binary Connect errors use the library's standard JSON envelope.
+    let mut reply =
+        Response::from_bytes(error.to_json().to_vec())?.with_status(error.http_status().as_u16());
+    reply
+        .headers_mut()
+        .set("content-type", "application/json")?;
+    reply
+        .headers_mut()
+        .set("x-crm-error-code", error.code.as_str())?;
+    Ok(reply)
+}
 fn now_nanos() -> i64 {
     (Date::now().as_millis() as i64).saturating_mul(1_000_000)
 }
 fn bind(db: &D1Database, sql: &str, values: &[JsValue]) -> Result<worker::d1::D1PreparedStatement> {
     db.prepare(sql).bind(values)
 }
-fn correlation_id(req: &Request, trusted: Option<&str>) -> Result<String> {
-    // Native's independently generated id takes precedence over any client header.
-    if let Some(id) = trusted { return Ok(id.to_owned()); }
-    // The public native and integrated entries overwrite this internal header.
-    // The isolated CI build generates its own identifier if the header is absent.
-    let id = req.headers().get("x-crm-internal-request-id")?
-        .filter(|value| value.len() == 36 &&
-            value.bytes().all(|byte| byte.is_ascii_hexdigit() || byte == b'-'));
-    match id { Some(id) => Ok(id), None => native_request_id() }
-}
 #[cfg(feature = "native")]
 #[derive(Deserialize)]
-struct SchemaCount { present: i64 }
+struct SchemaCount {
+    present: i64,
+}
 
 #[cfg(feature = "native")]
 async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
     // A truthful live, read-only diagnostic: this probes the active Rust
     // runtime and current D1 tables. CI/browser/Logs proof remains a separate
     // protected release artifact, never an invented live health result.
-    const EXPECTED: [&str; 18] = [
-        "crm_tenants", "crm_users", "crm_audit", "crm_party_records", "crm_party_receipts",
-        "crm_account_records", "crm_account_receipts",
-        "crm_contact_point_records", "crm_contact_point_receipts",
-        "crm_party_relationship_records", "crm_party_relationship_receipts",
-        "crm_activity_task_records", "crm_activity_task_receipts",
-        "crm_sales_deal_records", "crm_sales_deal_receipts",
-        "crm_consent_records", "crm_consent_receipts",
+    const EXPECTED: &[&str] = &[
+        "crm_tenants",
+        "crm_users",
+        "crm_audit",
+        "crm_party_records",
+        "crm_party_receipts",
+        "crm_account_records",
+        "crm_account_receipts",
+        "crm_contact_point_records",
+        "crm_contact_point_receipts",
+        "crm_party_relationship_records",
+        "crm_party_relationship_receipts",
+        "crm_activity_task_records",
+        "crm_activity_task_receipts",
+        "crm_sales_deal_records",
+        "crm_sales_deal_receipts",
+        "crm_sales_pipeline_records",
+        "crm_sales_pipeline_receipts",
+        "crm_consent_records",
+        "crm_consent_receipts",
         "crm_sales_link_delivery_records",
+        "crm_privacy_case_records",
+        "crm_privacy_case_receipts",
+        "crm_party_import_receipts",
+        "crm_enrichment_profiles",
+        "crm_enrichment_mappings",
+        "crm_enrichment_receipts",
     ];
     let db = env.d1("DB")?;
-    let bindings: Vec<JsValue> = EXPECTED.iter().map(|name| JsValue::from_str(name)).collect();
-    let row = bind(&db,
-        "SELECT COUNT(*) AS present FROM sqlite_master WHERE type='table' AND name IN (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        &bindings)?.first::<SchemaCount>(None).await?;
+    let bindings: Vec<JsValue> = EXPECTED
+        .iter()
+        .map(|name| JsValue::from_str(name))
+        .collect();
+    let placeholders = EXPECTED.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+    let schema_query = format!(
+        "SELECT COUNT(*) AS present FROM sqlite_master WHERE type='table' AND name IN ({placeholders})"
+    );
+    let row = bind(&db, &schema_query, &bindings)?
+        .first::<SchemaCount>(None)
+        .await?;
     let present = row.map_or(0, |value| value.present);
     let schema_ok = present == EXPECTED.len() as i64;
     let mut read_checks = serde_json::Map::new();
@@ -101,218 +164,927 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
             ("parties", "crm_party_records", "tenant"),
             ("accounts", "crm_account_records", "tenant"),
             ("contact-points", "crm_contact_point_records", "tenant"),
-            ("party-relationships", "crm_party_relationship_records", "tenant"),
+            (
+                "party-relationships",
+                "crm_party_relationship_records",
+                "tenant",
+            ),
             ("activity-tasks", "crm_activity_task_records", "tenant"),
             ("sales-deals", "crm_sales_deal_records", "tenant"),
+            ("sales-pipelines", "crm_sales_pipeline_records", "tenant"),
             ("consents", "crm_consent_records", "tenant"),
-            ("sales-activities-link", "crm_sales_link_delivery_records", "tenant"),
+            (
+                "sales-activities-link",
+                "crm_sales_link_delivery_records",
+                "tenant",
+            ),
+            ("customer-privacy", "crm_privacy_case_records", "tenant"),
+            (
+                "customer-enrichment-profiles",
+                "crm_enrichment_profiles",
+                "tenant",
+            ),
+            (
+                "customer-enrichment-mappings",
+                "crm_enrichment_mappings",
+                "tenant",
+            ),
         ] {
             // Table and column names are compiled-in constants, not user input.
             let query = format!("SELECT COUNT(*) AS present FROM {table} WHERE {column} = ?");
             let count = match bind(&db, &query, &[JsValue::from_str(tenant)]) {
-                Ok(statement) => statement.first::<SchemaCount>(None).await.ok().flatten().map(|x|x.present),
+                Ok(statement) => statement
+                    .first::<SchemaCount>(None)
+                    .await
+                    .ok()
+                    .flatten()
+                    .map(|x| x.present),
                 Err(_) => None,
             };
-            if count.is_none() { reads_ok = false; }
-            read_checks.insert(module.into(), json!({
-                "status": if count.is_some() { "PASS" } else { "FAIL" },
-                "visible_records": count,
-                "scope": "verified_access_tenant"
-            }));
+            if count.is_none() {
+                reads_ok = false;
+            }
+            read_checks.insert(
+                module.into(),
+                json!({
+                    "status": if count.is_some() { "PASS" } else { "FAIL" },
+                    "visible_records": count,
+                    "scope": "verified_access_tenant"
+                }),
+            );
         }
     }
     // Real audit-schema probe; if request_id is absent, the doctor must fail,
     // even when all nine table names still exist.
     let audit_trace = if schema_ok {
-        match bind(&db,
+        match bind(
+            &db,
             "SELECT COUNT(request_id) AS present FROM crm_audit WHERE tenant_id = ?",
-            &[JsValue::from_str(tenant)]) {
-            Ok(statement) => statement.first::<SchemaCount>(None).await.ok().flatten().map(|x|x.present),
+            &[JsValue::from_str(tenant)],
+        ) {
+            Ok(statement) => statement
+                .first::<SchemaCount>(None)
+                .await
+                .ok()
+                .flatten()
+                .map(|x| x.present),
             Err(_) => None,
         }
-    } else { None };
+    } else {
+        None
+    };
     let trace_ready = audit_trace.is_some();
-    let worker_version = env.object_var::<Value>("CF_VERSION_METADATA").ok()
-        .and_then(|metadata| metadata.get("id").and_then(Value::as_str).map(str::to_owned));
+    let worker_version = env
+        .object_var::<Value>("CF_VERSION_METADATA")
+        .ok()
+        .and_then(|metadata| {
+            metadata
+                .get("id")
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+        });
     let source = env.var("GIT_SHA").ok().map(|value| value.to_string());
-    let identity_ok = source.as_deref().is_some_and(|value| value.len()==40
-        && value.bytes().all(|byte| byte.is_ascii_hexdigit()))
-        && worker_version.as_deref().is_some_and(|value| value.len()==36);
+    let identity_ok = source.as_deref().is_some_and(|value| {
+        value.len() == 40 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+    }) && worker_version
+        .as_deref()
+        .is_some_and(|value| value.len() == 36);
     let healthy = schema_ok && reads_ok && trace_ready && identity_ok;
-    response(json!({
-        "application": "crm-dev",
-        "runtime": "workers-rs",
-        "entrypoint": "native-workers-rs",
-        "source": source.unwrap_or_else(|| "NOT_AVAILABLE".into()),
-        "worker_version": worker_version.unwrap_or_else(|| "NOT_AVAILABLE".into()),
-        "release": { "source_version": if identity_ok {"PASS"} else {"FAIL"},
-            "traffic_percentage": "EXTERNAL_CLOUDFLARE_DEPLOYMENTS_CHECK_REQUIRED",
-            "native_only": true },
-        "access": {"status": "PASS", "check": "signed JWT and enrolled tenant",
-            "principal_scope": "verified_access_tenant"},
-        "database": {"status": if schema_ok && reads_ok && trace_ready { "PASS" } else { "FAIL" },
-            "tables": {"present": present, "expected": EXPECTED.len()},
-            "tenant_reads": read_checks.clone(),
-            "audit": {"request_id_column": if trace_ready { "PASS" } else { "FAIL" },
-                "tenant_audit_rows_with_id": audit_trace }},
-        "modules": {
-            "crm.parties": {"read": read_checks.get("parties"), "business_owner": "original-crm-parties"},
-            "crm.sales-activities-link": {"read":read_checks.get("sales-activities-link"),
-                "business_owner":"original-crm-sales-activities-link",
-                "api":"native-workers-rs","delivery":"SYNCHRONOUS_ATOMIC_D1",
-                "ui":"NOT_CONNECTED",
-                "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
-            "crm.consents": {"read":read_checks.get("consents"),
-                "business_owner":"original-crm-consents","api":"native-workers-rs",
-                "ui":"NOT_CONNECTED","grant_evidence":"NOT_CONNECTED",
-                "operator_suppressions":"ENABLED",
-                "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
-            "crm.sales": {"read":read_checks.get("sales-deals"),
-                "business_owner":"original-crm-sales", "api":"native-workers-rs",
-                "ui":"REACT_CONNECTED_NOT_LIVE", "account":"ORIGINAL_DOMAIN_D1",
-                "primary_contact":"NOT_CONNECTED",
-                "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
-            "crm.activities": {"read":read_checks.get("activity-tasks"),
-                "business_owner":"original-crm-activities", "api":"native-workers-rs",
-                "ui":"REACT_CONNECTED_NOT_LIVE","completion":"ORIGINAL_DOMAIN",
-                "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
-            "crm.party-relationships": {"read":read_checks.get("party-relationships"),
-                "business_owner":"original-crm-party-relationships",
-                "api":"native-workers-rs", "ui":"NOT_CONNECTED",
-                "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
-            "crm.contact-points": {"read":read_checks.get("contact-points"),
-                "business_owner":"original-crm-contact-points",
-                "api":"native-workers-rs", "ui":"REACT_CONNECTED_NOT_LIVE",
-                "verification":"TRUSTED_EVIDENCE_NOT_CONNECTED",
-                "consent":"SEPARATE_DOMAIN_NOT_CONNECTED",
-                "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
-            "crm.customer-accounts": {"read":read_checks.get("accounts"),
-                "business_owner":"original-crm-customer-accounts",
-                "api":"native-workers-rs", "ui":"REACT_CONNECTED_NOT_LIVE",
-                "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
-            "crm.account-overview": {"read": "owner_composition_on_one_d1",
-                "business_owner":"native-worker-read-projection",
-                "ui":"REACT_CONNECTED_NOT_LIVE",
-                "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"}
-        },
-        "functional_cycle": {
-            "browser_buttons": "EXTERNAL_PROTECTED_CI_CHECK_REQUIRED",
-            "crud_writes": "EXTERNAL_PROTECTED_CI_CHECK_REQUIRED",
-            "d1_request_id": "EXTERNAL_PROTECTED_CI_CHECK_REQUIRED",
-            "cloudflare_logs": "EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"
-        }
-    }), if healthy {200} else {503})
+    response(
+        json!({
+            "application": "crm-dev",
+            "runtime": "workers-rs",
+            "entrypoint": "native-workers-rs",
+            "source": source.unwrap_or_else(|| "NOT_AVAILABLE".into()),
+            "worker_version": worker_version.unwrap_or_else(|| "NOT_AVAILABLE".into()),
+            "release": { "source_version": if identity_ok {"PASS"} else {"FAIL"},
+                "traffic_percentage": "EXTERNAL_CLOUDFLARE_DEPLOYMENTS_CHECK_REQUIRED",
+                "native_only": true },
+            "access": {"status": "PASS", "check": "signed JWT and enrolled tenant",
+                "principal_scope": "verified_access_tenant"},
+            "database": {"status": if schema_ok && reads_ok && trace_ready { "PASS" } else { "FAIL" },
+                "tables": {"present": present, "expected": EXPECTED.len()},
+                "tenant_reads": read_checks.clone(),
+                "audit": {"request_id_column": if trace_ready { "PASS" } else { "FAIL" },
+                    "tenant_audit_rows_with_id": audit_trace }},
+            "modules": {
+                "crm.parties": {"read": read_checks.get("parties"), "business_owner": "original-crm-parties"},
+                "crm.customer-enrichment": {
+                    "provider_profiles":read_checks.get("customer-enrichment-profiles"),
+                    "mapping_versions":read_checks.get("customer-enrichment-mappings"),
+                    "business_owner":"original-crm-customer-enrichment",
+                    "ui":"REACT_CONFIG_CONNECTED",
+                    "profile_mapping_publication":"ORIGINAL_DOMAIN_D1",
+                    "provider_dispatch":"NOT_CONNECTED",
+                    "suggestion_application":"NOT_CONNECTED",
+                    "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
+                "crm.customer-privacy": {"read":read_checks.get("customer-privacy"),
+                    "business_owner":"original-crm-customer-privacy",
+                    "ui":"REACT_INTAKE_CONNECTED",
+                    "draft_submit_cancel":"ORIGINAL_DOMAIN_D1",
+                    "subject_verification":"NOT_CONNECTED",
+                    "restriction_enforcement":"NOT_CONNECTED",
+                    "erasure_execution":"NOT_CONNECTED",
+                    "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
+                "crm.customer-data-operations": {"read":read_checks.get("parties"),
+                    "business_owner":"original-crm-customer-data-operations",
+                    "api":"ADMIN_BOUNDED_PARTY_CSV", "ui":"REACT_EXPORT",
+                    "scope":"MAX_100_PARTIES_FAIL_CLOSED",
+                    "export_job":"NOT_CONNECTED", "import":"BOUNDED_ATOMIC_CREATE_ONLY_CSV"},
+                "crm.data-quality": {"read":read_checks.get("parties"),
+                    "business_owner":"original-crm-data-quality",
+                    "api":"READ_ONLY_PARTY_NAME_RULES", "ui":"READ_ONLY_NAME_REVIEW",
+                    "rule_set":"BUILTIN_V1_NOT_TENANT_PERSISTED",
+                    "findings":"NOT_CONNECTED", "completeness_score":"NOT_CONNECTED"},
+                "crm.identity-resolution": {"read":read_checks.get("parties"),
+                    "business_owner":"original-crm-identity-resolution",
+                    "api":"READ_ONLY_PARTY_COMPARISON", "ui":"READ_ONLY_COMPARISON",
+                    "candidate_search":"READ_ONLY_EXACT_RECORDED_EMAIL", "match_evidence":"NOT_CONNECTED",
+                    "merge":"NOT_CONNECTED"},
+                "crm.sales-activities-link": {"read":read_checks.get("sales-activities-link"),
+                    "business_owner":"original-crm-sales-activities-link",
+                    "api":"native-workers-rs","delivery":"SYNCHRONOUS_ATOMIC_D1",
+                    "ui":"INTERNAL_LINK_NO_SCREEN",
+                    "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
+                "crm.consents": {"read":read_checks.get("consents"),
+                    "business_owner":"original-crm-consents","api":"native-workers-rs",
+                    "ui":"REACT_CONNECTED","grant_evidence":"SIGNED_SELF_VERIFIED_EMAIL_ONLY",
+                    "operator_suppressions":"ENABLED",
+                    "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
+                "crm.sales": {"read":read_checks.get("sales-deals"),
+                    "business_owner":"original-crm-sales", "api":"native-workers-rs",
+                    "ui":"REACT_CONNECTED", "account":"ORIGINAL_DOMAIN_D1",
+                    "primary_contact":"NOT_CONNECTED",
+                    "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
+                "crm.activities": {"read":read_checks.get("activity-tasks"),
+                    "business_owner":"original-crm-activities", "api":"native-workers-rs",
+                    "ui":"REACT_CONNECTED","completion":"ORIGINAL_DOMAIN",
+                    "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
+                "crm.party-relationships": {"read":read_checks.get("party-relationships"),
+                    "business_owner":"original-crm-party-relationships",
+                    "api":"native-workers-rs", "ui":"REACT_CONNECTED",
+                    "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
+                "crm.contact-points": {"read":read_checks.get("contact-points"),
+                    "business_owner":"original-crm-contact-points",
+                    "api":"native-workers-rs", "ui":"REACT_CONNECTED",
+                    "verification":"TRUSTED_EVIDENCE_NOT_CONNECTED",
+                    "consent":"SEPARATE_DOMAIN_NOT_CONNECTED",
+                    "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
+                "crm.customer-accounts": {"read":read_checks.get("accounts"),
+                    "business_owner":"original-crm-customer-accounts",
+                    "api":"native-workers-rs", "ui":"REACT_CONNECTED",
+                    "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
+                "crm.account-overview": {"read": "owner_composition_on_one_d1",
+                    "business_owner":"native-worker-read-projection",
+                    "ui":"REACT_CONNECTED",
+                    "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"}
+            },
+            "functional_cycle": {
+                "browser_buttons": "EXTERNAL_PROTECTED_CI_CHECK_REQUIRED",
+                "crud_writes": "EXTERNAL_PROTECTED_CI_CHECK_REQUIRED",
+                "d1_request_id": "EXTERNAL_PROTECTED_CI_CHECK_REQUIRED",
+                "cloudflare_logs": "EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"
+            }
+        }),
+        if healthy { 200 } else { 503 },
+    )
 }
 
-async fn dispatch(req: Request, env: Env, tenant: &str, trusted_id: Option<&str>,
-    role: Option<&str>, verified_actor: Option<&str>) -> Result<Response> {
-    let request_id = correlation_id(&req, trusted_id)?;
+// The only handwritten RPC activation and authorization table.
+// Paths are exact: a newly generated method is denied until explicitly classified.
+// CI compares this table against compiled Buf descriptors, registered Rust traits
+// and signed workerd evidence. HTTP POST does not imply write permission.
+#[cfg(feature = "native")]
+#[derive(Clone, Copy, PartialEq, Eq, serde::Serialize)]
+enum RpcPermission {
+    Read,
+    AdminRead,
+    Write,
+    SelfWrite,
+}
+
+#[cfg(feature = "native")]
+#[derive(Clone, Copy, serde::Serialize)]
+struct RpcPolicy {
+    permission: RpcPermission,
+}
+
+#[cfg(feature = "native")]
+impl RpcPolicy {
+    fn wire_error(
+        self,
+        error: connectrpc::ConnectError,
+        request_id: &str,
+        before_dispatch: bool,
+    ) -> connectrpc::ConnectError {
+        match self.permission {
+            RpcPermission::Write | RpcPermission::SelfWrite => {
+                diagnostics::wire_write_error(error, request_id, before_dispatch)
+            }
+            RpcPermission::Read | RpcPermission::AdminRead => error,
+        }
+    }
+}
+
+#[cfg(feature = "native")]
+const RPC_POLICIES: &[(&str, RpcPolicy)] = &[
+    (
+        "/crm.access.v2.MemberService/GetTeam",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.access.v2.MemberService/ListTeams",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.access.v2.MemberService/CreateTeam",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.access.v2.MemberService/UpdateTeam",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.activities.v2.TaskService/ClaimTask",
+        RpcPolicy {
+            permission: RpcPermission::SelfWrite,
+        },
+    ),
+    (
+        "/crm.access.v2.MemberService/GetMyMembership",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.access.v2.MemberService/ListMembers",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.access.v2.MemberService/GetMember",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.access.v2.MemberService/ProvisionMember",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.access.v2.MemberService/UpdateMember",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.activities.v2.InteractionService/CreateInteraction",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.activities.v2.InteractionService/GetInteraction",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.activities.v2.InteractionService/ListInteractions",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.customer_360.v2.Customer360Service/GetAccountOverview",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.customer_data_operations.v2.PartyCsvService/PreviewPartyExport",
+        RpcPolicy {
+            permission: RpcPermission::AdminRead,
+        },
+    ),
+    (
+        "/crm.customer_data_operations.v2.PartyCsvService/PreviewPartyImport",
+        RpcPolicy {
+            permission: RpcPermission::AdminRead,
+        },
+    ),
+    (
+        "/crm.customer_data_operations.v2.PartyCsvService/ApplyPartyImport",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.customer_enrichment.v2.EnrichmentConfigurationService/PublishProviderProfile",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.customer_enrichment.v2.EnrichmentConfigurationService/PublishMapping",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.customer_enrichment.v2.EnrichmentConfigurationService/GetProviderProfile",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.customer_enrichment.v2.EnrichmentConfigurationService/GetMapping",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.customer_enrichment.v2.EnrichmentConfigurationService/ListProviderProfiles",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.customer_enrichment.v2.EnrichmentConfigurationService/ListMappings",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.customer_privacy.v2.PrivacyCaseService/CreatePrivacyCase",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.customer_privacy.v2.PrivacyCaseService/SubmitPrivacyCase",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.customer_privacy.v2.PrivacyCaseService/VerifyOwnPrivacyCaseSubject",
+        RpcPolicy {
+            permission: RpcPermission::SelfWrite,
+        },
+    ),
+    (
+        "/crm.customer_privacy.v2.PrivacyCaseService/CancelPrivacyCase",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.customer_privacy.v2.PrivacyCaseService/PreviewOwnPrivacyScope",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.customer_privacy.v2.PrivacyCaseService/GetPrivacyCase",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.customer_privacy.v2.PrivacyCaseService/ListPrivacyCases",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.parties.v3.PartyService/CreateParty",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.parties.v3.PartyService/UpdateParty",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.parties.v3.PartyService/GetParty",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.parties.v3.PartyService/ListParties",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.accounts.v2.AccountService/CreateAccount",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.accounts.v2.AccountService/UpdateAccount",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.accounts.v2.AccountService/GetAccount",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.accounts.v2.AccountService/ListAccounts",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.contact_points.v2.ContactPointService/CreateContactPoint",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.contact_points.v2.ContactPointService/UpdateContactPoint",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.contact_points.v2.ContactPointService/VerifyOwnEmailContactPoint",
+        RpcPolicy {
+            permission: RpcPermission::SelfWrite,
+        },
+    ),
+    (
+        "/crm.contact_points.v2.ContactPointService/GetContactPoint",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.contact_points.v2.ContactPointService/ListContactPoints",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.party_relationships.v2.PartyRelationshipService/CreatePartyRelationship",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.party_relationships.v2.PartyRelationshipService/UpdatePartyRelationship",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.party_relationships.v2.PartyRelationshipService/GetPartyRelationship",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.party_relationships.v2.PartyRelationshipService/ListPartyRelationships",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.activities.v2.TaskService/CreateTask",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.activities.v2.TaskService/UpdateTask",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.activities.v2.TaskService/ScheduleReminder",
+        RpcPolicy {
+            permission: RpcPermission::SelfWrite,
+        },
+    ),
+    (
+        "/crm.activities.v2.TaskService/CompleteTask",
+        RpcPolicy {
+            permission: RpcPermission::SelfWrite,
+        },
+    ),
+    (
+        "/crm.activities.v2.TaskService/GetTask",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.activities.v2.TaskService/ListTasks",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.activities.v2.TaskService/ListTaskWorkload",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.data_quality.v2.DataQualityService/EvaluatePartyName",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.identity_resolution.v2.IdentityResolutionService/FindSharedEmailCandidates",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.identity_resolution.v2.IdentityResolutionService/CompareParties",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.identity_resolution.v2.IdentityResolutionService/MergeParty",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.identity_resolution.v2.IdentityResolutionService/UnmergeParty",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.identity_resolution.v2.IdentityResolutionService/GetMergeOperation",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.identity_resolution.v2.IdentityResolutionService/ListMergeOperationsByParty",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.identity_resolution.v2.IdentityResolutionService/ResolveCanonicalParty",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.consents.v2.ConsentAuthorizationService/EvaluateConsent",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.consents.v2.ConsentAuthorizationService/GetConsentAuthorization",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.consents.v2.ConsentAuthorizationService/SuppressCommunication",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.consents.v2.ConsentAuthorizationService/GrantVerifiedEmailConsent",
+        RpcPolicy {
+            permission: RpcPermission::SelfWrite,
+        },
+    ),
+    (
+        "/crm.consents.v2.ConsentAuthorizationService/WithdrawConsentAuthorization",
+        RpcPolicy {
+            permission: RpcPermission::SelfWrite,
+        },
+    ),
+    (
+        "/crm.consents.v2.ConsentAuthorizationService/ListConsentAuthorizations",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/CreateSalesRoutingRule",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/UpdateSalesRoutingRule",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/GetSalesRoutingRule",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/ListSalesRoutingRules",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/PreviewSalesRouting",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/CreateTerritory",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/UpdateTerritory",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/GetTerritory",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/ListTerritories",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/CreateSalesAccountAssignment",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/UpdateSalesAccountAssignment",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/GetSalesAccountAssignment",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/ListSalesAccountAssignments",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/CreateSalesView",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/UpdateSalesView",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/GetSalesView",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/ListSalesViews",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/CreatePipeline",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/UpdatePipeline",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/GetPipeline",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/ListPipelines",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/ListStageDeals",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/GetPipelineMetrics",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/CreateDeal",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/UpdateDeal",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/AdvanceStage",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/CloseDeal",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/ReopenDeal",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/ListDealEvents",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/GetDeal",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/ListDeals",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+];
+
+#[cfg(feature = "native")]
+fn rpc_policy(path: &str) -> Option<RpcPolicy> {
+    RPC_POLICIES
+        .iter()
+        .find(|(method, _)| *method == path)
+        .map(|(_, rule)| *rule)
+}
+
+#[cfg(feature = "native")]
+async fn dispatch(
+    req: Request,
+    env: Env,
+    _tenant: &str,
+    request_id: &str,
+    actor: &access::Actor,
+) -> Result<Response> {
     let path = req.path();
     let method = req.method();
-    // Minimal existing-role rule for the test CRM: an enrolled admin can write;
-    // other verified tenant members may only read. Consent evaluation is a
-    // non-mutating query despite its POST transport. Do not silently grant
-    // business mutation rights merely because Access verified a JWT.
-    #[cfg(feature = "native")]
-    if role != Some("admin")
-        && method != Method::Get
-        && !(path == "/api/consents/evaluate" && method == Method::Post)
-    {
-        return error("FORBIDDEN", 403);
+    if path.starts_with("/crm.") {
+        if method != Method::Post {
+            return rpc_error(connectrpc::ConnectError::unimplemented("POST required"));
+        }
+        // One explicit policy authorizes every registered RPC.
+        let Some(rule) = rpc_policy(&path) else {
+            return rpc_error(connectrpc::ConnectError::unimplemented("Unknown RPC"));
+        };
+        if matches!(
+            rule.permission,
+            RpcPermission::Write | RpcPermission::AdminRead
+        ) && actor.role != "admin"
+        {
+            return rpc_error(rule.wire_error(
+                connectrpc::ConnectError::permission_denied("FORBIDDEN"),
+                request_id,
+                true,
+            ));
+        }
+        return connect_sales::route(req, env, actor, request_id, rule).await;
     }
-    let db = env.d1("DB")?;
     // Explicitly CI-only, signed-Access-gated native workerd proof. This gate
     // performs no D1 writes and makes no claims about module persistence.
     #[cfg(feature = "native-ci")]
     if path == "/api/_ci/original-domain-check" && method == Method::Get {
+        let db = env.d1("DB")?;
         let code = original_domain_probe::check();
-        return response(json!({
-            "result": if code == 0 { "PASS" } else { "FAIL" },
-            "code": code,
-            "scope": "in-memory original owner domain contracts",
-            "owners_executed": ["crm.customer-accounts", "crm.contact-points",
-                "crm.sales", "crm.activities"],
-            "original_modules_compiled": 13,
-            "d1_owner_persistence": "NOT_TESTED",
-            "remaining_owners": "NOT_TESTED"
-        }), if code == 0 { 200 } else { 503 });
-    }
-    #[cfg(feature = "native")]
-    if path == "/api/consents" || path.starts_with("/api/consents/") {
-        let Some(actor)=verified_actor else{return error("AUTH_REQUIRED",401)};
-        let Some(role)=role else{return error("AUTH_REQUIRED",401)};
-        return consents::route(req,db,tenant,actor,role,&request_id).await;
-    }
-    #[cfg(feature = "native")]
-    if path == "/api/sales-deals" || path.starts_with("/api/sales-deals/") {
-        let Some(actor)=verified_actor else{return error("AUTH_REQUIRED",401)};
-        return sales_deals::route(req,db,tenant,actor,&request_id).await;
-    }
-    #[cfg(feature = "native")]
-    if path == "/api/activity-tasks" || path.starts_with("/api/activity-tasks/") {
-        let Some(actor)=verified_actor else{return error("AUTH_REQUIRED",401)};
-        return activity_tasks::route(req,db,tenant,actor,&request_id).await;
-    }
-    #[cfg(feature = "native")]
-    if path == "/api/party-relationships" || path.starts_with("/api/party-relationships/") {
-        return party_relationships::route(req, db, tenant, &request_id).await;
-    }
-    #[cfg(feature = "native")]
-    if path == "/api/contact-points" || path.starts_with("/api/contact-points/") {
-        return contact_points::route(req, db, tenant, &request_id).await;
-    }
-    #[cfg(feature = "native")]
-    if let Some(id) = path.strip_prefix("/api/accounts/")
-        .and_then(|segment| segment.strip_suffix("/overview"))
-    {
-        if id.is_empty() || id.contains('/') || method != Method::Get {
-            return error("NOT_FOUND", 404);
-        }
-        return account_overview::overview(&db, tenant, id).await;
-    }
-    #[cfg(feature = "native")]
-    if path == "/api/accounts" || path.starts_with("/api/accounts/") {
-        return accounts::route(req, db, tenant, &request_id).await;
-    }
-    if path == "/api/parties" || path.starts_with("/api/parties/") {
-        return parties::route(req, db, tenant, &request_id).await;
+        let receipt_read = sales_deals::probe_receipt_read(&db, _tenant, request_id).await;
+        let mut owners = connect_sales::MethodOwners::new();
+        let router = connect_sales::router(env, actor, request_id, Some(&mut owners));
+        let mut methods: Vec<String> = router
+            .methods()
+            .map(|path| format!("/{}", path.trim_start_matches('/')))
+            .collect();
+        methods.sort();
+        let mut policy_paths = std::collections::BTreeSet::new();
+        let policy_ok = RPC_POLICIES.iter().all(|(path, rule)| {
+            policy_paths.insert(*path)
+                && router.has_method(path)
+                && rpc_policy(path).is_some_and(|found| found.permission == rule.permission)
+        }) && methods.iter().all(|path| rpc_policy(path).is_some())
+            && rpc_policy("/crm.unregistered.v1.Service/Unknown").is_none();
+        let checked = code == 0 && policy_ok;
+        return response(
+            json!({
+                "result": if checked { "PASS" } else { "FAIL" },
+                "code": code,
+                "rpc": {"registered_methods": methods, "method_owners": owners, "policies": RPC_POLICIES,
+                    "compiled_policy_check": policy_ok},
+                "scope": "in-memory original owner domain contracts",
+                "owners_executed": ["crm.customer-accounts", "crm.contact-points",
+                    "crm.sales", "crm.activities"],
+                "original_modules_compiled": 13,
+                "d1_owner_persistence": "NOT_TESTED",
+                "receipt_read_classification": receipt_read,
+                "remaining_owners": "NOT_TESTED"
+            }),
+            if checked { 200 } else { 503 },
+        );
     }
     #[cfg(feature = "native")]
     {
         if path == "/api/health" && method == Method::Get {
-            return response(json!({"service":"crm-dev","status":"ok"}),200);
+            return response(json!({"service":"crm-dev","status":"ok"}), 200);
         }
         if path == "/api/session" && method == Method::Get {
-            return response(json!({"authenticated":true,"role":role}),200);
+            return response(json!({"authenticated":true,"role":actor.role}), 200);
         }
         if path == "/api/version" && method == Method::Get {
-            return response(json!({"source":env.var("GIT_SHA")
+            return response(
+                json!({"source":env.var("GIT_SHA")
                 .map(|x|x.to_string()).unwrap_or_default(),
-                "database":"D1","api":"crm.dev/v1"}),200);
+                "database":"D1","api":"crm.dev/v1"}),
+                200,
+            );
         }
     }
-    let _ = (env, role);
-    error("NOT_FOUND",404)
+    let _ = env;
+    error("NOT_FOUND", 404)
 }
 
 #[event(fetch)]
 pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
-    #[cfg(all(feature = "ci-local", feature = "native"))]
-    compile_error!("ci-local and native are mutually exclusive");
-
-    // Only the compiled-in test mode trusts a loopback CI-only header.
-    #[cfg(feature = "ci-local")]
-    {
-        if env.var("CRM_CI_LOCAL_ONLY").ok().map(|v| v.to_string()) != Some("yes".into()) {
-            return error("AUTH_REQUIRED", 403);
-        }
-        let Some(tenant) = req.headers().get("x-crm-ci-tenant")?
-            .filter(|s| s == "tenant-a" || s == "tenant-b") else {
-            return error("AUTH_REQUIRED", 403);
-        };
-        return dispatch(req, env, &tenant, None, None, None).await;
-    }
-
     #[cfg(feature = "native")]
     {
         // One correlation boundary, shared by Access, native domain and D1.
@@ -323,83 +1095,78 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         let method = req.method();
         // Read version binding before dispatch takes ownership of Env.
         let source_sha = env.var("GIT_SHA").ok().map(|value| value.to_string());
-        let operation = match (path.as_str(), method.clone()) {
-            ("/api/consents", Method::Get) => "consents.list",
-            ("/api/consents/evaluate", Method::Post) => "consents.evaluate",
-            ("/api/consents/suppress", Method::Post) => "consents.suppress",
-            ("/api/sales-deals", Method::Get) => "sales-deals.list",
-            ("/api/sales-deals", Method::Post) => "sales-deals.create",
-            (p, Method::Get) if p.starts_with("/api/sales-deals/") => "sales-deals.read",
-            (p, Method::Patch) if p.starts_with("/api/sales-deals/") => "sales-deals.update",
-            (p, Method::Post) if p.starts_with("/api/sales-deals/") && p.ends_with("/advance") => "sales-deals.advance",
-            ("/api/activity-tasks", Method::Get) => "activity-tasks.list",
-            ("/api/activity-tasks", Method::Post) => "activity-tasks.create",
-            (p, Method::Get) if p.starts_with("/api/activity-tasks/") => "activity-tasks.read",
-            (p, Method::Post) if p.starts_with("/api/activity-tasks/") && p.ends_with("/complete") => "activity-tasks.complete",
-            ("/api/party-relationships", Method::Get) => "party-relationships.list",
-            ("/api/party-relationships", Method::Post) => "party-relationships.create",
-            (p, Method::Get) if p.starts_with("/api/party-relationships/") => "party-relationships.read",
-            (p, Method::Patch) if p.starts_with("/api/party-relationships/") => "party-relationships.update",
-            ("/api/contact-points", Method::Get) => "contact-points.list",
-            ("/api/contact-points", Method::Post) => "contact-points.create",
-            (p, Method::Get) if p.starts_with("/api/contact-points/") => "contact-points.read",
-            (p, Method::Patch) if p.starts_with("/api/contact-points/") => "contact-points.update",
-            ("/api/accounts", Method::Get) => "accounts.list",
-            ("/api/accounts", Method::Post) => "accounts.create",
-            (p, Method::Get) if p.starts_with("/api/accounts/") && p.ends_with("/overview") => "accounts.overview",
-            (p, Method::Get) if p.starts_with("/api/accounts/") => "accounts.read",
-            (p, Method::Patch) if p.starts_with("/api/accounts/") => "accounts.update",
-            ("/api/parties", Method::Get) => "parties.list",
-            ("/api/parties", Method::Post) => "parties.create",
-            (p, Method::Get) if p.starts_with("/api/parties/") => "parties.read",
-            (p, Method::Patch) if p.starts_with("/api/parties/") => "parties.update",
-            ("/api/doctor", Method::Get) => "doctor.read",
-            ("/api/health", Method::Get) => "health.read",
-            ("/api/session", Method::Get) => "session.read",
-            ("/api/version", Method::Get) => "version.read",
-            _ => "unmatched",
+        let operation = path.as_str();
+        let rpc_failure = |error, before_dispatch| {
+            let error = match rpc_policy(&path) {
+                Some(policy) => policy.wire_error(error, &request_id, before_dispatch),
+                None => error,
+            };
+            rpc_error(error)
         };
         let (result, phase) = match access::actor(&req, &env).await {
-            Ok(Some(actor)) if path == "/api/doctor" && method == Method::Get =>
-                (native_doctor(&env, &actor.tenant).await, "diagnostics"),
-            Ok(Some(actor)) =>
-                (dispatch(req, env, &actor.tenant, Some(&request_id), Some(&actor.role), Some(&actor.identity)).await, "domain_d1"),
+            Ok(Some(actor)) if path == "/api/doctor" && method == Method::Get => {
+                (native_doctor(&env, &actor.tenant).await, "diagnostics")
+            }
+            Ok(Some(actor)) => (
+                dispatch(req, env, &actor.tenant, &request_id, &actor).await,
+                "domain_d1",
+            ),
+            Ok(None) if path.starts_with("/crm.") => (
+                rpc_failure(
+                    connectrpc::ConnectError::unauthenticated("AUTH_REQUIRED"),
+                    true,
+                ),
+                "access",
+            ),
             Ok(None) => (error("AUTH_REQUIRED", 401), "access"),
-            Err(_) => (error("ACCESS_INTERNAL_ERROR", 503), "access"),
+            Err(_) => {
+                diagnostics::read_failure(
+                    &request_id,
+                    "access",
+                    diagnostics::ReadFailureReason::AccessProviderFailed,
+                );
+                let reply = if path.starts_with("/crm.") {
+                    rpc_failure(
+                        connectrpc::ConnectError::unavailable("ACCESS_INTERNAL_ERROR"),
+                        true,
+                    )
+                } else {
+                    error("ACCESS_INTERNAL_ERROR", 503)
+                };
+                (reply, "access")
+            }
         };
         let mut reply = match result {
             Ok(reply) => reply,
+            Err(_) if path.starts_with("/crm.") => {
+                rpc_failure(connectrpc::ConnectError::internal("INTERNAL_ERROR"), false)?
+            }
             Err(_) => error("INTERNAL_ERROR", 500)?,
         };
         reply.headers_mut().set("x-request-id", &request_id)?;
-        let module = if path == "/api/doctor" { "crm.diagnostics" }
-            else if path.starts_with("/api/parties") { "crm.parties" }
-            else if path.starts_with("/api/accounts") { "crm.customer-accounts" }
-            else if path.starts_with("/api/contact-points") { "crm.contact-points" }
-            else if path.starts_with("/api/party-relationships") { "crm.party-relationships" }
-            else if path.starts_with("/api/activity-tasks") { "crm.activities" }
-            else if path.starts_with("/api/sales-deals") { "crm.sales" }
-            else if path.starts_with("/api/consents") { "crm.consents" }
-            else { "crm.platform" };
-        reply.headers_mut().set("x-crm-module", module)?;
-        reply.headers_mut().set("x-crm-runtime", "native-workers-rs")?;
-        if let Some(value) = source_sha {
-            if value.len() == 40 && value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-                reply.headers_mut().set("x-crm-source-sha", &value)?;
-            }
+        reply
+            .headers_mut()
+            .set("x-crm-runtime", "native-workers-rs")?;
+        if let Some(value) = source_sha
+            && value.len() == 40
+            && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+        {
+            reply.headers_mut().set("x-crm-source-sha", &value)?;
         }
         let elapsed = Date::now().as_millis().saturating_sub(started);
         let error_code = reply.headers().get("x-crm-error-code").ok().flatten();
-        console_log!("{}", json!({
-            "event":"crm.native.request", "request_id":request_id,
-            "module":module,
-            "operation":operation, "phase":phase,
-            "status":reply.status_code(), "error_code":error_code, "duration_ms":elapsed
-        }));
-        return Ok(reply);
+        diagnostics::request(
+            &request_id,
+            operation,
+            phase,
+            reply.status_code(),
+            error_code.as_deref(),
+            elapsed,
+        );
+        Ok(reply)
     }
 
-    #[cfg(not(any(feature = "ci-local", feature = "native")))]
+    #[cfg(not(feature = "native"))]
     {
         let _ = (req, env);
         error("AUTH_REQUIRED", 403)
