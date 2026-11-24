@@ -996,11 +996,13 @@ impl CreditResolution {
         };
         let context = crm_sales::CloseCreditContext {
             teams: Vec::new(),
-            territory: territory.as_ref().map(|value| crm_sales::CommercialDimension {
-                id: value.territory_id.clone(),
-                name: value.name.clone(),
-                version: value.version,
-            }),
+            territory: territory
+                .as_ref()
+                .map(|value| crm_sales::CommercialDimension {
+                    id: value.territory_id.clone(),
+                    name: value.name.clone(),
+                    version: value.version,
+                }),
             assignment_version: assignment
                 .as_ref()
                 .filter(|value| !value.archived)
@@ -1163,10 +1165,11 @@ async fn stage_mutation(
                     reason_code,
                     occurred_at_unix_nanos: now_nanos(),
                 },
-                credit.as_ref().map_or_else(
-                    crm_sales::CloseCreditContext::default,
-                    |value| value.context.clone(),
-                ),
+                credit
+                    .as_ref()
+                    .map_or_else(crm_sales::CloseCreditContext::default, |value| {
+                        value.context.clone()
+                    }),
             )
         }
     };
@@ -1189,7 +1192,9 @@ async fn stage_mutation(
             return Ok(rejected_sdk(e));
         }
     };
-    let mut update_sql = String::from("UPDATE crm_sales_deal_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=?,last_action=? WHERE tenant=? AND id=? AND version=?");
+    let mut update_sql = String::from(
+        "UPDATE crm_sales_deal_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=?,last_action=? WHERE tenant=? AND id=? AND version=?",
+    );
     let mut update_values = vec![
         JsValue::from_str(&saved),
         JsValue::from_f64(deal.version() as f64),

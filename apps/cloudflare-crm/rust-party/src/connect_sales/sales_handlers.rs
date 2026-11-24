@@ -1539,7 +1539,9 @@ impl sale_wire::DealService for SalesV2Service {
                         .as_deref()
                         .map(|raw| {
                             let value: crm_sales::CommercialCloseFact = serde_json::from_str(raw)
-                                .map_err(|_| ConnectError::internal("SALES_COMMERCIAL_EVENT_INVALID"))?;
+                                .map_err(|_| {
+                                ConnectError::internal("SALES_COMMERCIAL_EVENT_INVALID")
+                            })?;
                             Self::commercial_fact_wire(&value)
                         })
                         .transpose()?
