@@ -188,10 +188,15 @@ jobs:
       - name: Build the test Worker, run Rust owner tests and prepare Chromium
         env:
           CARGO_PROFILE_TEST_DEBUG: line-tables-only
+          RUST_LOG: worker_build::build=info
         working-directory: apps/cloudflare-crm
         shell: bash
         run: |
-          (cd rust-party && worker-build --dev --locked --features native-ci) &
+          # Cargo's own HTML report; no second compilation or custom profiler.
+          mkdir -p "$RUNNER_TEMP/crm-cargo-timings"
+          rm -f rust-party/target/cargo-timings/cargo-timing.html
+          (cd rust-party && worker-build --dev --locked --features native-ci --timings &&
+            cp target/cargo-timings/cargo-timing.html "$RUNNER_TEMP/crm-cargo-timings/native-ci.html") &
           worker_pid=$!
           (cd "$GITHUB_WORKSPACE" && python apps/cloudflare-crm/scripts/test-rust-owners.py) &
           owners_pid=$!
@@ -204,17 +209,28 @@ jobs:
         id: crm_native_workerd
         working-directory: apps/cloudflare-crm
         env:
+          RUST_LOG: worker_build::build=info
           CRM_SOURCE_SHA: ${{ github.sha }}
           CRM_RPC_RUNTIME_PROOF: /tmp/crm-rpc-runtime.json
         shell: bash
         run: |
           # Workerd reads the completed native-ci build. The release has its own output directory.
-          (cd rust-party && worker-build --release --out-dir ../.release/native-build --locked --features native) &
+          rm -f rust-party/target/cargo-timings/cargo-timing.html
+          (cd rust-party && worker-build --release --out-dir ../.release/native-build --locked --features native --timings &&
+            cp target/cargo-timings/cargo-timing.html "$RUNNER_TEMP/crm-cargo-timings/native-release.html") &
           release_pid=$!
           status=0
           node rust-party/test/native.mjs || status=$?
           wait "$release_pid" || status=$?
           exit "$status"
+      - name: Preserve Cargo build timing reports
+        if: ${{ always() && steps.crm_native_workerd.outcome != 'skipped' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: crm-cargo-timings-${{ github.sha }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/crm-cargo-timings/*.html
+          if-no-files-found: warn
+          retention-days: 7
       - name: Verify compiled router, executed policy and RPC calls against Buf
         run: |
           set -euo pipefail
