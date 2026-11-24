@@ -5587,10 +5587,16 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      assert.equal(response.status,status,method+": "+describeProtobuf(response.body));
      return response.body;
    };
+   const revision=async tenant=>BigInt((await sql("SELECT CAST(COALESCE((SELECT revision FROM crm_sales_forecast_revisions WHERE tenant=?),0) AS TEXT) AS revision",tenant))[0].revision);
+   const initialFence=await revision("tenant-a"),initialOtherFence=await revision("tenant-b");
    for(const [label,email] of [["a",emailA],["b",emailB]])assert.equal((await memberV2("ProvisionMember",admin,{email,role:1,precondition:pre("member-"+label)})).status,200);
+   assert.equal(await revision("tenant-a"),initialFence+2n);
    assert.equal((await memberV2("CreateTeam",admin,{teamId:team,name:"Routing QA "+suffix,roster:{memberEmails:[emailA,emailB]},precondition:pre("team")})).status,200);
+   assert.equal(await revision("tenant-a"),initialFence+3n);
    await call("CreatePipeline",admin,{pipelineId:pipeline,name:"Routing "+suffix,stages:[{stageId:"lead",name:"Lead",probabilityBasisPoints:5000}],precondition:pre("pipeline")});
    await call("CreateTerritory",admin,{territoryId,configuration:{name:"Routing territory "+suffix,defaultOwner:actor(emailB)},precondition:pre("territory")});
+   assert.equal(await revision("tenant-a"),initialFence+4n);
+   assert.equal(await revision("tenant-b"),initialOtherFence);
    const stage={pipelineId:pipeline,stageId:"lead",ordinal:1};
    const facts={accountId,stage,territoryId,amount:{currencyCode:"EUR",minorUnits:100n}};
    const cfg={name:"Routing workload "+suffix,priority:10,criteria:{territoryId,pipelineId:pipeline,stageId:"lead",currencyCode:"EUR",minimumMinorUnits:100n,maximumMinorUnits:100n},target,dispatch:2,maximumOpenDeals:1,overflow:1};
@@ -5672,7 +5678,9 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    const noTerritory={accountId,stage,amount:facts.amount};
    await call("PreviewSalesRouting",viewer,noTerritory,409);
    const previousAssignment=(await call("GetSalesAccountAssignment",viewer,{accountId})).assignment;
+   const beforeAssignmentFence=await revision("tenant-a");
    await call("UpdateSalesAccountAssignment",admin,{accountId,configuration:{territoryId,primaryOwner:actor(emailB),overlays:[],archived:false},precondition:pre("assignment",previousAssignment.version)});
+   assert.equal(await revision("tenant-a"),beforeAssignmentFence+1n);
    assert.equal((await call("PreviewSalesRouting",viewer,noTerritory)).decision.source,2);
    await call("PreviewSalesRouting",viewer,{...facts,territoryId:"conflicting-"+suffix},409);
    await call("PreviewSalesRouting",tenantB,facts,409);
@@ -5876,6 +5884,80 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=?","tenant-a"))[0].n,readBefore);
    assert.equal((await sql("SELECT COUNT(*) n FROM crm_sales_performance_forecast_sources WHERE tenant=? AND report_id=?","tenant-a",reportId))[0].n,7);
    assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=?","tenant-a",reportId))[0].n,1);
+   // Industrial synchronous capture: >2500 open rows, independent of the
+   // closed-event scale proof above. Clone only disposable valid fixture state.
+   const prefix="report-scale-open-"+suffix+"-";
+   const openScale=2501,limitScale=8193;
+   const scaledReportId="report-open-scale-"+suffix;
+   const capacityReportId="report-capacity-"+suffix;
+   const cloneOpen=async(first,last)=>sql(
+     `WITH RECURSIVE nums(n) AS (SELECT ?1 UNION ALL SELECT n+1 FROM nums WHERE n<?2)
+      INSERT INTO crm_sales_deal_records(tenant,id,account_id,state,version,idem_key,idem_digest,request_id,actor)
+      SELECT d.tenant,?3||printf('%06d',n),d.account_id,json_set(d.state,'$.deal_id',?3||printf('%06d',n)),
+        d.version,?3||printf('%06d',n),d.idem_digest,?3||printf('%06d',n),d.actor
+      FROM nums CROSS JOIN crm_sales_deal_records d WHERE d.tenant=?4 AND d.id=?5`,
+     first,last,prefix,"tenant-a",forecastInputs[0].dealId);
+   const beforeFence=await revision("tenant-a"),otherFence=await revision("tenant-b");
+   try{
+     await cloneOpen(1,openScale);
+     assert.equal(await revision("tenant-a"),beforeFence+BigInt(openScale));
+     assert.equal(await revision("tenant-b"),otherFence);
+     const openAmount=3001n+BigInt(openScale)*1001n;
+     const weightedAmount=10005000n+BigInt(openScale)*1001n*5000n;
+     const captureInput={quotaId,quotaVersion:2n,pageSize:1};
+     const started=Date.now();
+     const largePreview=await call("PreviewSalesPerformanceReport",viewer,captureInput);
+     const previewMs=Date.now()-started;
+     assert.equal(largePreview.report.forecast.openMinorUnits,String(openAmount));
+     assert.equal(largePreview.report.forecast.weightedMinorUnitsTimesBasisPoints,String(weightedAmount));
+     assert.equal(largePreview.report.forecast.includedCount,BigInt(openScale+2));
+     assert.equal(largePreview.forecastSources.length,1);
+     assert.equal(largePreview.moreForecastSources,true);
+     const saveStart=Date.now();
+     const largeReport=(await call("SaveSalesPerformanceReport",admin,{...reportIntent,reportId:scaledReportId,precondition:pre("open-scale-report")})).report;
+     const saveMs=Date.now()-saveStart;
+     assert.deepEqual(largeReport.forecast,largePreview.report.forecast);
+     assert.equal((await sql("SELECT COUNT(*) n FROM crm_sales_performance_forecast_sources WHERE tenant=? AND report_id=?","tenant-a",scaledReportId))[0].n,openScale+7);
+     const tail=await call("GetSalesPerformanceReport",viewer,{reportId:scaledReportId,forecastAfter:prefix+String(openScale-1).padStart(6,"0"),pageSize:1});
+     assert.equal(tail.forecastSources[0].dealId,prefix+String(openScale).padStart(6,"0"));
+     assert.equal(tail.forecastSources[0].amount.minorUnits,1001n);
+     assert.equal(tail.forecastSources[0].probabilityBasisPoints,5000);
+     await call("GetSalesPerformanceReport",tenantB,{reportId:scaledReportId},404);
+     const fence=await revision("tenant-a");
+     await assert.rejects(()=>batch([
+       statement("UPDATE crm_sales_deal_records SET state=state WHERE tenant=? AND id=?","tenant-a",forecastInputs[0].dealId),
+       statement("INSERT INTO crm_ci_missing_forecast_table VALUES (1)")
+     ]));
+     assert.equal(await revision("tenant-a"),fence,"failed batch must roll back the fence");
+     // Real concurrent read and atomic fixture mutation: a successful report
+     // must be wholly before or wholly after the change, never a mixed sum.
+     const [race]=await Promise.all([
+       salesV2("PreviewSalesPerformanceReport",viewer,captureInput),
+       sql("UPDATE crm_sales_deal_records SET state=json_set(state,'$.probability_basis_points',1000) WHERE tenant=? AND id LIKE ?","tenant-a",prefix+"%")
+     ]);
+     const newWeight=10005000n+BigInt(openScale)*1001n*1000n;
+     assert.ok([200,409].includes(race.status),describeProtobuf(race.body));
+     if(race.status===200)assert.ok([String(weightedAmount),String(newWeight)].includes(race.body.report.forecast.weightedMinorUnitsTimesBasisPoints),"mixed capture");
+     else assert.match(race.body.message,/SALES_FORECAST_SNAPSHOT_CHANGED/);
+     assert.equal((await call("PreviewSalesPerformanceReport",viewer,captureInput)).report.forecast.weightedMinorUnitsTimesBasisPoints,String(newWeight));
+     assert.deepEqual((await call("GetSalesPerformanceReport",viewer,{reportId:scaledReportId,pageSize:1})).report,largeReport);
+     await cloneOpen(openScale+1,limitScale);
+     const oversized=await salesV2("PreviewSalesPerformanceReport",viewer,captureInput);
+     assert.equal(oversized.status,429,describeProtobuf(oversized.body));
+     assert.match(oversized.body.message,/SALES_FORECAST_CAPTURE_CAPACITY/);
+     const refused=await salesV2("SaveSalesPerformanceReport",admin,{...reportIntent,reportId:capacityReportId,precondition:pre("capacity-report")});
+     assert.equal(refused.status,429,describeProtobuf(refused.body));
+     assert.equal((await sql("SELECT COUNT(*) n FROM crm_sales_performance_reports WHERE tenant=? AND id=?","tenant-a",capacityReportId))[0].n,0);
+     assert.equal((await sql("SELECT COUNT(*) n FROM crm_sales_performance_forecast_sources WHERE tenant=? AND report_id=?","tenant-a",capacityReportId))[0].n,0);
+     assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=?","tenant-a",capacityReportId))[0].n,0);
+     assert.equal(await revision("tenant-b"),otherFence);
+     console.log(JSON.stringify({event:"crm.native-d3-open-forecast-scale",result:"PASS",added_open_deals:openScale,preview_ms:previewMs,save_ms:saveMs,capture_capacity_rejected:true,concurrent_outcome:race.status,exact_weight:true,tenant_fence:true,rollback_fence:true}));
+   }finally{
+     await sql("DELETE FROM crm_sales_deal_events WHERE tenant=? AND deal_id LIKE ?","tenant-a",prefix+"%");
+     await sql("DELETE FROM crm_sales_deal_receipts WHERE tenant=? AND key LIKE ?","tenant-a",prefix+"%");
+     await sql("DELETE FROM crm_audit WHERE tenant_id=? AND subject_id LIKE ?","tenant-a",prefix+"%");
+     await sql("DELETE FROM crm_sales_deal_records WHERE tenant=? AND id LIKE ?","tenant-a",prefix+"%");
+   }
    const faultId="report-fault-"+suffix;
    await sql("CREATE TRIGGER fixture_report_audit_fail BEFORE INSERT ON crm_audit WHEN NEW.action='sales.performance_report.save' BEGIN SELECT RAISE(ABORT,'fixture report audit rollback'); END;");
    try{
@@ -5883,8 +5965,11 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      assert.equal((await sql("SELECT COUNT(*) n FROM crm_sales_performance_reports WHERE tenant=? AND id=?","tenant-a",faultId))[0].n,0);
      assert.equal((await sql("SELECT COUNT(*) n FROM crm_sales_performance_forecast_sources WHERE tenant=? AND report_id=?","tenant-a",faultId))[0].n,0);
    }finally{await sql("DROP TRIGGER fixture_report_audit_fail");}
+   const beforeOwnerFence=await revision("tenant-a");
    const changedForecast=await call("UpdateDeal",admin,{dealId:forecastInputs[0].dealId,amount:{operation:{case:"set",value:{currencyCode:"EUR",minorUnits:9000n}}},precondition:pre("forecast-update",1n)});
    assert.equal(changedForecast.deal.version,2n);
+   assert.equal(await revision("tenant-a"),beforeOwnerFence+1n);
+   assert.equal(await revision("tenant-b"),otherFence);
    assert.equal((await call("PreviewSalesPerformanceReport",viewer,{quotaId,quotaVersion:2n})).report.forecast.openMinorUnits,"11000");
    assert.deepEqual(await call("GetSalesPerformanceReport",viewer,getReport),readReport);
    for(const [index,input] of forecastInputs.entries())await call("CloseDeal",admin,{dealId:input.dealId,outcome:3,reasonCode:"qa.report.cleanup",precondition:pre("report-close-"+index,index===0?2n:1n)});

@@ -1,10 +1,11 @@
 //! D1 persistence of the original Sales performance report. The current
-//! portfolio is captured in ONE statement, and actual events use its cutoff.
+//! portfolio uses indexed keyset pages fenced by a tenant-local revision.
+//! Each page and its fence are read in the same D1 statement.
 use super::{bind, d1_write, diagnostics::ReceiptUncertainty, sales_deals};
-use connectrpc::ErrorCode;
+use connectrpc::{ConnectError, ErrorCode};
 use crm_sales::{
-    CloseCreditContext, CommercialDimension, ForecastSource, PerformanceReport,
-    SalesAccountAssignment, SalesQuota, SalesTerritory,
+    CloseCreditContext, CommercialDimension, ForecastAccumulator, ForecastSource,
+    PerformanceReport, SalesAccountAssignment, SalesQuota, SalesTerritory,
 };
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -21,18 +22,60 @@ pub(super) fn decode(raw: &str) -> Result<PerformanceReport> {
     PerformanceReport::decode(raw).map_err(|e| worker::Error::RustError(e.code))
 }
 
+// The synchronous envelope is explicit, not a silent LIMIT on totals.
+// 32 full pages + end probe, plus existing auth/actuals/commit reads.
+// A future durable bulk job can reuse the accumulator and versioned sources.
+const CAPTURE_PAGE: usize = 256;
+const MAX_CANDIDATES: usize = 8192;
+const MAX_ROW_BYTES: usize = 16 * 1024;
+const MAX_SOURCE_BYTES: usize = 8192;
+const MAX_CAPTURE_BYTES: usize = 8 * 1024 * 1024;
+
+pub(super) enum CaptureFailure {
+    Storage,
+    Changed,
+    Capacity,
+}
+
+impl From<worker::Error> for CaptureFailure {
+    fn from(_: worker::Error) -> Self {
+        Self::Storage
+    }
+}
+
+impl CaptureFailure {
+    pub(super) fn connect(self) -> ConnectError {
+        match self {
+            Self::Storage => ConnectError::internal("SALES_FORECAST_SNAPSHOT_FAILED"),
+            Self::Changed => ConnectError::aborted("SALES_FORECAST_SNAPSHOT_CHANGED"),
+            Self::Capacity => {
+                ConnectError::resource_exhausted("SALES_FORECAST_CAPTURE_CAPACITY")
+            }
+        }
+    }
+}
+
 pub(super) struct Snapshot {
     pub captured_at: i64,
     pub event_sequence: i64,
     pub actual_candidate_count: u64,
+    pub forecast: ForecastAccumulator,
     pub sources: Vec<ForecastSource>,
 }
 
 #[derive(Deserialize)]
-struct SnapshotRow {
+struct CaptureAnchor {
     captured_at: String,
     event_sequence: String,
     actual_candidate_count: String,
+    revision: String,
+}
+
+#[derive(Deserialize)]
+struct SnapshotRow {
+    revision: String,
+    id: Option<String>,
+    oversized: i64,
     deal: Option<String>,
     teams: String,
     assignment: Option<String>,
@@ -86,71 +129,135 @@ pub(super) async fn snapshot(
     db: &D1Database,
     tenant: &str,
     quota: &SalesQuota,
-) -> Result<Snapshot> {
-    let teams = sales_deals::credit_teams_sql(
-        "d.tenant",
-        "json_extract(d.state,'$.owner.kind')",
-        "COALESCE(json_extract(d.state,'$.owner.actor_id'),json_extract(d.state,'$.owner.team_id'))",
+    keep: Option<usize>,
+) -> std::result::Result<Snapshot, CaptureFailure> {
+    let anchor_sql = format!(
+        "WITH clock AS MATERIALIZED (SELECT CAST(strftime('%s','now') AS INTEGER)*1000000000 + CAST(substr(strftime('%f','now'),4,3) AS INTEGER)*1000000 captured_at, (SELECT COALESCE(MAX(sequence),0) FROM crm_sales_commercial_event_order WHERE tenant=?1) sequence, COALESCE((SELECT revision FROM crm_sales_forecast_revisions WHERE tenant=?1),0) revision) SELECT CAST(c.captured_at AS TEXT) captured_at,CAST(c.sequence AS TEXT) event_sequence,CAST(c.revision AS TEXT) revision,CAST(({MEMBERSHIP} AND e.occurred_at_unix_nanos<=c.captured_at AND o.sequence<=c.sequence) AS TEXT) actual_candidate_count FROM clock c"
     );
-    let sql = format!(
-        "WITH clock AS MATERIALIZED (SELECT CAST(strftime('%s','now') AS INTEGER)*1000000000 + CAST(substr(strftime('%f','now'),4,3) AS INTEGER)*1000000 captured_at, (SELECT COALESCE(MAX(sequence),0) FROM crm_sales_commercial_event_order WHERE tenant=?1) sequence),          snapshot AS MATERIALIZED (SELECT c.captured_at,c.sequence,({MEMBERSHIP} AND e.occurred_at_unix_nanos<=c.captured_at AND o.sequence<=c.sequence) candidate_count FROM clock c)          SELECT CAST(s.captured_at AS TEXT) captured_at,CAST(s.sequence AS TEXT) event_sequence,CAST(s.candidate_count AS TEXT) actual_candidate_count,d.state deal,({teams}) teams,a.state assignment,t.state territory          FROM snapshot s LEFT JOIN crm_sales_deal_records d ON d.tenant=?1 AND json_extract(d.state,'$.status')='open' AND (?4 IS NULL OR json_extract(d.state,'$.stage.pipeline_id')=?4)          LEFT JOIN crm_sales_account_assignment_records a ON a.tenant=d.tenant AND a.id=d.account_id          LEFT JOIN crm_sales_territory_records t ON t.tenant=d.tenant AND t.id=json_extract(a.state,'$.territory_id') AND json_extract(a.state,'$.archived')=0          ORDER BY d.id"
-    );
-    let rows = bind(db, &sql, &membership_parameters(tenant, quota)?)?
-        .all()
+    let anchor = bind(db, &anchor_sql, &membership_parameters(tenant, quota)?)?
+        .first::<CaptureAnchor>(None)
         .await?
-        .results::<SnapshotRow>()?;
-    let first = rows.first().ok_or_else(invalid)?;
+        .ok_or_else(invalid)?;
     let mut snapshot = Snapshot {
-        captured_at: first.captured_at.parse().map_err(|_| invalid())?,
-        event_sequence: first.event_sequence.parse().map_err(|_| invalid())?,
-        actual_candidate_count: first
+        captured_at: anchor.captured_at.parse().map_err(|_| invalid())?,
+        event_sequence: anchor.event_sequence.parse().map_err(|_| invalid())?,
+        actual_candidate_count: anchor
             .actual_candidate_count
             .parse()
             .map_err(|_| invalid())?,
+        forecast: ForecastAccumulator::default(),
         sources: Vec::new(),
     };
-    for row in rows {
-        let Some(state) = row.deal else {
-            continue;
-        };
-        let deal = sales_deals::decode(&state)?;
-        let assignment = row
-            .assignment
-            .as_deref()
-            .map(SalesAccountAssignment::decode)
-            .transpose()
-            .map_err(|_| invalid())?;
-        let assigned = assignment.as_ref().filter(|value| !value.archived);
-        let territory = row
-            .territory
-            .as_deref()
-            .map(SalesTerritory::decode)
-            .transpose()
-            .map_err(|_| invalid())?;
-        let territory = match (
-            assigned.and_then(|value| value.territory_id.as_deref()),
-            territory,
-        ) {
-            (None, None) => None,
-            (Some(id), Some(value)) if !value.archived && value.territory_id == id => {
-                Some(CommercialDimension {
-                    id: value.territory_id,
-                    name: value.name,
-                    version: value.version,
-                })
+    let teams = sales_deals::credit_teams_projection(
+        "d.tenant",
+        "json_extract(d.state,'$.owner.kind')",
+        "COALESCE(json_extract(d.state,'$.owner.actor_id'),json_extract(d.state,'$.owner.team_id'))",
+        true,
+    );
+    // Static predicate variants allow the partial indexes to be used without
+    // an OR on pipeline. All user values remain bound.
+    let pipeline_filter = if quota.pipeline_id.is_some() {
+        " AND json_extract(d.state,'$.stage.pipeline_id')=?5"
+    } else {
+        ""
+    };
+    let oversized = "COALESCE(length(CAST(d.state AS BLOB)),0)+COALESCE(length(CAST(a.state AS BLOB)),0)+COALESCE(length(CAST(t.state AS BLOB)),0)";
+    let sql = format!(
+        "WITH fence AS MATERIALIZED (SELECT COALESCE((SELECT revision FROM crm_sales_forecast_revisions WHERE tenant=?1),0) revision), page AS MATERIALIZED (SELECT d.tenant,d.id,d.state,d.account_id FROM crm_sales_deal_records d WHERE d.tenant=?1 AND d.id>?2 AND json_extract(d.state,'$.status')='open'{pipeline_filter} AND (SELECT revision FROM fence)=CAST(?3 AS INTEGER) ORDER BY d.id LIMIT ?4) SELECT CAST(f.revision AS TEXT) revision,d.id,CASE WHEN ({oversized})>{MAX_ROW_BYTES} THEN 1 ELSE 0 END oversized,CASE WHEN ({oversized})<={MAX_ROW_BYTES} THEN d.state END deal,CASE WHEN ({oversized})<={MAX_ROW_BYTES} THEN ({teams}) ELSE '[]' END teams,CASE WHEN ({oversized})<={MAX_ROW_BYTES} THEN a.state END assignment,CASE WHEN ({oversized})<={MAX_ROW_BYTES} THEN t.state END territory FROM fence f LEFT JOIN page d ON 1=1 LEFT JOIN crm_sales_account_assignment_records a ON a.tenant=d.tenant AND a.id=d.account_id LEFT JOIN crm_sales_territory_records t ON t.tenant=d.tenant AND t.id=json_extract(a.state,'$.territory_id') AND json_extract(a.state,'$.archived')=0 ORDER BY d.id"
+    );
+    let mut after = String::new();
+    let mut candidates = 0usize;
+    let mut source_bytes = 0usize;
+    loop {
+        let mut args = vec![
+            JsValue::from_str(tenant),
+            JsValue::from_str(&after),
+            JsValue::from_str(&anchor.revision),
+            JsValue::from_f64(CAPTURE_PAGE as f64),
+        ];
+        if let Some(pipeline) = &quota.pipeline_id {
+            args.push(JsValue::from_str(pipeline));
+        }
+        let rows = bind(db, &sql, &args)?
+            .all()
+            .await?
+            .results::<SnapshotRow>()?;
+        if rows.is_empty() || rows.iter().any(|row| row.revision != anchor.revision) {
+            return Err(CaptureFailure::Changed);
+        }
+        let mut page_count = 0usize;
+        for row in rows {
+            let Some(id) = row.id else {
+                continue;
+            };
+            if id <= after {
+                return Err(invalid().into());
             }
-            _ => return Err(invalid()),
-        };
-        let context = CloseCreditContext {
-            teams: serde_json::from_str(&row.teams).map_err(|_| invalid())?,
-            territory,
-            assignment_version: assigned.map(|value| value.version),
-            catalog_version: None,
-        };
-        if let Some(source) =
-            ForecastSource::capture(quota, &deal, context).map_err(|_| invalid())?
-        {
-            snapshot.sources.push(source);
+            after = id;
+            page_count += 1;
+            candidates += 1;
+            if candidates > MAX_CANDIDATES || row.oversized != 0 {
+                return Err(CaptureFailure::Capacity);
+            }
+            let state = row.deal.ok_or_else(invalid)?;
+            let deal = sales_deals::decode(&state)?;
+            if deal.deal_id().as_str() != after {
+                return Err(invalid().into());
+            }
+            let assignment = row
+                .assignment
+                .as_deref()
+                .map(SalesAccountAssignment::decode)
+                .transpose()
+                .map_err(|_| invalid())?;
+            let assigned = assignment.as_ref().filter(|value| !value.archived);
+            let territory = row
+                .territory
+                .as_deref()
+                .map(SalesTerritory::decode)
+                .transpose()
+                .map_err(|_| invalid())?;
+            let territory = match (
+                assigned.and_then(|value| value.territory_id.as_deref()),
+                territory,
+            ) {
+                (None, None) => None,
+                (Some(id), Some(value)) if !value.archived && value.territory_id == id => {
+                    Some(CommercialDimension {
+                        id: value.territory_id,
+                        name: value.name,
+                        version: value.version,
+                    })
+                }
+                _ => return Err(invalid().into()),
+            };
+            let context = CloseCreditContext {
+                teams: serde_json::from_str(&row.teams).map_err(|_| invalid())?,
+                territory,
+                assignment_version: assigned.map(|value| value.version),
+                catalog_version: None,
+            };
+            if let Some(source) =
+                ForecastSource::capture(quota, &deal, context).map_err(|_| invalid())?
+            {
+                snapshot
+                    .forecast
+                    .observe(&source)
+                    .map_err(|_| invalid())?;
+                let bytes = serde_json::to_vec(&source).map_err(|_| invalid())?.len();
+                source_bytes = source_bytes
+                    .checked_add(bytes + 2)
+                    .ok_or(CaptureFailure::Capacity)?;
+                if bytes > MAX_SOURCE_BYTES || source_bytes > MAX_CAPTURE_BYTES {
+                    return Err(CaptureFailure::Capacity);
+                }
+                if keep.is_none_or(|limit| snapshot.sources.len() < limit) {
+                    snapshot.sources.push(source);
+                }
+            }
+        }
+        if page_count < CAPTURE_PAGE {
+            break;
         }
     }
     Ok(snapshot)

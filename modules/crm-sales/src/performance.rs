@@ -249,9 +249,17 @@ pub struct ForecastCoverage {
     pub buckets: Vec<ForecastBucket>,
 }
 
-impl ForecastCoverage {
-    pub fn new(actual: &PerformanceActuals, sources: &[ForecastSource]) -> Result<Self, SdkError> {
-        let mut value = Self {
+/// Constant-size running totals; pages do not own or duplicate formula logic.
+pub struct ForecastAccumulator {
+    value: ForecastCoverage,
+    total: i128,
+    weighted: i128,
+    buckets: BTreeMap<ForecastCategory, (u64, i128, i128)>,
+}
+
+impl Default for ForecastAccumulator {
+    fn default() -> Self {
+        let value = ForecastCoverage {
             open: "0".into(),
             weighted: "0".into(),
             open_coverage: None,
@@ -264,43 +272,56 @@ impl ForecastCoverage {
             other_currency_count: 0,
             buckets: Vec::new(),
         };
-        let mut total = 0i128;
-        let mut weighted = 0i128;
-        let mut buckets: BTreeMap<ForecastCategory, (u64, i128, i128)> = BTreeMap::new();
-        for source in sources {
-            source.validate()?;
-            let counter = match source.disposition {
-                ForecastDisposition::Included => &mut value.included_count,
-                ForecastDisposition::Unallocated => &mut value.unallocated_count,
-                ForecastDisposition::Undated => &mut value.undated_count,
-                ForecastDisposition::Omitted => &mut value.omitted_count,
-                ForecastDisposition::MissingAmount => &mut value.missing_amount_count,
-                ForecastDisposition::OtherCurrency => &mut value.other_currency_count,
-            };
-            *counter = counter.checked_add(1).ok_or_else(overflow)?;
-            if source.disposition != ForecastDisposition::Included {
-                continue;
-            }
-            let units = source
-                .amount
-                .as_ref()
-                .ok_or_else(overflow)?
-                .minor_units
-                .parse::<i128>()
-                .map_err(|_| overflow())?;
-            if units < 0 || source.probability_basis_points > 10_000 {
-                return Err(invalid("SALES_FORECAST_SOURCE_INVALID"));
-            }
-            let weight = units
-                .checked_mul(i128::from(source.probability_basis_points))
-                .ok_or_else(overflow)?;
-            total = total.checked_add(units).ok_or_else(overflow)?;
-            weighted = weighted.checked_add(weight).ok_or_else(overflow)?;
-            let entry = buckets.entry(source.category).or_default();
-            entry.0 = entry.0.checked_add(1).ok_or_else(overflow)?;
-            entry.1 = entry.1.checked_add(units).ok_or_else(overflow)?;
-            entry.2 = entry.2.checked_add(weight).ok_or_else(overflow)?;
+        Self {
+            value,
+            total: 0,
+            weighted: 0,
+            buckets: BTreeMap::new(),
         }
+    }
+}
+
+impl ForecastAccumulator {
+    pub fn observe(&mut self, source: &ForecastSource) -> Result<(), SdkError> {
+        source.validate()?;
+        let counter = match source.disposition {
+            ForecastDisposition::Included => &mut self.value.included_count,
+            ForecastDisposition::Unallocated => &mut self.value.unallocated_count,
+            ForecastDisposition::Undated => &mut self.value.undated_count,
+            ForecastDisposition::Omitted => &mut self.value.omitted_count,
+            ForecastDisposition::MissingAmount => &mut self.value.missing_amount_count,
+            ForecastDisposition::OtherCurrency => &mut self.value.other_currency_count,
+        };
+        *counter = counter.checked_add(1).ok_or_else(overflow)?;
+        if source.disposition != ForecastDisposition::Included {
+            return Ok(());
+        }
+        let units = source
+            .amount
+            .as_ref()
+            .ok_or_else(overflow)?
+            .minor_units
+            .parse::<i128>()
+            .map_err(|_| overflow())?;
+        if units < 0 || source.probability_basis_points > 10_000 {
+            return Err(invalid("SALES_FORECAST_SOURCE_INVALID"));
+        }
+        let weight = units
+            .checked_mul(i128::from(source.probability_basis_points))
+            .ok_or_else(overflow)?;
+        self.total = self.total.checked_add(units).ok_or_else(overflow)?;
+        self.weighted = self.weighted.checked_add(weight).ok_or_else(overflow)?;
+        let entry = self.buckets.entry(source.category).or_default();
+        entry.0 = entry.0.checked_add(1).ok_or_else(overflow)?;
+        entry.1 = entry.1.checked_add(units).ok_or_else(overflow)?;
+        entry.2 = entry.2.checked_add(weight).ok_or_else(overflow)?;
+        Ok(())
+    }
+
+    pub fn finish(self, actual: &PerformanceActuals) -> Result<ForecastCoverage, SdkError> {
+        let mut value = self.value;
+        let total = self.total;
+        let weighted = self.weighted;
         value.open = total.to_string();
         value.weighted = weighted.to_string();
         let remaining = actual.remaining.parse::<i128>().map_err(|_| overflow())?;
@@ -309,7 +330,8 @@ impl ForecastCoverage {
                 Some((total.checked_mul(10_000).ok_or_else(overflow)? / remaining).to_string());
             value.weighted_coverage = Some((weighted / remaining).to_string());
         }
-        value.buckets = buckets
+        value.buckets = self
+            .buckets
             .into_iter()
             .map(|(category, (count, open, weighted))| ForecastBucket {
                 category,
@@ -319,6 +341,16 @@ impl ForecastCoverage {
             })
             .collect();
         Ok(value)
+    }
+}
+
+impl ForecastCoverage {
+    pub fn new(actual: &PerformanceActuals, sources: &[ForecastSource]) -> Result<Self, SdkError> {
+        let mut accumulator = ForecastAccumulator::default();
+        for source in sources {
+            accumulator.observe(source)?;
+        }
+        accumulator.finish(actual)
     }
 
     fn validate(&self, actual: &PerformanceActuals) -> Result<(), SdkError> {
@@ -474,7 +506,11 @@ mod tests {
         let mut excluded = source.clone();
         excluded.deal_id = "deal-b".into();
         excluded.disposition = ForecastDisposition::Unallocated;
+        let mut streaming = ForecastAccumulator::default();
+        streaming.observe(&source).unwrap();
+        streaming.observe(&excluded).unwrap();
         let totals = ForecastCoverage::new(&actual, &[source, excluded]).unwrap();
+        assert_eq!(streaming.finish(&actual).unwrap(), totals);
         assert_eq!(totals.open, "9007199254740993");
         assert_eq!(totals.weighted, (9007199254740993i128 * 3333).to_string());
         assert_eq!(totals.source_count(), Some(2));

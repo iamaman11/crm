@@ -930,8 +930,20 @@ pub(super) async fn close_typed(
 /// Shared SQL projection of current eligible team evidence. Arguments are
 /// static SQL expressions, never user-supplied values.
 pub(super) fn credit_teams_sql(tenant: &str, kind: &str, id: &str) -> String {
+    credit_teams_projection(tenant, kind, id, false)
+}
+
+/// Automatic attribution only distinguishes zero, one, and multiple eligible
+/// teams. Two ordered rows suffice; explicit selection still sees all teams.
+pub(super) fn credit_teams_projection(
+    tenant: &str,
+    kind: &str,
+    id: &str,
+    automatic_only: bool,
+) -> String {
+    let limit = if automatic_only { " LIMIT 2" } else { "" };
     format!(
-        "SELECT COALESCE(json_group_array(json_object('id',id,'name',name,'version',version)),'[]') AS snapshot FROM (SELECT t.id,json_extract(t.state,'$.name') name,t.version FROM crm_access_teams t WHERE t.tenant={tenant} AND (({kind}='team' AND t.id={id}) OR ({kind}='actor' AND json_extract(t.state,'$.active')=1 AND EXISTS (SELECT 1 FROM crm_users u WHERE u.tenant_id=t.tenant AND u.email={id} AND u.active=1 AND u.email NOT LIKE 'service:%') AND EXISTS (SELECT 1 FROM json_each(t.state,'$.member_emails') m WHERE m.value={id}))) ORDER BY t.id)"
+        "SELECT COALESCE(json_group_array(json_object('id',id,'name',name,'version',version)),'[]') AS snapshot FROM (SELECT t.id,json_extract(t.state,'$.name') name,t.version FROM crm_access_teams t WHERE t.tenant={tenant} AND (({kind}='team' AND t.id={id}) OR ({kind}='actor' AND json_extract(t.state,'$.active')=1 AND EXISTS (SELECT 1 FROM crm_users u WHERE u.tenant_id=t.tenant AND u.email={id} AND u.active=1 AND u.email NOT LIKE 'service:%') AND EXISTS (SELECT 1 FROM json_each(t.state,'$.member_emails') m WHERE m.value={id}))) ORDER BY t.id{limit})"
     )
 }
 

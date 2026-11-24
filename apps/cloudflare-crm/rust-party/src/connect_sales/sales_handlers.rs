@@ -10,6 +10,7 @@ impl SalesV2Service {
         quota_version: i64,
         report_id: String,
         name: String,
+        keep: Option<usize>,
     ) -> std::result::Result<
         (crm_sales::PerformanceReport, Vec<crm_sales::ForecastSource>),
         ConnectError,
@@ -34,9 +35,9 @@ impl SalesV2Service {
                 "SALES_PERFORMANCE_PUBLISHED_QUOTA_REQUIRED",
             ));
         }
-        let snapshot = sales_performance::snapshot(&db, &self.tenant, &quota)
+        let snapshot = sales_performance::snapshot(&db, &self.tenant, &quota, keep)
             .await
-            .map_err(|_| ConnectError::internal("SALES_FORECAST_SNAPSHOT_FAILED"))?;
+            .map_err(sales_performance::CaptureFailure::connect)?;
         let (_, actuals) = self
             .quota_performance(sale_wire::GetSalesQuotaPerformanceRequest {
                 quota_id: quota_id.to_owned(),
@@ -61,7 +62,9 @@ impl SalesV2Service {
         if count != snapshot.actual_candidate_count {
             return Err(ConnectError::aborted("SALES_PERFORMANCE_HISTORY_CHANGED"));
         }
-        let forecast = crm_sales::ForecastCoverage::new(&actuals, &snapshot.sources)
+        let forecast = snapshot
+            .forecast
+            .finish(&actuals)
             .map_err(|_| ConnectError::internal("SALES_PERFORMANCE_TOTAL_OVERFLOW"))?;
         Ok((
             crm_sales::PerformanceReport {
@@ -704,6 +707,7 @@ impl sale_wire::DealService for SalesV2Service {
                 input.quota_version,
                 String::new(),
                 "Live forecast".into(),
+                Some(size + 1),
             )
             .await?;
         let more = sources.len() > size;
@@ -752,7 +756,7 @@ impl sale_wire::DealService for SalesV2Service {
             saved
         } else {
             let (report, sources) = self
-                .capture_performance(&quota_id, input.quota_version, id, input.name)
+                .capture_performance(&quota_id, input.quota_version, id, input.name, None)
                 .await?;
             sales_performance::save(&ctx, report, &sources)
                 .await

@@ -106,6 +106,7 @@ export function SalesPerformanceReports({isAdmin,quota,reportId,currencies}:{isA
   return <section aria-label="Коммерческие отчёты и прогнозное покрытие">
     <h4>Коммерческие отчёты и прогнозное покрытие</h4>
     <p>Сохранённый отчёт — неизменяемый снимок версии цели, факта и текущего открытого портфеля. Сохранение фиксирует новый снимок, а не устаревший результат предварительного просмотра.</p>
+    <p>Расчёт выполняется согласованными страницами. При изменении портфеля во время расчёта повторите операцию; если объём превышает безопасный синхронный бюджет, сузьте воронку или используйте меньший портфель. Неполный отчёт не сохраняется.</p>
     {ready&&quotaId&&version!==undefined&&<>
       <Button variant="secondary" disabled={preview.busy} onClick={()=>void preview.run(async signal=>({key,response:await api.deals.previewSalesPerformanceReport({quotaId,quotaVersion:version,pageSize:25},{signal})}))}>Предпросмотр покрытия цели</Button>
       <QueryNotice query={preview}/>
