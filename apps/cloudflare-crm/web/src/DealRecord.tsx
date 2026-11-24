@@ -249,14 +249,14 @@ export function DealDetails({dealId,currencies,pipelines,onEdit,onAdvance,onClos
       </div>:onReopen&&capabilities?.reopen?<Button variant="secondary" onClick={onReopen}>
         Открыть повторно
       </Button>:null}
-      {details.data?.teamDistribution&&<TeamDistribution key={deal.dealId+":"+deal.version} options={details.data.teamDistribution}
+      {details.data?.teamDistribution&&<TeamDistribution key={"distribution:"+deal.dealId+":"+deal.version} options={details.data.teamDistribution}
         pending={distribution.busy||distribution.pending} onChanged={distribution.changed} onAssign={(scope,email)=>void distribution.runIntent(()=>prepareMutation(api.deals.updateDeal,{
           dealId:deal.dealId,owner:{owner:{case:"assigneeIdentity",value:email}},teamDistribution:scope,
           precondition:{expectedVersion:deal.version,idempotencyKey:distribution.key}
         },deal.dealId),async()=>{await details.reload();})}/>}
       <MutationNotice state={distribution}/>
       <OpportunityTeam deal={deal} canManage={capabilities?.manageOpportunityTeam??false} choices={choices} refresh={details.reload}/>
-      <DealHistory key={deal.dealId+":"+deal.version} dealId={deal.dealId} accountId={deal.accountId} pipeline={pipeline} currencies={currencies} choices={choices}/>
+      <DealHistory key={"history:"+deal.dealId+":"+deal.version} dealId={deal.dealId} accountId={deal.accountId} pipeline={pipeline} currencies={currencies} choices={choices}/>
       <InteractionTimeline accountId={deal.accountId} dealId={deal.dealId}/>
     </>}
   </section>;

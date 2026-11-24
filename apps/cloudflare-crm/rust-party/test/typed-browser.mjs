@@ -3150,6 +3150,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
          const distribution=record.getByRole("form",{name:"Распределение из очереди команды",exact:true});
          await expect(distribution).toHaveCount(1);
          await expect(distribution).toBeVisible();
+         if(!isTask)await expect(record.getByRole("region",{name:"История сделки "+id,exact:true})).toHaveCount(1);
          await expect(coordinatorPage.getByRole("form",{name:"Распределение из очереди команды",exact:true})).toHaveCount(1);
          await expect(record.getByRole("button",{name:editLabel,exact:true})).toHaveCount(0);
          await distribution.getByLabel("Назначить сотруднику команды",{exact:true}).selectOption("native-viewer@example.test");
@@ -3160,6 +3161,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
          await coordinatorPage.reload();
          await record.getByText("Ответственный: native-viewer@example.test",{exact:true}).waitFor();
          await expect(record.getByRole("form",{name:"Распределение из очереди команды",exact:true})).toHaveCount(0);
+         if(!isTask)await expect(record.getByRole("region",{name:"История сделки "+id,exact:true})).toHaveCount(1);
          assert.equal((await sql("SELECT json_extract(state,'$.owner.actor_id') AS owner FROM "+table+" WHERE tenant=? AND id=?",tenantA,id))[0].owner,"native-viewer@example.test");
          checkpoint("SK-07 signed coordinator "+method+" exact record, D1 and reload");
          await coordinatorPage.close();
