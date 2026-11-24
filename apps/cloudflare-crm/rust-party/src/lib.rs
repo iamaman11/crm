@@ -1084,6 +1084,34 @@ fn rpc_policy(path: &str) -> Option<RpcPolicy> {
         .map(|(_, rule)| *rule)
 }
 
+// Classify technical paths once, for both dispatch and safe diagnostics.
+// Never emit an arbitrary caller-supplied URL path as an operation label.
+#[cfg(feature = "native")]
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TechnicalRoute {
+    Health,
+    Doctor,
+    Session,
+    Version,
+    #[cfg(feature = "native-ci")]
+    OriginalDomainCheck,
+}
+
+#[cfg(feature = "native")]
+impl TechnicalRoute {
+    fn from_path(path: &str) -> Option<Self> {
+        match path {
+            "/api/health" => Some(Self::Health),
+            "/api/doctor" => Some(Self::Doctor),
+            "/api/session" => Some(Self::Session),
+            "/api/version" => Some(Self::Version),
+            #[cfg(feature = "native-ci")]
+            "/api/_ci/original-domain-check" => Some(Self::OriginalDomainCheck),
+            _ => None,
+        }
+    }
+}
+
 #[cfg(feature = "native")]
 async fn dispatch(
     req: Request,
@@ -1091,6 +1119,7 @@ async fn dispatch(
     _tenant: &str,
     request_id: &str,
     actor: &access::Actor,
+    technical: Option<TechnicalRoute>,
 ) -> Result<Response> {
     let path = req.path();
     let method = req.method();
@@ -1118,7 +1147,7 @@ async fn dispatch(
     // Explicitly CI-only, signed-Access-gated native workerd proof. This gate
     // performs no D1 writes and makes no claims about module persistence.
     #[cfg(feature = "native-ci")]
-    if path == "/api/_ci/original-domain-check" && method == Method::Get {
+    if technical == Some(TechnicalRoute::OriginalDomainCheck) && method == Method::Get {
         let db = env.d1("DB")?;
         let code = original_domain_probe::check();
         let receipt_read = sales_deals::probe_receipt_read(&db, _tenant, request_id).await;
@@ -1156,13 +1185,13 @@ async fn dispatch(
     }
     #[cfg(feature = "native")]
     {
-        if path == "/api/health" && method == Method::Get {
+        if technical == Some(TechnicalRoute::Health) && method == Method::Get {
             return response(json!({"service":"crm-dev","status":"ok"}), 200);
         }
-        if path == "/api/session" && method == Method::Get {
+        if technical == Some(TechnicalRoute::Session) && method == Method::Get {
             return response(json!({"authenticated":true,"role":actor.role}), 200);
         }
-        if path == "/api/version" && method == Method::Get {
+        if technical == Some(TechnicalRoute::Version) && method == Method::Get {
             return response(
                 json!({"source":env.var("GIT_SHA")
                 .map(|x|x.to_string()).unwrap_or_default(),
@@ -1187,7 +1216,14 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         let method = req.method();
         // Read version binding before dispatch takes ownership of Env.
         let source_sha = env.var("GIT_SHA").ok().map(|value| value.to_string());
-        let operation = path.as_str();
+        let technical = TechnicalRoute::from_path(&path);
+        let operation = if technical.is_some() || rpc_policy(&path).is_some() {
+            path.as_str()
+        } else if path.starts_with("/crm.") {
+            "unknown_rpc"
+        } else {
+            "unknown_http"
+        };
         let rpc_failure = |error, before_dispatch| {
             let error = match rpc_policy(&path) {
                 Some(policy) => policy.wire_error(error, &request_id, before_dispatch),
@@ -1196,11 +1232,13 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             rpc_error(error)
         };
         let (result, phase) = match access::actor(&req, &env).await {
-            Ok(Some(actor)) if path == "/api/doctor" && method == Method::Get => {
+            Ok(Some(actor))
+                if technical == Some(TechnicalRoute::Doctor) && method == Method::Get =>
+            {
                 (native_doctor(&env, &actor.tenant).await, "diagnostics")
             }
             Ok(Some(actor)) => (
-                dispatch(req, env, &actor.tenant, &request_id, &actor).await,
+                dispatch(req, env, &actor.tenant, &request_id, &actor, technical).await,
                 "domain_d1",
             ),
             Ok(None) if path.starts_with("/crm.") => (
