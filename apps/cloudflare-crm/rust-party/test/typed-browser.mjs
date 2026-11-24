@@ -2998,7 +2998,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      await scoreRegion.getByLabel("Число периодов",{exact:true}).fill("2");
      await scoreRegion.getByRole("button",{name:"Рассчитать эффективность",exact:true}).click();
      const scoreTable=scoreRegion.getByRole("region",{name:"Таблица коммерческой эффективности",exact:true});
-     const actorRow=scoreTable.getByRole("row").filter({has:scoreTable.getByRole("rowheader",{name:"native-a@example.test",exact:true})});
+     const actorRow=scoreTable.getByRole("row").filter({has:page.getByRole("rowheader",{name:"native-a@example.test",exact:true})});
      await actorRow.getByRole("cell",{name:"Нет цели",exact:true}).waitFor();
      await actorRow.getByRole("button",{name:"Исходные события",exact:true}).click();
      const scoreFacts=scoreRegion.getByRole("region",{name:"Исходные коммерческие события",exact:true});
