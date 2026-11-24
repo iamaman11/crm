@@ -72,6 +72,15 @@ with TemporaryDirectory() as temporary:
     run(pnpm, "exec", "buf", "format", "-d", "--exit-code", "proto")
     run(pnpm, "exec", "buf", "lint", "proto")
     run(pnpm, "exec", "buf", "build", "proto", "-o", image)
+    # The internal v1 Sales/Activities link is a published persisted wire
+    # contract, unlike the intentionally evolving development CRM HTTP API.
+    # Compare to an immutable accepted Git revision with Buf's existing FILE
+    # rules. The pinned identity tests independently protect descriptor hashes.
+    run(pnpm, "exec", "buf", "breaking", ".",
+        "--against", ".git#ref=2c5f20eeb4185d16d2edec957965d8d50ec3d756",
+        "--path", "proto/crm/core/v1/common.proto",
+        "--path", "proto/crm/activities/v1/task.proto",
+        "--path", "proto/crm/sales/v1/deal.proto")
     run(pnpm, "web:generate", image)
     run(node, "scripts/crm-rpc-descriptors.mjs", image)
     run(node, "--test", "scripts/crm-core-v2.test.mjs", "scripts/crm-cutover-contracts.test.mjs",

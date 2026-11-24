@@ -43,6 +43,7 @@ jobs:
           python -m unittest tests.test_ci_event_policy
           python scripts/check_action_pinning.py
           node --check apps/cloudflare-crm/rust-party/test/native.mjs
+          node --check apps/cloudflare-crm/rust-party/test/production-access.mjs
           node --check apps/cloudflare-crm/rust-party/test/typed-browser.mjs
           node --check apps/cloudflare-crm/rust-party/test/ui-diagnostics.mjs
           node --check apps/cloudflare-crm/e2e/live.mjs
@@ -268,6 +269,15 @@ jobs:
         run: |
           mv build "$RUNNER_TEMP/crm-tested-native-ci"
           mv ../.release/native-build build
+      # Prove the production binary can run with the external JWKS provider
+      # intercepted only by Wrangler's Node test harness. Keep all current
+      # native-ci business/compiled-policy proofs until parity is established.
+      - name: Prove signed Access on the existing production WASM artifact
+        working-directory: apps/cloudflare-crm
+        env:
+          CRM_SOURCE_SHA: ${{ github.sha }}
+          CRM_PRODUCTION_ACCESS_PROOF: /tmp/crm-production-access.json
+        run: node rust-party/test/production-access.mjs
       - name: Enforce committed native Worker dependency lock
         run: git diff --exit-code -- apps/cloudflare-crm/rust-party/Cargo.lock
       - name: Dry-run exact native entrypoint upload with original CRM Wrangler configuration
@@ -337,7 +347,13 @@ jobs:
             const wasmGraph=(features,edges)=>run("cargo",["tree","--locked","--manifest-path",
               "rust-party/Cargo.toml","--target","wasm32-unknown-unknown","--features",features,
               "--edges",edges,"--charset","ascii"]);
+            const productionAccess=JSON.parse(readFileSync("/tmp/crm-production-access.json","utf8"));
+            if(productionAccess.result!=="PASS"||productionAccess.source_sha!==process.env.CRM_BUILD_SHA||
+              productionAccess.artifact.wasm!==hash("rust-party/build/index_bg.wasm")||
+              productionAccess.artifact.entry!==hash("rust-party/build/index.js"))
+              throw Error("production Access proof must match the sealed artifact");
             writeFileSync(".release/provenance.json",JSON.stringify({
+              production_access_probe:productionAccess,
               tested_sha:process.env.CRM_BUILD_SHA,
               tree:run("git",["rev-parse","HEAD^{tree}"]),
               production_features:["native"],runtime_test_features:["native-ci"],
