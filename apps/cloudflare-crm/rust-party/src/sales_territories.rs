@@ -14,6 +14,7 @@ pub(super) enum Kind {
     Territory,
     Assignment,
     RoutingRule,
+    Quota,
 }
 
 impl Kind {
@@ -22,6 +23,7 @@ impl Kind {
             Self::Territory => "crm_sales_territory_records",
             Self::Assignment => "crm_sales_account_assignment_records",
             Self::RoutingRule => "crm_sales_routing_rule_records",
+            Self::Quota => "crm_sales_quota_records",
         }
     }
 
@@ -30,6 +32,7 @@ impl Kind {
             Self::Territory => "crm_sales_territory_receipts",
             Self::Assignment => "crm_sales_account_assignment_receipts",
             Self::RoutingRule => "crm_sales_routing_rule_receipts",
+            Self::Quota => "crm_sales_quota_receipts",
         }
     }
 
@@ -38,6 +41,7 @@ impl Kind {
             Self::Territory => SalesTerritory::decode(state).map(Record::Territory),
             Self::Assignment => SalesAccountAssignment::decode(state).map(Record::Assignment),
             Self::RoutingRule => SalesRoutingRule::decode(state).map(Record::RoutingRule),
+            Self::Quota => crm_sales::SalesQuota::decode(state).map(Record::Quota),
         }
         .map_err(|e| worker::Error::RustError(e.code))
     }
@@ -47,6 +51,7 @@ pub(super) enum Record {
     Territory(SalesTerritory),
     Assignment(SalesAccountAssignment),
     RoutingRule(SalesRoutingRule),
+    Quota(crm_sales::SalesQuota),
 }
 
 impl Record {
@@ -55,6 +60,7 @@ impl Record {
             Self::Territory(_) => Kind::Territory,
             Self::Assignment(_) => Kind::Assignment,
             Self::RoutingRule(_) => Kind::RoutingRule,
+            Self::Quota(_) => Kind::Quota,
         }
     }
 
@@ -63,6 +69,7 @@ impl Record {
             Self::Territory(value) => &value.territory_id,
             Self::Assignment(value) => &value.account_id,
             Self::RoutingRule(value) => &value.rule_id,
+            Self::Quota(value) => &value.quota_id,
         }
     }
 
@@ -71,6 +78,7 @@ impl Record {
             Self::Territory(value) => value.version,
             Self::Assignment(value) => value.version,
             Self::RoutingRule(value) => value.version,
+            Self::Quota(value) => value.version,
         }
     }
 
@@ -79,6 +87,7 @@ impl Record {
             Self::Territory(value) => value.archived,
             Self::Assignment(value) => value.archived,
             Self::RoutingRule(value) => value.archived,
+            Self::Quota(value) => value.archived,
         }
     }
 
@@ -89,6 +98,10 @@ impl Record {
                 .chain(value.overlays.iter().map(|overlay| &overlay.owner))
                 .collect(),
             Self::RoutingRule(value) => vec![&value.target],
+            Self::Quota(value) => match &value.scope {
+                crm_sales::SalesQuotaScope::Owner(owner) => vec![owner],
+                _ => Vec::new(),
+            },
         }
     }
 
@@ -97,6 +110,7 @@ impl Record {
             Self::Territory(value) => serde_json::to_string(value),
             Self::Assignment(value) => serde_json::to_string(value),
             Self::RoutingRule(value) => serde_json::to_string(value),
+            Self::Quota(value) => serde_json::to_string(value),
         }
         .map_err(|e| worker::Error::RustError(e.to_string()))
     }
@@ -115,6 +129,8 @@ impl Record {
             (Self::Assignment(value), Some(Self::Assignment(old))) => {
                 value.revise(Some(old), expected).map(Self::Assignment)
             }
+            (Self::Quota(value), None) => value.revise(None, expected, super::now_nanos()).map(Self::Quota),
+            (Self::Quota(value), Some(Self::Quota(old))) => value.revise(Some(old), expected, super::now_nanos()).map(Self::Quota),
             (Self::RoutingRule(value), None) => value.revise(None, expected).map(Self::RoutingRule),
             (Self::RoutingRule(value), Some(Self::RoutingRule(old))) => {
                 value.revise(Some(old), expected).map(Self::RoutingRule)
@@ -196,6 +212,31 @@ const ASSIGNMENT_GUARD: &str = " AND EXISTS (SELECT 1 FROM crm_account_records a
 
 const ROUTING_GUARD: &str = " AND (json_extract(?3,'$.archived')=1 OR (NOT EXISTS (SELECT 1 FROM crm_sales_routing_rule_records r WHERE r.tenant=?1 AND r.id<>?2 AND json_extract(r.state,'$.archived')=0 AND json_extract(r.state,'$.priority')=json_extract(?3,'$.priority')) AND (json_extract(?3,'$.criteria.territory_id') IS NULL OR EXISTS (SELECT 1 FROM crm_sales_territory_records t WHERE t.tenant=?1 AND t.id=json_extract(?3,'$.criteria.territory_id') AND json_extract(t.state,'$.archived')=0)) AND (json_extract(?3,'$.criteria.pipeline_id') IS NULL OR EXISTS (SELECT 1 FROM crm_sales_pipeline_records p WHERE p.tenant=?1 AND p.id=json_extract(?3,'$.criteria.pipeline_id') AND json_extract(p.state,'$.archived')=0 AND (json_extract(?3,'$.criteria.stage_id') IS NULL OR EXISTS (SELECT 1 FROM json_each(p.state,'$.stages') s WHERE json_extract(s.value,'$.stage_id')=json_extract(?3,'$.criteria.stage_id') AND json_extract(s.value,'$.archived')=0))))))";
 
+// Published series remain reserved even when archived; a revised target uses
+// the same quota ID. The CAS serializes overlapping publication attempts.
+const QUOTA_GUARD: &str = " AND (json_extract(?3,'$.archived')=1 OR ((json_extract(?3,'$.scope.territory') IS NULL OR EXISTS (SELECT 1 FROM crm_sales_territory_records t WHERE t.tenant=?1 AND t.id=json_extract(?3,'$.scope.territory') AND json_extract(t.state,'$.archived')=0)) AND (json_extract(?3,'$.pipeline_id') IS NULL OR EXISTS (SELECT 1 FROM crm_sales_pipeline_records p WHERE p.tenant=?1 AND p.id=json_extract(?3,'$.pipeline_id') AND json_extract(p.state,'$.archived')=0)))) AND (json_extract(?3,'$.published')=0 OR NOT EXISTS (SELECT 1 FROM crm_sales_quota_records q WHERE q.tenant=?1 AND q.id<>?2 AND json_extract(q.state,'$.published')=1 AND json_extract(q.state,'$.scope')=json_extract(?3,'$.scope') AND json_extract(q.state,'$.pipeline_id') IS json_extract(?3,'$.pipeline_id') AND json_extract(q.state,'$.currency_code')=json_extract(?3,'$.currency_code') AND json_extract(q.state,'$.period.time_zone')=json_extract(?3,'$.period.time_zone') AND json_extract(q.state,'$.period.cadence')=json_extract(?3,'$.period.cadence') AND CAST(json_extract(q.state,'$.period.start_unix_nanos') AS INTEGER)<CAST(json_extract(?3,'$.period.end_exclusive_unix_nanos') AS INTEGER) AND CAST(json_extract(q.state,'$.period.end_exclusive_unix_nanos') AS INTEGER)>CAST(json_extract(?3,'$.period.start_unix_nanos') AS INTEGER)))";
+
+pub(super) async fn quota_revision(
+    db: &D1Database,
+    tenant: &str,
+    id: &str,
+    version: i64,
+) -> Result<Option<Record>> {
+    bind(
+        db,
+        "SELECT id,state FROM crm_sales_quota_revisions WHERE tenant=? AND id=? AND version=CAST(? AS INTEGER)",
+        &[
+            JsValue::from_str(tenant),
+            JsValue::from_str(id),
+            JsValue::from_str(&version.to_string()),
+        ],
+    )?
+    .first::<Row>(None)
+    .await?
+    .map(|row| Kind::Quota.decode(&row.state))
+    .transpose()
+}
+
 pub(super) async fn mutate(
     ctx: &Context<'_>,
     draft: Record,
@@ -242,6 +283,7 @@ pub(super) async fn mutate(
         Kind::Territory => TERRITORY_GUARD.to_owned(),
         Kind::Assignment => ASSIGNMENT_GUARD.to_owned(),
         Kind::RoutingRule => ROUTING_GUARD.to_owned(),
+        Kind::Quota => QUOTA_GUARD.to_owned(),
     };
     let state = record.encode()?;
     let mut values = vec![
@@ -284,12 +326,16 @@ pub(super) async fn mutate(
     match d1_write::confirm(
         write,
         receipt(ctx, kind, key),
-        if matches!(kind, Kind::RoutingRule) {
+        if matches!(kind, Kind::Quota) {
+            "SALES_QUOTA_CONFLICT"
+        } else if matches!(kind, Kind::RoutingRule) {
             "SALES_ROUTING_RULE_CONFLICT"
         } else {
             "SALES_COVERAGE_CONFLICT"
         },
-        if matches!(kind, Kind::RoutingRule) {
+        if matches!(kind, Kind::Quota) {
+            "SALES_QUOTA_WRITE_UNCONFIRMED"
+        } else if matches!(kind, Kind::RoutingRule) {
             "SALES_ROUTING_RULE_WRITE_UNCONFIRMED"
         } else {
             "SALES_COVERAGE_WRITE_UNCONFIRMED"

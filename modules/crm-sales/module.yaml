@@ -199,6 +199,31 @@ provides:
       binding:
         kind: protobuf_rpc
         rpc: crm.sales.v2.DealService.PreviewSalesRouting
+    - id: sales.quota.create
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.CreateSalesQuota
+    - id: sales.quota.update
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.UpdateSalesQuota
+    - id: sales.quota.get
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.GetSalesQuota
+    - id: sales.quota.list
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.ListSalesQuotas
+    - id: sales.quota.performance
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.GetSalesQuotaPerformance
   events:
     - id: sales.deal.created
       version: 1.0.0
@@ -222,6 +247,7 @@ provides:
     - sales.territory
     - sales.account_assignment
     - sales.routing_rule
+    - sales.quota
   ui_extensions:
     - id: sales.pipeline.navigation
       type: navigation.item
@@ -244,6 +270,7 @@ storage:
     - sales.territory
     - sales.account_assignment
     - sales.routing_rule
+    - sales.quota
   private_state_namespaces:
     - crm.sales
 security:
@@ -268,3 +295,4 @@ lifecycle:
     - sales.territory
     - sales.account_assignment
     - sales.routing_rule
+    - sales.quota

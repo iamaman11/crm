@@ -5711,6 +5711,42 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    const storedCredit=await sql("SELECT commercial_close_fact FROM crm_sales_deal_events WHERE tenant=? AND deal_id=? AND deal_version IN (3,4) ORDER BY deal_version","tenant-a",one.dealId);
    assert.equal(storedCredit.length,2);
    assert.deepEqual(JSON.parse(storedCredit[0].commercial_close_fact),JSON.parse(storedCredit[1].commercial_close_fact));
+   // D3 quota publication, overlap, exact event net and historical revision.
+   const quotaId="quota-"+suffix;
+   const year=new Date().getUTCFullYear();
+   const quotaCfg={name:"QA quota "+suffix,scope:{scope:{case:"owner",value:target}},pipelineId:pipeline,
+     period:{startDate:{year,month:1,day:1},endDate:{year,month:12,day:31},timeZone:"UTC",cadence:3},
+     target:{currencyCode:"EUR",minorUnits:1000n},published:false,revisionReason:"qa.draft"};
+   const draft={quotaId,configuration:quotaCfg,precondition:pre("quota-draft")};
+   await call("CreateSalesQuota",viewer,draft,403);
+   const quota=await call("CreateSalesQuota",admin,draft);
+   assert.equal(quota.quota.version,1n);
+   assert.equal((await call("CreateSalesQuota",admin,draft)).receipt.replayed,true);
+   const publish={quotaId,configuration:{...quotaCfg,published:true,revisionReason:"qa.publish"},precondition:pre("quota-publish",1n)};
+   const publishedQuota=await call("UpdateSalesQuota",admin,publish);
+   assert.equal(publishedQuota.quota.version,2n);
+   await call("CreateSalesQuota",admin,{...draft,quotaId:"overlap-"+suffix,configuration:publish.configuration,precondition:pre("quota-overlap")},409);
+   await call("GetSalesQuota",tenantB,{quotaId},404);
+   assert.equal((await call("ListSalesQuotas",tenantB,{})).quotas.length,0);
+   assert.deepEqual(await call("GetSalesQuota",viewer,{quotaId}),await call("GetSalesQuota",admin,{quotaId}));
+   assert.equal((await call("ListSalesQuotas",viewer,{})).quotas.some(q=>q.quotaId===quotaId),true);
+   const firstQuota=await call("GetSalesQuota",viewer,{quotaId,version:1n,receiptIdempotencyKey:draft.precondition.idempotencyKey});
+   assert.equal(firstQuota.quota.configuration.published,false);
+   assert.equal(firstQuota.confirmedMutation.resourceVersion,1n);
+   const perf=await call("GetSalesQuotaPerformance",viewer,{quotaId,pageSize:1});
+   assert.equal(perf.grossMinorUnits,"100");assert.equal(perf.reversalMinorUnits,"100");
+   assert.equal(perf.netMinorUnits,"0");assert.equal(perf.remainingMinorUnits,"1000");
+   assert.equal(perf.facts.length,1);assert.ok(perf.next);
+   const page2=await call("GetSalesQuotaPerformance",viewer,{quotaId,quotaVersion:2n,asOfUnixNanos:perf.asOfUnixNanos,after:perf.next,pageSize:1});
+   assert.equal(page2.netMinorUnits,perf.netMinorUnits);assert.notDeepEqual(page2.facts[0],perf.facts[0]);
+   const revised=await call("UpdateSalesQuota",admin,{quotaId,configuration:{...publish.configuration,target:{currencyCode:"EUR",minorUnits:2000n},revisionReason:"qa.revise"},precondition:pre("quota-revise",2n)});
+   assert.equal(revised.quota.version,3n);
+   const historical=await call("GetSalesQuotaPerformance",viewer,{quotaId,quotaVersion:2n,asOfUnixNanos:perf.asOfUnixNanos});
+   assert.equal(historical.remainingMinorUnits,"1000");
+   assert.equal((await call("GetSalesQuotaPerformance",viewer,{quotaId})).remainingMinorUnits,"2000");
+   await call("UpdateSalesQuota",admin,{quotaId,configuration:{...revised.quota.configuration,archived:true,revisionReason:"qa.archive"},precondition:pre("quota-archive",3n)});
+   assert.equal((await sql("SELECT COUNT(*) n FROM crm_sales_quota_revisions WHERE tenant=? AND id=?","tenant-a",quotaId))[0].n,4);
+   assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=?","tenant-a",quotaId))[0].n,4);
    await call("UpdateTerritory",admin,{territoryId,configuration:{name:"Routing territory "+suffix,defaultOwner:actor(emailB),archived:true},precondition:pre("archive-territory",1n)});
    assert.equal((await memberV2("UpdateTeam",admin,{teamId:team,active:false,precondition:pre("archive-team",1n)})).status,200);
    for(const [label,email] of [["a",emailA],["b",emailB]])assert.equal((await memberV2("UpdateMember",admin,{email,active:false,precondition:pre("deactivate-"+label,1n)})).status,200);

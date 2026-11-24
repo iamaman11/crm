@@ -7,6 +7,7 @@ import {useMutation,useQuery,prepareMutation,MutationNotice,QueryNotice} from ".
 import {allOwners,ownerLabel,ownerValue,ownerWire} from "./ownerCatalog";
 import {AccountName} from "./Pickers";
 import {SalesRoutingWorkspace} from "./SalesRouting";
+import {SalesQuotaWorkspace} from "./SalesQuotas";
 
 type Choices=Awaited<ReturnType<typeof allOwners>>["choices"];
 export async function allTerritories(signal:AbortSignal):Promise<SalesTerritory[]> {
@@ -152,6 +153,7 @@ export function TerritoryWorkspace({isAdmin,choices,ownersUnavailable}:{
     {cursor&&<Button variant="secondary" disabled={assignments.busy} onClick={()=>setCursor("")}>Первая страница портфелей</Button>}
     {assignments.data?.pageInfo?.nextPageToken&&<Button variant="secondary" disabled={assignments.busy}
       onClick={()=>setCursor(assignments.data?.pageInfo?.nextPageToken??"")}>Следующая страница портфелей</Button>}
+    <SalesQuotaWorkspace isAdmin={isAdmin} choices={choices} ownersUnavailable={ownersUnavailable||territories.busy||!!territories.error} territories={items}/>
     <SalesRoutingWorkspace isAdmin={isAdmin} choices={choices} ownersUnavailable={ownersUnavailable||territories.busy||!!territories.error} territories={items}/>
   </section>;
 }

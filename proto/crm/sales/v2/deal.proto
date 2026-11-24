@@ -704,7 +704,131 @@ message PreviewSalesRoutingResponse {
   string expected_decision = 2;
 }
 
+enum SalesQuotaCadence {
+  SALES_QUOTA_CADENCE_UNSPECIFIED = 0;
+  SALES_QUOTA_CADENCE_MONTHLY = 1;
+  SALES_QUOTA_CADENCE_QUARTERLY = 2;
+  SALES_QUOTA_CADENCE_CUSTOM = 3;
+}
+message SalesQuotaScope {
+  oneof scope {
+    bool tenant_wide = 1;
+    crm.core.v2.ActorOrTeamOwner owner = 2;
+    string territory_id = 3;
+  }
+}
+message SalesQuotaPeriod {
+  crm.core.v2.CalendarDate start_date = 1;
+  crm.core.v2.CalendarDate end_date = 2;
+  string time_zone = 3;
+  SalesQuotaCadence cadence = 4;
+}
+message SalesQuotaConfiguration {
+  string name = 1;
+  SalesQuotaScope scope = 2;
+  optional string pipeline_id = 3;
+  SalesQuotaPeriod period = 4;
+  crm.core.v2.ExactMoney target = 5;
+  bool published = 6;
+  bool archived = 7;
+  string revision_reason = 8;
+}
+message SalesQuota {
+  string quota_id = 1;
+  SalesQuotaConfiguration configuration = 2;
+  int64 version = 3;
+  int64 start_unix_nanos = 4;
+  int64 end_exclusive_unix_nanos = 5;
+  int64 revision_at_unix_nanos = 6;
+}
+message CreateSalesQuotaRequest {
+  string quota_id = 1;
+  SalesQuotaConfiguration configuration = 2;
+  crm.core.v2.MutationPrecondition precondition = 3;
+}
+message CreateSalesQuotaResponse {
+  SalesQuota quota = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+message UpdateSalesQuotaRequest {
+  string quota_id = 1;
+  SalesQuotaConfiguration configuration = 2;
+  crm.core.v2.MutationPrecondition precondition = 3;
+}
+message UpdateSalesQuotaResponse {
+  SalesQuota quota = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+message GetSalesQuotaRequest {
+  string quota_id = 1;
+  optional string receipt_idempotency_key = 2;
+  optional int64 version = 3;
+}
+message GetSalesQuotaResponse {
+  SalesQuota quota = 1;
+  crm.core.v2.MutationCommitEvidence confirmed_mutation = 2;
+}
+message ListSalesQuotasRequest {
+  crm.core.v2.PageRequest page = 1;
+  bool include_archived = 2;
+}
+message ListSalesQuotasResponse {
+  repeated SalesQuota quotas = 1;
+  crm.core.v2.PageInfo page_info = 2;
+}
+message SalesQuotaFactCursor {
+  string deal_id = 1;
+  int64 deal_version = 2;
+}
+message GetSalesQuotaPerformanceRequest {
+  string quota_id = 1;
+  optional int64 quota_version = 2;
+  optional int64 as_of_unix_nanos = 3;
+  SalesQuotaFactCursor after = 4;
+  uint32 page_size = 5;
+}
+message SalesQuotaFact {
+  string deal_id = 1;
+  int64 deal_version = 2;
+  int64 event_at_unix_nanos = 3;
+  bool reversal = 4;
+  CommercialCloseFact close_fact = 5;
+  optional string signed_minor_units = 6;
+}
+message GetSalesQuotaPerformanceResponse {
+  SalesQuota quota = 1;
+  int64 as_of_unix_nanos = 2;
+  string gross_minor_units = 3;
+  string reversal_minor_units = 4;
+  string net_minor_units = 5;
+  string remaining_minor_units = 6;
+  string attainment_basis_points = 7;
+  uint64 won_count = 8;
+  uint64 lost_count = 9;
+  uint64 reversal_count = 10;
+  uint64 missing_amount_count = 11;
+  uint64 unknown_history_count = 12;
+  uint64 unallocated_count = 13;
+  repeated SalesQuotaFact facts = 14;
+  SalesQuotaFactCursor next = 15;
+}
+
 service DealService {
+  rpc CreateSalesQuota(CreateSalesQuotaRequest) returns (CreateSalesQuotaResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc UpdateSalesQuota(UpdateSalesQuotaRequest) returns (UpdateSalesQuotaResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc GetSalesQuota(GetSalesQuotaRequest) returns (GetSalesQuotaResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListSalesQuotas(ListSalesQuotasRequest) returns (ListSalesQuotasResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc GetSalesQuotaPerformance(GetSalesQuotaPerformanceRequest) returns (GetSalesQuotaPerformanceResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   rpc CreateSalesRoutingRule(CreateSalesRoutingRuleRequest) returns (CreateSalesRoutingRuleResponse) {
     option idempotency_level = IDEMPOTENT;
   }

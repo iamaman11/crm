@@ -230,6 +230,16 @@ impl CalendarDate {
             .map_err(|_| invalid())
     }
 
+    /// Resolve a civil period boundary using the same pinned IANA authority.
+    /// Reject skipped/repeated midnight rather than silently shifting a period.
+    pub fn start_of_day(self, zone_name: &str) -> Result<UtcInstant, ContractError> {
+        UtcInstant::resolve_local(
+            self.0.at(0, 0, 0, 0),
+            zone_name,
+            LocalTimeResolution::Reject,
+        )
+    }
+
     pub fn days_until(self, other: Self) -> i64 {
         self.0.duration_until(other.0).as_secs() / 86_400
     }
