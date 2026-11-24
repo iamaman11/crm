@@ -48,9 +48,7 @@ impl CaptureFailure {
         match self {
             Self::Storage => ConnectError::internal("SALES_FORECAST_SNAPSHOT_FAILED"),
             Self::Changed => ConnectError::aborted("SALES_FORECAST_SNAPSHOT_CHANGED"),
-            Self::Capacity => {
-                ConnectError::resource_exhausted("SALES_FORECAST_CAPTURE_CAPACITY")
-            }
+            Self::Capacity => ConnectError::resource_exhausted("SALES_FORECAST_CAPTURE_CAPACITY"),
         }
     }
 }
@@ -240,10 +238,7 @@ pub(super) async fn snapshot(
             if let Some(source) =
                 ForecastSource::capture(quota, &deal, context).map_err(|_| invalid())?
             {
-                snapshot
-                    .forecast
-                    .observe(&source)
-                    .map_err(|_| invalid())?;
+                snapshot.forecast.observe(&source).map_err(|_| invalid())?;
                 let bytes = serde_json::to_vec(&source).map_err(|_| invalid())?.len();
                 source_bytes = source_bytes
                     .checked_add(bytes + 2)
