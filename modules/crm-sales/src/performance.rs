@@ -8,7 +8,12 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 fn invalid(code: &'static str) -> SdkError {
-    SdkError::new(code, ErrorCategory::InvalidArgument, false, "Invalid Sales performance report.")
+    SdkError::new(
+        code,
+        ErrorCategory::InvalidArgument,
+        false,
+        "Invalid Sales performance report.",
+    )
 }
 
 fn overflow() -> SdkError {
@@ -122,13 +127,18 @@ impl ForecastSource {
             crm_core_contracts::CurrencyCode::try_new(amount.currency_code.clone())
                 .map_err(|_| invalid("SALES_FORECAST_SOURCE_INVALID"))?;
         }
-        for dimension in [&self.credited_team, &self.credited_territory].into_iter().flatten() {
+        for dimension in [&self.credited_team, &self.credited_territory]
+            .into_iter()
+            .flatten()
+        {
             if dimension.id.is_empty() || dimension.name.is_empty() || dimension.version < 1 {
                 return Err(invalid("SALES_FORECAST_SOURCE_INVALID"));
             }
         }
         if self.disposition == ForecastDisposition::Included
-            && (self.amount.is_none() || self.expected_close_date.is_none() || self.category == ForecastCategory::Omitted)
+            && (self.amount.is_none()
+                || self.expected_close_date.is_none()
+                || self.category == ForecastCategory::Omitted)
         {
             return Err(invalid("SALES_FORECAST_SOURCE_INVALID"));
         }
@@ -144,13 +154,17 @@ impl ForecastSource {
         context: CloseCreditContext,
     ) -> Result<Option<Self>, SdkError> {
         if deal.status() != DealStatus::Open
-            || quota.pipeline_id.as_deref().is_some_and(|id| id != deal.stage().pipeline_id().as_str())
+            || quota
+                .pipeline_id
+                .as_deref()
+                .is_some_and(|id| id != deal.stage().pipeline_id().as_str())
         {
             return Ok(None);
         }
         let date = deal.expected_close_date();
         if let Some(date) = date
-            && (date < quota.period.start_date.calendar()? || date > quota.period.end_date.calendar()?)
+            && (date < quota.period.start_date.calendar()?
+                || date > quota.period.end_date.calendar()?)
         {
             return Ok(None);
         }
@@ -158,8 +172,13 @@ impl ForecastSource {
         let dimension = match &quota.scope {
             SalesQuotaScope::Tenant => None,
             SalesQuotaScope::Owner(SalesOwnerScope::Actor(_)) => credit.actor.as_deref(),
-            SalesQuotaScope::Owner(SalesOwnerScope::Team(_)) => credit.team.as_ref().map(|team| team.id.as_str()),
-            SalesQuotaScope::Territory(_) => credit.territory.as_ref().map(|territory| territory.id.as_str()),
+            SalesQuotaScope::Owner(SalesOwnerScope::Team(_)) => {
+                credit.team.as_ref().map(|team| team.id.as_str())
+            }
+            SalesQuotaScope::Territory(_) => credit
+                .territory
+                .as_ref()
+                .map(|territory| territory.id.as_str()),
         };
         if let Some(id) = quota.scope.dimension_id()
             && dimension.is_some_and(|value| value != id)
@@ -262,11 +281,19 @@ impl ForecastCoverage {
             if source.disposition != ForecastDisposition::Included {
                 continue;
             }
-            let units = source.amount.as_ref().ok_or_else(overflow)?.minor_units.parse::<i128>().map_err(|_| overflow())?;
+            let units = source
+                .amount
+                .as_ref()
+                .ok_or_else(overflow)?
+                .minor_units
+                .parse::<i128>()
+                .map_err(|_| overflow())?;
             if units < 0 || source.probability_basis_points > 10_000 {
                 return Err(invalid("SALES_FORECAST_SOURCE_INVALID"));
             }
-            let weight = units.checked_mul(i128::from(source.probability_basis_points)).ok_or_else(overflow)?;
+            let weight = units
+                .checked_mul(i128::from(source.probability_basis_points))
+                .ok_or_else(overflow)?;
             total = total.checked_add(units).ok_or_else(overflow)?;
             weighted = weighted.checked_add(weight).ok_or_else(overflow)?;
             let entry = buckets.entry(source.category).or_default();
@@ -278,15 +305,19 @@ impl ForecastCoverage {
         value.weighted = weighted.to_string();
         let remaining = actual.remaining.parse::<i128>().map_err(|_| overflow())?;
         if remaining > 0 {
-            value.open_coverage = Some((total.checked_mul(10_000).ok_or_else(overflow)? / remaining).to_string());
+            value.open_coverage =
+                Some((total.checked_mul(10_000).ok_or_else(overflow)? / remaining).to_string());
             value.weighted_coverage = Some((weighted / remaining).to_string());
         }
-        value.buckets = buckets.into_iter().map(|(category, (count, open, weighted))| ForecastBucket {
-            category,
-            count,
-            open: open.to_string(),
-            weighted: weighted.to_string(),
-        }).collect();
+        value.buckets = buckets
+            .into_iter()
+            .map(|(category, (count, open, weighted))| ForecastBucket {
+                category,
+                count,
+                open: open.to_string(),
+                weighted: weighted.to_string(),
+            })
+            .collect();
         Ok(value)
     }
 
@@ -331,8 +362,16 @@ impl ForecastCoverage {
     }
 
     pub fn source_count(&self) -> Option<u64> {
-        [self.included_count, self.unallocated_count, self.undated_count, self.omitted_count, self.missing_amount_count, self.other_currency_count]
-            .into_iter().try_fold(0u64, u64::checked_add)
+        [
+            self.included_count,
+            self.unallocated_count,
+            self.undated_count,
+            self.omitted_count,
+            self.missing_amount_count,
+            self.other_currency_count,
+        ]
+        .into_iter()
+        .try_fold(0u64, u64::checked_add)
     }
 }
 
@@ -353,7 +392,11 @@ pub struct PerformanceReport {
 
 impl PerformanceReport {
     pub fn validate_name(name: &str) -> Result<(), SdkError> {
-        if name.is_empty() || name.trim() != name || name.len() > 240 || name.chars().any(char::is_control) {
+        if name.is_empty()
+            || name.trim() != name
+            || name.len() > 240
+            || name.chars().any(char::is_control)
+        {
             return Err(invalid("SALES_PERFORMANCE_REPORT_NAME_INVALID"));
         }
         Ok(())
@@ -365,9 +408,14 @@ impl PerformanceReport {
         self.quota.validate()?;
         self.actuals.validate(&self.quota)?;
         self.forecast.validate(&self.actuals)?;
-        if self.formula_version != 1 || self.captured_by.is_empty()
+        if self.formula_version != 1
+            || self.captured_by.is_empty()
             || self.captured_at.parse::<i64>().ok().is_none_or(|n| n < 0)
-            || self.event_sequence.parse::<i64>().ok().is_none_or(|n| n < 0)
+            || self
+                .event_sequence
+                .parse::<i64>()
+                .ok()
+                .is_none_or(|n| n < 0)
             || self.forecast.source_count().is_none()
         {
             return Err(invalid("SALES_PERFORMANCE_REPORT_INVALID"));
@@ -376,7 +424,8 @@ impl PerformanceReport {
     }
 
     pub fn decode(raw: &str) -> Result<Self, SdkError> {
-        let value: Self = serde_json::from_str(raw).map_err(|_| invalid("SALES_PERFORMANCE_REPORT_INVALID"))?;
+        let value: Self =
+            serde_json::from_str(raw).map_err(|_| invalid("SALES_PERFORMANCE_REPORT_INVALID"))?;
         value.validate()?;
         Ok(value)
     }
@@ -405,7 +454,11 @@ mod tests {
             deal_id: "deal-a".into(),
             deal_version: 1,
             pipeline_id: "pipeline-a".into(),
-            expected_close_date: Some(QuotaDate { year: 2026, month: 11, day: 24 }),
+            expected_close_date: Some(QuotaDate {
+                year: 2026,
+                month: 11,
+                day: 24,
+            }),
             amount: Some(CommercialAmount {
                 minor_units: "9007199254740993".into(),
                 currency_code: "EUR".into(),
@@ -428,6 +481,11 @@ mod tests {
         assert_eq!(totals.unallocated_count, 1);
         let mut complete = actual;
         complete.remaining = "0".into();
-        assert_eq!(ForecastCoverage::new(&complete, &[]).unwrap().weighted_coverage, None);
+        assert_eq!(
+            ForecastCoverage::new(&complete, &[])
+                .unwrap()
+                .weighted_coverage,
+            None
+        );
     }
 }
