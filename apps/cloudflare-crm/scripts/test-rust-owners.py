@@ -32,6 +32,21 @@ for module in linked:
     owner_features[module["crate_name"]] = flags
 # Test every active owner and shared crate with a single Cargo invocation.
 subprocess.run(["cargo", "test", "--locked", "--workspace", "--all-targets"], check=True)
+# Both feature graphs must pass the published v1 compatibility vectors.
+subprocess.run(["cargo", "test", "--locked", "-p", "crm-proto-contracts",
+                "--no-default-features", "--features", "sales-activities-link", "--lib"], check=True)
+# Cargo's resolved metadata is the feature authority, not a source-code parser.
+metadata = json.loads(subprocess.check_output([
+    "cargo", "metadata", "--locked", "--format-version", "1",
+    "--manifest-path", str(worker / "Cargo.toml"),
+    "--filter-platform", "wasm32-unknown-unknown", "--features", "native",
+], text=True))
+contract_ids = {p["id"] for p in metadata["packages"] if p["name"] == "crm-proto-contracts"}
+contract_nodes = [n for n in metadata["resolve"]["nodes"] if n["id"] in contract_ids]
+if len(contract_nodes) != 1 or contract_nodes[0]["features"] != ["sales-activities-link"]:
+    raise SystemExit("Worker must compile only the original link contract feature")
+print(json.dumps({"event": "crm.worker-contract-features", "result": "PASS",
+                  "features": contract_nodes[0]["features"]}), flush=True)
 native_graphs = {}
 for owner, flags in sorted(owner_features.items()):
     if flags:

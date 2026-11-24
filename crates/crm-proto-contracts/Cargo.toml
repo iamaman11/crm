@@ -6,6 +6,13 @@ rust-version.workspace = true
 publish = false
 build = "build.rs"
 
+# Host workspace and contract export retain the complete published schema.
+# The Worker only needs the historical internal Sales -> Activities wire link.
+[features]
+default = ["full"]
+full = ["sales-activities-link"]
+sales-activities-link = []
+
 [dependencies]
 prost = { workspace = true }
 prost-types = "0.14"

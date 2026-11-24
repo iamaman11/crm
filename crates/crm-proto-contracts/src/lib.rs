@@ -151,6 +151,7 @@ mod tests {
         assert_eq!(decoded, request);
     }
 
+    #[cfg(feature = "full")]
     #[test]
     fn descriptor_set_contains_required_domain_packages() {
         let descriptor_set = prost_types::FileDescriptorSet::decode(FILE_DESCRIPTOR_SET).unwrap();
@@ -166,6 +167,47 @@ mod tests {
         assert!(packages.contains("crm.communications.v1"));
         assert!(packages.contains("crm.support.v1"));
         assert!(packages.contains("crm.billing.v1"));
+    }
+
+    #[cfg(not(feature = "full"))]
+    #[test]
+    fn link_descriptor_set_contains_only_transitive_imports() {
+        let descriptor_set = prost_types::FileDescriptorSet::decode(FILE_DESCRIPTOR_SET).unwrap();
+        let names = descriptor_set
+            .file
+            .into_iter()
+            .map(|file| file.name.unwrap())
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            names,
+            [
+                "crm/activities/v1/task.proto".to_owned(),
+                "crm/core/v1/common.proto".to_owned(),
+                "crm/sales/v1/deal.proto".to_owned(),
+            ]
+            .into_iter()
+            .collect()
+        );
+    }
+
+    #[test]
+    fn link_descriptor_identity_matches_published_v1_vectors() {
+        // Frozen compatibility vectors from the existing published contract
+        // hashes. Both feature graphs must preserve these exact identities.
+        let hex = |name| {
+            message_descriptor_hash(name)
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
+        };
+        assert_eq!(
+            hex("crm.activities.v1.CreateTaskRequest"),
+            "73d33b734e70e762d0f4d7c033e61e2a4fefe23878135e4ba6194c7477c1c9f0"
+        );
+        assert_eq!(
+            hex("crm.sales.v1.DealStageChangedEvent"),
+            "ca966c11a09250d1c25f5edd21e211aeffe67e375472e3ba40e429517dd5540e"
+        );
     }
 
     #[test]

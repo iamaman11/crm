@@ -7,7 +7,7 @@ publish = false
 
 [dependencies]
 crm-module-sdk = { path = "../crm-module-sdk" }
-crm-proto-contracts = { path = "../crm-proto-contracts" }
+crm-proto-contracts = { path = "../crm-proto-contracts", default-features = false, features = ["sales-activities-link"] }
 crm-sales-activities-link = { path = "../../modules/crm-sales-activities-link" }
 prost = { workspace = true }
 
