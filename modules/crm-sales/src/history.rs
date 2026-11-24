@@ -338,7 +338,8 @@ impl HistoryAccumulator {
     }
 
     fn record_detail(&mut self, detail: HistoricalDeal) {
-        let facts = detail.visits.len() + detail.close_versions.len() + detail.reopen_versions.len();
+        let facts =
+            detail.visits.len() + detail.close_versions.len() + detail.reopen_versions.len();
         let keep = !self.has_more()
             && self.result.deals.len() < self.page_size
             && self.detail_facts.saturating_add(facts) <= MAX_HISTORY_DETAIL_FACTS;
@@ -456,7 +457,8 @@ impl HistoryAccumulator {
                 self.cycles.push(cycle);
                 detail.cycle_seconds = Some((cycle / 1_000_000_000) as u64);
                 detail.episode_seconds = Some(((closed.at - episode_start) / 1_000_000_000) as u64);
-                *self.reasons
+                *self
+                    .reasons
                     .entry((closed.status == DealStatus::Won, detail.reason.clone()))
                     .or_default() += 1;
             }
@@ -468,11 +470,13 @@ impl HistoryAccumulator {
         let mut result = self.result;
         result.cycle = HistoryDuration::from_nanos(self.cycles);
         result.episode = HistoryDuration::from_nanos(self.episodes);
-        result.reasons = self.reasons
+        result.reasons = self
+            .reasons
             .into_iter()
             .map(|((won, code), count)| HistoryReason { won, code, count })
             .collect();
-        result.stages = self.stages
+        result.stages = self
+            .stages
             .into_iter()
             .map(
                 |((pipeline_id, stage_id, catalog_version), durations)| HistoryStage {
@@ -484,7 +488,10 @@ impl HistoryAccumulator {
             )
             .collect();
         if result.total_deals > result.deals.len() as u64 {
-            result.next_deal_id = result.deals.last().map_or_else(String::new, |deal| deal.id.clone());
+            result.next_deal_id = result
+                .deals
+                .last()
+                .map_or_else(String::new, |deal| deal.id.clone());
         }
         result
     }

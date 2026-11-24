@@ -2683,6 +2683,14 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.ok(new URL(page.url()).hash.includes("historyZone=Europe%2FWarsaw"));
    await historical.getByRole("region",{name:"История выбранного периода",exact:true}).waitFor();
    await historical.getByRole("region",{name:"История предыдущего периода",exact:true}).waitFor();
+   const historySummaryDownload=page.waitForEvent("download");
+   await historical.getByRole("button",{name:"Скачать историю CSV",exact:true}).click();
+   assert.equal((await historySummaryDownload).suggestedFilename(),"crm-sales-history.csv");
+   const historyCurrent=historical.getByRole("region",{name:"История выбранного периода",exact:true});
+   await historyCurrent.locator("details > summary").first().click();
+   const historyDetailDownload=page.waitForEvent("download");
+   await historyCurrent.getByRole("button",{name:"Скачать детализацию истории CSV",exact:true}).click();
+   assert.equal((await historyDetailDownload).suggestedFilename(),"crm-sales-history-deals.csv");
    await reloadDocument();
    await historical.getByRole("region",{name:"История выбранного периода",exact:true}).waitFor();
    await expect(historical.getByLabel("Часовой пояс истории",{exact:true})).toHaveValue("Europe/Warsaw");

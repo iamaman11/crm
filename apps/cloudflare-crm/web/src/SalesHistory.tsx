@@ -1,12 +1,13 @@
 import {useCallback,useState} from "react";
 import {Button,FilterForm,MetricGrid,ScrollTable,TextField} from "@ultimate-crm/ui";
-import {DealStatus} from "@ultimate-crm/client/cloudflare";
+import {DealStatus,MemberRole,SalesAnalyticsExportKind} from "@ultimate-crm/client/cloudflare";
 import {api} from "./api";
 import {parseDate} from "./calendarInput";
 import {QueryNotice,useQuery,useReadAction} from "./hooks";
 import {dealHref,intelligenceHref} from "./routes";
 import {navigateTo,currentRouteHash} from "./navigation";
 import {percent} from "./money";
+import {SalesExportButton} from "./SalesExportButton";
 
 type Response=Awaited<ReturnType<typeof api.deals.getSalesHistory>>;
 type Window=NonNullable<Response["current"]>;
@@ -24,7 +25,7 @@ function status(value:DealStatus|undefined):string {
   return "История неизвестна";
 }
 
-function HistoryWindow({window,title,request,snapshot,previous}:{window:Window;title:string;request:Request;snapshot:NonNullable<Response["snapshot"]>;previous:boolean}) {
+function HistoryWindow({window,title,request,snapshot,previous,isAdmin}:{window:Window;title:string;request:Request;snapshot:NonNullable<Response["snapshot"]>;previous:boolean;isAdmin:boolean}) {
   const state=window.stateAtCutoff,closed=window.finalCloses,cohort=window.creationCohort;
   const [page,setPage]=useState<Detail|undefined>(undefined);
   const detail=useReadAction<Detail>();
@@ -32,7 +33,7 @@ function HistoryWindow({window,title,request,snapshot,previous}:{window:Window;t
   const nextPage=()=>void detail.run(async signal=>{
     const result=await api.deals.getSalesHistory({...request,snapshot,detail:{previous,afterDealId:next}},{signal});
     if(!result.detail)throw Error("Сервер не вернул страницу истории");
-    setPage(result.detail);
+    if(!signal.aborted)setPage(result.detail);
     return result.detail;
   });
   return <section aria-label={title}>
@@ -71,6 +72,7 @@ function HistoryWindow({window,title,request,snapshot,previous}:{window:Window;t
         <p>На странице: {deals.length} из {count(window.totalDealCount)}.</p>
         {page&&<Button variant="secondary" disabled={detail.busy} onClick={()=>{setPage(undefined);}}>Первая страница</Button>}
         {next&&<Button variant="secondary" disabled={detail.busy} onClick={nextPage}>Следующая страница истории</Button>}
+        {isAdmin&&<SalesExportButton label="Скачать детализацию истории CSV" request={{kind:SalesAnalyticsExportKind.HISTORY_DETAIL,scope:{case:"history",value:{...request,snapshot,detail:{previous}}}}}/>}
       </details>
     </>}
   </section>;
@@ -78,11 +80,13 @@ function HistoryWindow({window,title,request,snapshot,previous}:{window:Window;t
 
 export function SalesHistory({start,end,pipelineId,compare,historyZone,includeArchived,owner}:Props){
   const [formError,setFormError]=useState("");
+  const me=useQuery(useCallback(async(signal:AbortSignal)=>(await api.members.getMyMembership({}, {signal})).member,[]));
+  const isAdmin=me.data?.role===MemberRole.ADMIN;
   const request=useCallback(():Request|undefined=>{
     if(!start||!end)return undefined;
     const startDate=parseDate(start),endDate=parseDate(end);
     if(!startDate||!endDate)throw Error("Укажите обе даты");
-    return {period:{startDate,endDate},timeZone:historyZone,...(pipelineId?{pipelineId}:{}),comparePrevious:compare};
+    return {period:{startDate,endDate},timeZone:historyZone,...(pipelineId?{pipelineId}:{}),comparePrevious:compare,pageSize:25};
   },[start,end,pipelineId,historyZone,compare]);
   const query=useQuery(useCallback(async(signal:AbortSignal)=>{
     const scope=request();
@@ -115,9 +119,10 @@ export function SalesHistory({start,end,pipelineId,compare,historyZone,includeAr
     {start&&end&&<QueryNotice query={query}/>}
     {query.error&&<Button type="button" variant="secondary" onClick={()=>void query.reload().catch(()=>{})}>Повторить исторический запрос</Button>}
     {data&&scope&&!query.stale&&!query.error&&data.current&&data.snapshot&&<>
-      <p>Срез {instant(data.asOfUnixNanos)}. Границы периода рассчитаны Rust в {historyZone}.</p>
-      <HistoryWindow key={data.snapshot.scopeSha256Hex+":current"} window={data.current} title="История выбранного периода" request={scope} snapshot={data.snapshot} previous={false}/>
-      {data.previous&&<><p>{data.comparisonComparable?"Полные периоды без обнаруженных пропусков.":"Периоды не сопоставимы: незавершённый период или неполная история."} Изменение Win rate: {data.winRateDeltaBasisPoints===undefined?"—":percent(data.winRateDeltaBasisPoints)+" п.п."}</p><HistoryWindow key={data.snapshot.scopeSha256Hex+":previous"} window={data.previous} title="История предыдущего периода" request={scope} snapshot={data.snapshot} previous/></>}
+      <p>Срез {instant(data.asOfUnixNanos)}. Границы периода рассчитаны Rust в {historyZone}. Детализация и экспорт используют ту же ревизию; при изменении исходных данных рассчитайте новый срез.</p>
+      {isAdmin&&<SalesExportButton key={data.snapshot.scopeSha256Hex} label="Скачать историю CSV" request={{kind:SalesAnalyticsExportKind.HISTORY,scope:{case:"history",value:{...scope,snapshot:data.snapshot}}}}/>}
+      <HistoryWindow key={data.snapshot.scopeSha256Hex+":current"} window={data.current} title="История выбранного периода" request={scope} snapshot={data.snapshot} previous={false} isAdmin={isAdmin}/>
+      {data.previous&&<><p>{data.comparisonComparable?"Полные периоды без обнаруженных пропусков.":"Периоды не сопоставимы: незавершённый период или неполная история."} Изменение Win rate: {data.winRateDeltaBasisPoints===undefined?"—":percent(data.winRateDeltaBasisPoints)+" п.п."}</p><HistoryWindow key={data.snapshot.scopeSha256Hex+":previous"} window={data.previous} title="История предыдущего периода" request={scope} snapshot={data.snapshot} previous isAdmin={isAdmin}/></>}
     </>}
   </section>;
 }

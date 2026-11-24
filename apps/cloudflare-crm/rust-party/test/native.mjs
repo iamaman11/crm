@@ -2730,8 +2730,9 @@ console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:
     if(n===1000){
       const portfolio=await salesV2("GetSalesPortfolio",viewer,{pipelineId:"pipeline.other"});
       assert.equal(portfolio.status,200,describeProtobuf(portfolio.body));
+      const historyYear=new Date().getUTCFullYear();
       const historyScope={pipelineId:"pipeline.other",timeZone:"UTC",pageSize:17,
-        period:{startDate:{year:2000,month:1,day:1},endDate:{year:2026,month:12,day:31}}};
+        period:{startDate:{year:historyYear-1,month:1,day:1},endDate:{year:historyYear,month:12,day:31}}};
       const history=await salesV2("GetSalesHistory",viewer,historyScope);
       assert.equal(history.status,200,describeProtobuf(history.body));
       assert.equal(history.body.current.totalDealCount,1032n);
@@ -5685,7 +5686,8 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    assert.equal(await revision("tenant-a"),initialFence+3n);
    await call("CreatePipeline",admin,{pipelineId:pipeline,name:"Routing "+suffix,stages:[{stageId:"lead",name:"Lead",probabilityBasisPoints:5000}],precondition:pre("pipeline")});
    await call("CreateTerritory",admin,{territoryId,configuration:{name:"Routing territory "+suffix,defaultOwner:actor(emailB)},precondition:pre("territory")});
-   assert.equal(await revision("tenant-a"),initialFence+4n);
+   // The shared read fence now covers catalog membership as well.
+   assert.equal(await revision("tenant-a"),initialFence+5n);
    assert.equal(await revision("tenant-b"),initialOtherFence);
    const stage={pipelineId:pipeline,stageId:"lead",ordinal:1};
    const facts={accountId,stage,territoryId,amount:{currencyCode:"EUR",minorUnits:100n}};
@@ -5987,11 +5989,16 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    let scaleReport,scaledScoreDetail;
    const scaleReportId="report-scale-"+suffix;
    try{
+     const beforeEventOnly=await call("GetSalesHistory",viewer,historyInput);
+     const eventOnlyFence=await revision("tenant-a");
      await sql(scaleInsert.replace("n<"+scaleCount,"n<120"),"tenant-a",one.dealId);
+     assert.equal(await revision("tenant-a"),eventOnlyFence+120n);
      // A deliberately incomplete stream belongs to the current year only;
      // it must not invalidate a historical window before immutable creation.
-     await call("GetSalesHistory",viewer,{...historyInput,snapshot:historyPaged.snapshot,
+     await call("GetSalesHistory",viewer,{...historyInput,snapshot:beforeEventOnly.snapshot,
        detail:{afterDealId:""}},409);
+     await call("ExportSalesAnalytics",admin,{kind:7,scope:{case:"history",value:{...historyInput,
+       snapshot:beforeEventOnly.snapshot}}},409);
      const gappedHistory=await call("GetSalesHistory",viewer,historyInput);
      assert.equal(gappedHistory.current.unknownHistoryCount,1n);
      assert.equal(gappedHistory.current.deals.find(d=>d.dealId===one.dealId).status,undefined);
@@ -6173,7 +6180,8 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    const beforeFence=await revision("tenant-a"),otherFence=await revision("tenant-b");
    try{
      await cloneOpen(1,openScale);
-     assert.equal(await revision("tenant-a"),beforeFence+BigInt(openScale));
+     // Each inserted Deal and its immutable created event invalidate the shared read fence.
+     assert.equal(await revision("tenant-a"),beforeFence+2n*BigInt(openScale));
      assert.equal(await revision("tenant-b"),otherFence);
      const openAmount=3001n+BigInt(openScale)*1001n;
      const weightedAmount=10005000n+BigInt(openScale)*1001n*5000n;
@@ -6215,7 +6223,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      assert.equal(mutation.status,200,describeProtobuf(mutation.body));
      assert.equal(mutation.body.deal.version,2n);
      assert.equal(mutation.body.deal.probabilityBasisPoints,1000);
-     assert.equal(await revision("tenant-a"),raceFence+1n);
+     assert.equal(await revision("tenant-a"),raceFence+2n);
      const newWeight=weightedAmount-1001n*4000n;
      assert.ok([200,409].includes(race.status),describeProtobuf(race.body));
      if(race.status===200)assert.ok([String(weightedAmount),String(newWeight)].includes(race.body.report.forecast.weightedMinorUnitsTimesBasisPoints),"mixed capture");
@@ -6223,6 +6231,21 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      assert.equal((await call("PreviewSalesPerformanceReport",viewer,captureInput)).report.forecast.weightedMinorUnitsTimesBasisPoints,String(newWeight));
      assert.deepEqual((await call("GetSalesPerformanceReport",viewer,{reportId:scaledReportId,pageSize:1})).report,largeReport);
      await cloneOpen(openScale+1,limitScale);
+     // The same retained fixture exceeds both obsolete historical limits.
+     // Exact summary membership is checked against original physical D1 records.
+     const expectedHistory=BigInt((await sql("SELECT COUNT(*) n FROM crm_sales_deal_records WHERE tenant=? AND json_extract(state,'$.stage.pipeline_id')=?",
+       "tenant-a",pipeline))[0].n);
+     const historyLarge=await call("GetSalesHistory",viewer,{...historyInput,pageSize:5});
+     assert.ok(expectedHistory>8192n);
+     assert.equal(historyLarge.current.totalDealCount,expectedHistory);
+     assert.equal(historyLarge.current.stateAtCutoff.totalCount+historyLarge.current.unknownHistoryCount,expectedHistory);
+     assert.equal(historyLarge.current.deals.length,5);
+     const historyLargeNext=await call("GetSalesHistory",viewer,{...historyInput,pageSize:5,
+       snapshot:historyLarge.snapshot,detail:{afterDealId:historyLarge.current.nextDealId}});
+     assert.equal(historyLargeNext.detail.deals.length,5);
+     assert.ok(historyLargeNext.detail.deals[0].dealId>historyLarge.current.nextDealId);
+     console.log(JSON.stringify({event:"crm.native-history-industrial-scale",result:"PASS",
+       deals:String(expectedHistory),page_size:5,exact_membership:true,fenced_detail:true}));
      const oversized=await salesV2("PreviewSalesPerformanceReport",viewer,captureInput);
      assert.equal(oversized.status,429,describeProtobuf(oversized.body));
      assert.match(oversized.body.message,/SALES_FORECAST_CAPTURE_CAPACITY/);
@@ -6254,7 +6277,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    const beforeOwnerFence=await revision("tenant-a");
    const changedForecast=await call("UpdateDeal",admin,{dealId:forecastInputs[0].dealId,amount:{operation:{case:"set",value:{currencyCode:"EUR",minorUnits:9000n}}},precondition:pre("forecast-update",1n)});
    assert.equal(changedForecast.deal.version,2n);
-   assert.equal(await revision("tenant-a"),beforeOwnerFence+1n);
+   assert.equal(await revision("tenant-a"),beforeOwnerFence+2n);
    assert.equal(await revision("tenant-b"),otherFence);
    assert.equal((await call("PreviewSalesPerformanceReport",viewer,{quotaId,quotaVersion:2n})).report.forecast.openMinorUnits,"11000");
    assert.deepEqual(await call("GetSalesPerformanceReport",viewer,getReport),readReport);
