@@ -42,7 +42,22 @@ pub(super) struct DistributionOptions {
 }
 
 // Shared Access predicate for both original owners; no second ACL store.
-const COORDINATOR_JOIN: &str = " FROM crm_access_teams tm JOIN json_each(tm.state,'$.queue_coordinators') g JOIN crm_users u ON u.tenant_id=tm.tenant AND u.email=json_extract(g.value,'$.email') AND u.active=1 AND u.version=CAST(json_extract(g.value,'$.member_version') AS INTEGER) JOIN json_each(tm.state,'$.member_emails') r JOIN crm_users target ON target.tenant_id=tm.tenant AND target.email=r.value AND target.active=1 WHERE tm.tenant=? AND tm.id=? AND json_extract(tm.state,'$.active')=1 AND u.email=? AND u.email NOT LIKE 'service:%' AND EXISTS (SELECT 1 FROM json_each(tm.state,'$.member_emails') leader WHERE leader.value=u.email) AND target.email NOT LIKE 'service:%'";
+const COORDINATOR_FROM: &str = "json_each(tm.state,'$.queue_coordinators') g JOIN crm_users u ON u.tenant_id=tm.tenant AND u.email=json_extract(g.value,'$.email') AND u.active=1 AND u.version=CAST(json_extract(g.value,'$.member_version') AS INTEGER)";
+const COORDINATOR_ACTIVE: &str = "json_extract(tm.state,'$.active')=1 AND u.email NOT LIKE 'service:%' AND EXISTS (SELECT 1 FROM json_each(tm.state,'$.member_emails') leader WHERE leader.value=u.email)";
+
+fn coordinator_join() -> String {
+    format!(
+        " FROM crm_access_teams tm JOIN {COORDINATOR_FROM} JOIN json_each(tm.state,'$.member_emails') r JOIN crm_users target ON target.tenant_id=tm.tenant AND target.email=r.value AND target.active=1 WHERE tm.tenant=? AND tm.id=? AND u.email=? AND {COORDINATOR_ACTIVE} AND target.email NOT LIKE 'service:%'"
+    )
+}
+
+// Current read projection only: never persist this derived authority in Team
+// state or mutation receipts. A coordinator is also an eligible target.
+fn team_projection() -> String {
+    format!(
+        "SELECT tm.state, (SELECT json_group_array(u.email) FROM {COORDINATOR_FROM} WHERE {COORDINATOR_ACTIVE}) AS effective_coordinators FROM crm_access_teams tm"
+    )
+}
 
 #[derive(Deserialize)]
 struct DistributionRow {
@@ -57,7 +72,8 @@ pub(super) async fn distribution_options(
     actor: &str,
 ) -> Result<Option<DistributionOptions>> {
     let sql = format!(
-        "SELECT CAST(tm.version AS TEXT) version,target.email{COORDINATOR_JOIN} ORDER BY target.email"
+        "SELECT CAST(tm.version AS TEXT) version,target.email{} ORDER BY target.email",
+        coordinator_join()
     );
     let rows = bind(
         db,
@@ -94,8 +110,10 @@ pub(super) async fn may_distribute(
     scope: &DistributionScope,
     target: &str,
 ) -> Result<bool> {
-    let sql =
-        format!("SELECT 1{COORDINATOR_JOIN} AND tm.version=CAST(? AS INTEGER) AND target.email=?");
+    let sql = format!(
+        "SELECT 1{} AND tm.version=CAST(? AS INTEGER) AND target.email=?",
+        coordinator_join()
+    );
     Ok(bind(
         db,
         &sql,
@@ -130,7 +148,7 @@ pub(super) fn append_distribution_guard(
         DistributionOwner::Task => "crm_activity_task_records",
         DistributionOwner::Deal => "crm_sales_deal_records",
     };
-    sql.push_str(&format!(" AND json_extract({table}.state,'$.owner.team_id')=? AND json_extract({table}.state,'$.status')='open' AND EXISTS (SELECT 1{COORDINATOR_JOIN} AND tm.version=CAST(? AS INTEGER) AND target.email=?)"));
+    sql.push_str(&format!(" AND json_extract({table}.state,'$.owner.team_id')=? AND json_extract({table}.state,'$.status')='open' AND EXISTS (SELECT 1{} AND tm.version=CAST(? AS INTEGER) AND target.email=?)", coordinator_join()));
     values.extend([
         JsValue::from_str(&scope.team_id),
         JsValue::from_str(tenant),
@@ -191,16 +209,54 @@ pub(super) async fn get(db: &D1Database, tenant: &str, id: &str) -> Result<Optio
     .map(|row| decode(&row.state))
     .transpose()
 }
+pub(super) struct TeamProjection {
+    pub team: Team,
+    pub effective_coordinators: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct ProjectionRow {
+    state: String,
+    effective_coordinators: String,
+}
+
+impl ProjectionRow {
+    fn decode(self) -> Result<TeamProjection> {
+        Ok(TeamProjection {
+            team: decode(&self.state)?,
+            effective_coordinators: serde_json::from_str(&self.effective_coordinators)
+                .map_err(|e| worker::Error::RustError(e.to_string()))?,
+        })
+    }
+}
+
+pub(super) async fn get_projected(
+    db: &D1Database,
+    tenant: &str,
+    id: &str,
+) -> Result<Option<TeamProjection>> {
+    let sql = format!("{} WHERE tm.tenant=? AND tm.id=?", team_projection());
+    bind(db, &sql, &[JsValue::from_str(tenant), JsValue::from_str(id)])?
+        .first::<ProjectionRow>(None)
+        .await?
+        .map(ProjectionRow::decode)
+        .transpose()
+}
+
 pub(super) async fn list(
     db: &D1Database,
     tenant: &str,
     after: &str,
     size: usize,
     inactive: bool,
-) -> Result<(Vec<Team>, Option<String>)> {
+) -> Result<(Vec<TeamProjection>, Option<String>)> {
+    let sql = format!(
+        "{} WHERE tm.tenant=? AND tm.id>? AND (?=1 OR json_extract(tm.state,'$.active')=1) ORDER BY tm.id LIMIT ?",
+        team_projection()
+    );
     let rows = bind(
         db,
-        "SELECT state FROM crm_access_teams WHERE tenant=? AND id>? AND (?=1 OR json_extract(state,'$.active')=1) ORDER BY id LIMIT ?",
+        &sql,
         &[
             JsValue::from_str(tenant),
             JsValue::from_str(after),
@@ -210,13 +266,13 @@ pub(super) async fn list(
     )?
     .all()
     .await?
-    .results::<Row>()?;
+    .results::<ProjectionRow>()?;
     let teams = rows
-        .iter()
-        .map(|row| decode(&row.state))
+        .into_iter()
+        .map(ProjectionRow::decode)
         .collect::<Result<Vec<_>>>()?;
     let next = if teams.len() > size {
-        teams.get(size - 1).map(|v| v.team_id.clone())
+        teams.get(size - 1).map(|v| v.team.team_id.clone())
     } else {
         None
     };

@@ -13,7 +13,7 @@ impl member_wire::MemberService for MemberV2Service {
         let id =
             access_teams::id(&input.team_id).map_err(|e| e.connect("GetTeam", &self.request_id))?;
         let db = self.d1()?;
-        let team = access_teams::get(&db, &self.actor.tenant, &id)
+        let team = access_teams::get_projected(&db, &self.actor.tenant, &id)
             .await
             .map_err(|_| ConnectError::internal("Team read failed"))?
             .ok_or_else(|| ConnectError::not_found("ACCESS_TEAM_NOT_FOUND"))?;
@@ -30,7 +30,7 @@ impl member_wire::MemberService for MemberV2Service {
             }
         };
         RpcResponse::ok(member_wire::GetTeamResponse {
-            team: Some(team_wire(team)).into(),
+            team: Some(team_wire(team.team, Some(&team.effective_coordinators))).into(),
             confirmed_mutation: evidence.into(),
             ..Default::default()
         })
@@ -63,7 +63,10 @@ impl member_wire::MemberService for MemberV2Service {
         .await
         .map_err(|_| ConnectError::internal("Team list failed"))?;
         RpcResponse::ok(member_wire::ListTeamsResponse {
-            teams: teams.into_iter().map(team_wire).collect(),
+            teams: teams
+                .into_iter()
+                .map(|view| team_wire(view.team, Some(&view.effective_coordinators)))
+                .collect(),
             page_info: Some(core_v2::PageInfo {
                 next_page_token: next.unwrap_or_default(),
                 ..Default::default()
@@ -102,7 +105,7 @@ impl member_wire::MemberService for MemberV2Service {
         .map_err(|e| e.connect("CreateTeam", &self.request_id))?;
         let receipt = team_receipt(&saved, &self.request_id);
         RpcResponse::ok(member_wire::CreateTeamResponse {
-            team: Some(team_wire(saved.team)).into(),
+            team: Some(team_wire(saved.team, None)).into(),
             receipt: Some(receipt).into(),
             ..Default::default()
         })
@@ -150,7 +153,7 @@ impl member_wire::MemberService for MemberV2Service {
         .map_err(|e| e.connect("UpdateTeam", &self.request_id))?;
         let receipt = team_receipt(&saved, &self.request_id);
         RpcResponse::ok(member_wire::UpdateTeamResponse {
-            team: Some(team_wire(saved.team)).into(),
+            team: Some(team_wire(saved.team, None)).into(),
             receipt: Some(receipt).into(),
             ..Default::default()
         })
@@ -319,7 +322,7 @@ pub(super) fn distribution_wire(
     }
 }
 
-fn team_wire(team: access_teams::Team) -> member_wire::Team {
+fn team_wire(team: access_teams::Team, effective: Option<&[String]>) -> member_wire::Team {
     member_wire::Team {
         team_id: team.team_id,
         name: team.name,
@@ -330,6 +333,7 @@ fn team_wire(team: access_teams::Team) -> member_wire::Team {
             .queue_coordinators
             .into_iter()
             .map(|grant| member_wire::TeamQueueCoordinator {
+                effective: effective.map(|emails| emails.contains(&grant.email)),
                 email: grant.email,
                 member_version: grant.member_version,
                 ..Default::default()

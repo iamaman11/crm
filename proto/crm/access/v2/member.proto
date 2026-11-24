@@ -82,6 +82,8 @@ message Team {
 message TeamQueueCoordinator {
   string email = 1;
   int64 member_version = 2;
+  // Current Access projection in GetTeam/ListTeams only; absent in receipts.
+  optional bool effective = 3;
 }
 message TeamQueueCoordinatorChange {
   string email = 1;

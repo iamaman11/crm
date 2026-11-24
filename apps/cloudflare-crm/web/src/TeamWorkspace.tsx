@@ -55,8 +55,9 @@ export function TeamWorkspace({query,members,isAdmin,actor,onChanged}:{
         <td>{team.active?"Активна":"Архив"}</td>
         <td><ul>{team.memberEmails.map(email=><li key={email}>{email}
           {human.find(m=>m.email===email)?.active?"":" · неактивен"}
-          {team.queueCoordinators.some(grant=>grant.email===email)&&
-            <> · Координатор очереди (версия участника {team.queueCoordinators.find(grant=>grant.email===email)?.memberVersion.toString()})</>}
+          {team.queueCoordinators.filter(grant=>grant.email===email).map(grant=><span key={grant.email}>
+            {grant.effective===true?" · Координатор очереди":grant.effective===false?" · Полномочие координатора недействительно":" · Статус полномочия не подтверждён"}
+          </span>)}
           </li>)}</ul></td>
         <td><a href={taskTeamHref(team.teamId)}>Задачи команды</a>{" · "}
           <a href={workdayHref("",false,team.teamId)}>Рабочий день команды</a>{" · "}

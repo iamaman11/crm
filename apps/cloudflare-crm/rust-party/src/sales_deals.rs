@@ -936,15 +936,14 @@ pub(super) async fn update_typed(
     let Some(mut deal) = load(db, tenant, id).await? else {
         return Ok(rejected("NOT_FOUND", ErrorCategory::NotFound));
     };
-    if let Some(scope) = distribution.as_ref() {
-        if deal.status() != DealStatus::Open
-            || !matches!(deal.owner(), DealOwner::Team(team) if team.as_str() == scope.team_id)
-        {
-            return Ok(rejected(
-                "SALES_DISTRIBUTION_SOURCE_CHANGED",
-                ErrorCategory::Authorization,
-            ));
-        }
+    if let Some(scope) = distribution.as_ref()
+        && (deal.status() != DealStatus::Open
+            || !matches!(deal.owner(), DealOwner::Team(team) if team.as_str() == scope.team_id))
+    {
+        return Ok(rejected(
+            "SALES_DISTRIBUTION_SOURCE_CHANGED",
+            ErrorCategory::Authorization,
+        ));
     }
     if input.clear_name == Some(true) && input.name.is_some() {
         return Ok(rejected(

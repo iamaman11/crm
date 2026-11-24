@@ -510,15 +510,14 @@ pub(super) async fn update_typed(
             ErrorCode::NotFound,
         )));
     };
-    if let Some(scope) = distribution.as_ref() {
-        if task.status() != TaskStatus::Open
-            || !matches!(task.owner(), TaskOwner::Team(team) if team.as_str() == scope.team_id)
-        {
-            return Ok(Err(MutationFailure::domain(
-                "ACTIVITIES_DISTRIBUTION_SOURCE_CHANGED",
-                ErrorCode::PermissionDenied,
-            )));
-        }
+    if let Some(scope) = distribution.as_ref()
+        && (task.status() != TaskStatus::Open
+            || !matches!(task.owner(), TaskOwner::Team(team) if team.as_str() == scope.team_id))
+    {
+        return Ok(Err(MutationFailure::domain(
+            "ACTIVITIES_DISTRIBUTION_SOURCE_CHANGED",
+            ErrorCode::PermissionDenied,
+        )));
     }
     let expected_version = input.expected_version;
     let mut assignee = None;
