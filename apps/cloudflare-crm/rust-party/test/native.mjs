@@ -4436,8 +4436,20 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    assert.equal(fromAdmin.status,200,label+" admin List");
    assert.equal(fromViewer.status,200,label+" viewer List");
    assert.ok(fromAdmin.body[field].length>0,label+" fixture must exercise populated list");
-   assert.deepEqual(fromViewer.body,fromAdmin.body,
-     label+" List must preserve all business fields, pagination and filters for viewer");
+   if(label==="Deal"){
+     // Caller-specific permissions are intentionally not shared business facts.
+     // Compare every other response field, including future business fields.
+     const {dealCapabilities:viewerCapabilities,...viewerBusiness}=fromViewer.body;
+     const {dealCapabilities:adminCapabilities,...adminBusiness}=fromAdmin.body;
+     assert.deepEqual(viewerBusiness,adminBusiness,label+" List business facts and pagination");
+     assert.deepEqual(viewerCapabilities.map(x=>x.dealId),fromViewer.body.deals.map(x=>x.dealId));
+     assert.deepEqual(adminCapabilities.map(x=>x.dealId),fromAdmin.body.deals.map(x=>x.dealId));
+     assert.ok(adminCapabilities.every(x=>x.capabilities.manageOpportunityTeam));
+     assert.ok(viewerCapabilities.every(x=>!x.capabilities.manageOpportunityTeam));
+   }else{
+     assert.deepEqual(fromViewer.body,fromAdmin.body,
+       label+" List must preserve all business fields, pagination and filters for viewer");
+   }
  }
  // The same related records must form one coherent Party -> Account -> Deal ->
  // Sales event -> original linked Task -> Customer360 chain, not isolated RPC 200s.

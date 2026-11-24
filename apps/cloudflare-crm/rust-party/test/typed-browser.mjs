@@ -2923,6 +2923,16 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      watch(leadContext);
      try{
        const leadPage=await leadContext.newPage();
+       await leadPage.goto(base+"/#sales?"+new URLSearchParams({search:ownedDealName}).toString());
+       const searchRegion=leadPage.getByRole("region",{name:"Результаты поиска сделок",exact:true});
+       await searchRegion.getByRole("heading",{name:ownedDealName,exact:true}).waitFor();
+       await expect(searchRegion.getByRole("button",{name:"Завершить",exact:true})).toHaveCount(1);
+       await leadPage.goto(base+"/#sales?"+new URLSearchParams({pipelineId:newPipelineId}).toString());
+       const leadBoard=leadPage.getByRole("region",{name:"Kanban — этапы и сделки",exact:true});
+       const leadCard=leadBoard.locator("section").filter({has:leadBoard.getByRole("heading",{name:ownedDealName,exact:true})}).last();
+       await leadCard.getByRole("heading",{name:ownedDealName,exact:true}).waitFor();
+       await expect(leadCard.getByRole("button",{name:"Завершить сделку",exact:true})).toHaveCount(1);
+       await expect(leadCard.getByLabel("Перетащить сделку "+ownedDealName,{exact:true})).toHaveCount(1);
        await leadPage.goto(base+"/#sales/"+encodeURIComponent(ownedDealId));
        const leadRecord=leadPage.getByRole("region",{name:"Подробности сделки "+ownedDealId,exact:true});
        await leadRecord.getByRole("heading",{name:ownedDealName,exact:true}).waitFor();
@@ -2955,6 +2965,26 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      assert.equal(grantEvents.length,2);
      assert.equal(JSON.parse(grantEvents[0].roster)[0].email,"native-viewer@example.test");
      assert.deepEqual(JSON.parse(grantEvents[1].roster),[]);
+     const revokedLeadContext=await browser.newContext({extraHTTPHeaders:viewerHeaders});
+     watch(revokedLeadContext);
+     try{
+       const revokedPage=await revokedLeadContext.newPage();
+       await revokedPage.goto(base+"/#sales?"+new URLSearchParams({search:ownedDealName}).toString());
+       const searchRegion=revokedPage.getByRole("region",{name:"Результаты поиска сделок",exact:true});
+       await searchRegion.getByRole("heading",{name:ownedDealName,exact:true}).waitFor();
+       await expect(searchRegion.getByRole("button",{name:"Завершить",exact:true})).toHaveCount(0);
+       await revokedPage.goto(base+"/#sales?"+new URLSearchParams({pipelineId:newPipelineId}).toString());
+       const board=revokedPage.getByRole("region",{name:"Kanban — этапы и сделки",exact:true});
+       const card=board.locator("section").filter({has:board.getByRole("heading",{name:ownedDealName,exact:true})}).last();
+       await card.getByRole("heading",{name:ownedDealName,exact:true}).waitFor();
+       await expect(card.getByRole("button",{name:"Завершить сделку",exact:true})).toHaveCount(0);
+       await expect(card.getByLabel("Перетащить сделку "+ownedDealName,{exact:true})).toHaveCount(0);
+       await revokedPage.goto(base+"/#sales/"+encodeURIComponent(ownedDealId));
+       const record=revokedPage.getByRole("region",{name:"Подробности сделки "+ownedDealId,exact:true});
+       await record.getByRole("heading",{name:ownedDealName,exact:true}).waitFor();
+       await expect(record.getByRole("button",{name:"Завершить сделку",exact:true})).toHaveCount(0);
+       checkpoint("SK-07.C6 revoked Lead loses List, Kanban and record actions");
+     }finally{await revokedLeadContext.close();}
      checkpoint("SK-07 opportunity team grant, immutable history, reload and revoke");
 
      // SK-07.D1: administration and customer card use the same Sales owner.
