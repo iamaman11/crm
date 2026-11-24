@@ -1101,15 +1101,7 @@ pub(super) async fn advance_typed(
     id: &str,
     context: DealMutationContext<'_>,
 ) -> Result<std::result::Result<AdvanceSaved, MutationFailure>> {
-    stage_mutation(
-        StageMutation::Move(input),
-        key,
-        db,
-        tenant,
-        id,
-        context,
-    )
-    .await
+    stage_mutation(StageMutation::Move(input), key, db, tenant, id, context).await
 }
 pub(super) async fn close_typed(
     input: CloseInput,
@@ -1119,15 +1111,7 @@ pub(super) async fn close_typed(
     id: &str,
     context: DealMutationContext<'_>,
 ) -> Result<std::result::Result<AdvanceSaved, MutationFailure>> {
-    stage_mutation(
-        StageMutation::Close(input),
-        key,
-        db,
-        tenant,
-        id,
-        context,
-    )
-    .await
+    stage_mutation(StageMutation::Close(input), key, db, tenant, id, context).await
 }
 // SQL supplies versioned credit context only; Sales chooses attribution.
 /// Shared SQL projection of current eligible team evidence. Arguments are
