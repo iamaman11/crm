@@ -54,7 +54,9 @@ export function AutomationScreen() {
       },{signal})).confirmedMutation;
     },
     refresh:async(marker)=>{
-      const id=marker.resourceId.split("/")[0];
+      const separator=marker.resourceId.indexOf("/");
+      if(separator<1)throw Error("Некорректный исходный запуск");
+      const id=marker.resourceId.slice(0,separator);
       if(runFilter===id&&runCursor==="")await runs.reload();
       else {setRunFilter(id);setRunCursor("");}
     }
