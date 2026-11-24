@@ -4585,7 +4585,8 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  assert.equal(sourceEvents.length,3);
  for(const row of sourceEvents){
    assert.equal(row.event_type,"crm.activities.interaction_created.v1");
-   assert.equal(row.event_id,"crm.activities.interaction_created.v1:"+row.source_id);
+   assert.equal(row.event_id,"crm.activities.e1:"+row.origin_intent_digest);
+   assert.ok(row.event_id.length<=180,"source EventId must match SDK bound");
    assert.equal(row.source_version,1);
    assert.equal(row.account_id,accountId);
    assert.equal(row.source_actor,"native-a@example.test");
@@ -4595,6 +4596,32 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    assert.equal(row.deal_id,row.source_id===eventNote?null:dealId);
  }
  assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_activity_automation_source_events WHERE tenant=?","tenant-b"))[0].n,0);
+ // Wrangler's documented native harness dispatches the compiled scheduled
+ // entrypoint of THIS SAME Rust Worker. Neither cron nor a rule is enabled
+ // in production: the boundary is read-only until complete run/lease acceptance.
+ const scheduledAuditBefore=(await sql(
+   "SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id=?","tenant-a"))[0].n;
+ const logStart=testHarness.getLogs().length;
+ for(let attempt=0;attempt<2;attempt++){
+   const result=await worker.scheduled({
+     cron:"*/5 * * * *",scheduledTime:new Date("2026-11-24T00:05:00.000Z")
+   });
+   assert.equal(result.outcome,"ok","native scheduled Worker must dispatch without an exception");
+   assert.equal(result.noRetry,false);
+ }
+ assert.ok(testHarness.getLogs().slice(logStart).some(entry=>
+   String(entry.message).includes("CRM_AUTOMATION_SCHEDULED_DISPATCH_DISABLED")),
+   "actual Rust scheduled callback must log its disabled-dispatch boundary");
+ assert.equal((await sql(
+   "SELECT COUNT(*) AS n FROM crm_activity_automation_source_events WHERE tenant=?","tenant-a"))[0].n,3,
+   "two cron invocations cannot consume or duplicate source events");
+ assert.equal((await sql(
+   "SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id=?","tenant-a"))[0].n,
+   scheduledAuditBefore,"scheduled compatibility probe must not write audit");
+ console.log(JSON.stringify({event:"crm.native-sk08a-scheduled-boundary",result:"PASS",
+   native_workerd_handler:true,repeat_count:2,no_cross_tenant_read:true,
+   no_task_creation:true,no_new_audit:true,production_cron_disabled:true}));
+
 
  assert.equal((await sql(
    "SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' AND action='activities.interaction.recorded'"))[0].n,
@@ -4663,9 +4690,26 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  assert.equal(recovered.body.receipt?.replayed,false);
  assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE subject_id=?",failedId))[0].n,1);
  assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_activity_automation_source_events WHERE source_id=?",failedId))[0].n,1);
+ // The original RecordId maximum must never overflow EventId. The
+ // Activity owner writes an opaque bounded event ID from the signed intent
+ // digest, not a potentially 180-character user-supplied source ID.
+ const longestInteractionId="i".repeat(180);
+ const longestResult=await interactionV2("CreateInteraction",admin,{
+   ...noteInput,interactionId:longestInteractionId,
+   precondition:{idempotencyKey:"sk08a-long-"+randomUUID()}
+ });
+ assert.equal(longestResult.status,200,describeProtobuf(longestResult.body));
+ const longSource=(await sql(
+   "SELECT event_id,origin_intent_digest FROM crm_activity_automation_source_events WHERE tenant=? AND source_id=?",
+   "tenant-a",longestInteractionId));
+ assert.equal(longSource.length,1);
+ assert.equal(longSource[0].event_id,"crm.activities.e1:"+longSource[0].origin_intent_digest);
+ assert.ok(longSource[0].event_id.length<=180);
+
  console.log(JSON.stringify({event:"crm.native-sk08a-interaction-source",result:"PASS",atomic:true,
    original_activities_owner:true,exact_origin_request:true,tenant_ab:true,
-   replay_single_event:true,failed_audit_rollback:true,automation_execution_disabled:true}));
+   replay_single_event:true,failed_audit_rollback:true,bounded_event_id:true,
+   automation_execution_disabled:true}));
  console.log(JSON.stringify({event:"crm.native-sk05-interaction",result:"PASS",
    source_sha:sourceSha,original_owner:"crm.activities",binary_connect:true,tenant_ab:true,
    viewer_fields_equal:true,viewer_write_denied:true,account_deal_fk:true,
