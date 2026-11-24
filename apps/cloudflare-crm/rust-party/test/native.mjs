@@ -2228,6 +2228,64 @@ assert.equal((await salesV2("GetDeal",tenantB,{dealId,receiptIdempotencyKey:sale
 assert.equal((await salesV2("GetDeal",null,{dealId,receiptIdempotencyKey:saleCreate.precondition.idempotencyKey})).status,401);
 assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id=?",
   receiptRead.headers.get("x-request-id")))[0].n,0);
+// Isolated team grant proof using the original Deal CAS and receipts. No
+// global viewer permission, even when a viewer is an opportunity lead.
+{
+  const id="opportunity-team-qa-"+randomUUID();
+  const created=await salesV2("CreateDeal",admin,{...saleCreate,dealId:id,
+    precondition:{idempotencyKey:"opportunity-create-"+id}});
+  assert.equal(created.status,200,describeProtobuf(created.body));
+  const email="native-viewer@example.test";
+  const grant=(role,version,key)=>({dealId:id,email,...(role===undefined?{}:{role}),
+    precondition:{expectedVersion:version,idempotencyKey:"opportunity-"+key+"-"+id}});
+  const edit=(version,key,fields={})=>({dealId:id,name:{operation:{case:"set",value:"Opportunity team "+key}},
+    ...fields,precondition:{expectedVersion:version,idempotencyKey:"opportunity-edit-"+key+"-"+id}});
+  assert.equal((await salesV2("UpdateDeal",viewer,edit(1n,"denied"))).status,403);
+  assert.equal((await salesV2("SetOpportunityParticipant",viewer,grant(3,1n,"escalate"))).status,403);
+  const observer=await salesV2("SetOpportunityParticipant",admin,grant(1,1n,"observer"));
+  assert.equal(observer.status,200,describeProtobuf(observer.body));
+  assert.equal(observer.body.deal.opportunityTeam[0].role,1);
+  assert.equal((await salesV2("UpdateDeal",viewer,edit(2n,"observer"))).status,403);
+  const contributor=await salesV2("SetOpportunityParticipant",admin,grant(2,2n,"contributor"));
+  assert.equal(contributor.status,200,describeProtobuf(contributor.body));
+  const read=(await salesV2("GetDeal",viewer,{dealId:id})).body;
+  assert.equal(read.capabilities.edit,true);assert.equal(read.capabilities.editCommercial,false);
+  assert.equal(read.capabilities.advance,false);assert.equal(read.capabilities.manageOpportunityTeam,false);
+  assert.equal((await salesV2("UpdateDeal",viewer,edit(3n,"money",{probabilityBasisPoints:1200}))).status,403);
+  assert.equal((await salesV2("UpdateDeal",viewer,edit(3n,"owner",{owner:{owner:{case:"assigneeIdentity",value:email}}}))).status,403);
+  const command=edit(3n,"allowed");
+  const edited=await salesV2("UpdateDeal",viewer,command);
+  assert.equal(edited.status,200,describeProtobuf(edited.body));
+  assert.equal(edited.body.deal.version,4n);
+  assert.equal((await salesV2("UpdateDeal",viewer,command)).body.receipt.replayed,true);
+  assert.equal((await salesV2("UpdateDeal",viewer,{...command,dealId})).status,403);
+  const lead=await salesV2("SetOpportunityParticipant",admin,grant(3,4n,"lead"));
+  assert.equal(lead.status,200,describeProtobuf(lead.body));
+  assert.equal((await salesV2("GetDeal",viewer,{dealId:id})).body.capabilities.advance,true);
+  const commercial=await salesV2("UpdateDeal",viewer,edit(5n,"commercial",{probabilityBasisPoints:3300}));
+  assert.equal(commercial.status,200,describeProtobuf(commercial.body));
+  assert.equal(commercial.body.deal.probabilityBasisPoints,3300);
+  assert.equal((await salesV2("CloseDeal",viewer,{dealId:id,outcome:3,reasonCode:"qa",
+    precondition:{expectedVersion:6n,idempotencyKey:"opportunity-close-denied-"+id}})).status,403);
+  const revoke=await salesV2("SetOpportunityParticipant",admin,grant(undefined,6n,"revoke"));
+  assert.equal(revoke.status,200,describeProtobuf(revoke.body));
+  assert.equal(revoke.body.deal.opportunityTeam.length,0);
+  assert.equal((await salesV2("UpdateDeal",viewer,command)).status,403);
+  assert.equal((await salesV2("UpdateDeal",viewer,edit(7n,"revoked"))).status,403);
+  assert.equal((await salesV2("SetOpportunityParticipant",tenantB,grant(3,7n,"other"))).status,404);
+  const events=(await salesV2("ListDealEvents",viewer,{dealId:id,page:{pageSize:25}})).body.events;
+  assert.deepEqual(events.filter(e=>e.opportunityTeamAfter).map(e=>e.opportunityTeamAfter.participants.map(m=>m.role)),[[],[3],[2],[1]]);
+  const audit=(await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND action='sales_deals.opportunity_team'","tenant-a",id))[0].n;
+  assert.equal(audit,4);
+  // Keep all other deterministic historical fixtures unchanged.
+  await batch([
+    statement("DELETE FROM crm_sales_deal_events WHERE tenant=? AND deal_id=?","tenant-a",id),
+    statement("DELETE FROM crm_sales_deal_receipts WHERE tenant=? AND key LIKE ?","tenant-a","%"+id),
+    statement("DELETE FROM crm_audit WHERE tenant_id=? AND subject_id=?","tenant-a",id),
+    statement("DELETE FROM crm_sales_deal_records WHERE tenant=? AND id=?","tenant-a",id)
+  ]);
+  console.log(JSON.stringify({event:"crm.native-opportunity-team",result:"PASS",roles:true,scoped_update:true,revocation:true,receipt:true,tenant_isolation:true,history:true}));
+}
 const updateSale={dealId,
   name:{operation:{case:"set",value:"Updated Connect Deal"}},
   amount:{operation:{case:"set",value:{minorUnits:98765n,currencyCode:"PLN"}}},

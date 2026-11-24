@@ -54,6 +54,11 @@ provides:
       binding:
         kind: protobuf_rpc
         rpc: crm.sales.v2.DealService.UpdateDeal
+    - id: sales.deal.opportunity_participant.set
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.SetOpportunityParticipant
     - id: sales.deal.advance_stage
       version: 2.0.0
       binding:

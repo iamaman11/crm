@@ -34,6 +34,34 @@ message DealStage {
   uint32 ordinal = 3;
 }
 
+enum OpportunityTeamRole {
+  OPPORTUNITY_TEAM_ROLE_UNSPECIFIED = 0;
+  OPPORTUNITY_TEAM_ROLE_OBSERVER = 1;
+  OPPORTUNITY_TEAM_ROLE_CONTRIBUTOR = 2;
+  OPPORTUNITY_TEAM_ROLE_LEAD = 3;
+}
+
+message OpportunityParticipant {
+  string email = 1;
+  OpportunityTeamRole role = 2;
+  int64 member_version = 3;
+}
+
+message OpportunityTeamSnapshot {
+  repeated OpportunityParticipant participants = 1;
+}
+
+// Caller-specific policy projection, separate from tenant-wide Deal facts.
+message DealCapabilities {
+  bool edit = 1;
+  bool edit_commercial = 2;
+  bool advance = 3;
+  bool assign_owner = 4;
+  bool close = 5;
+  bool reopen = 6;
+  bool manage_opportunity_team = 7;
+}
+
 message Deal {
   string deal_id = 1;
   string name = 2;
@@ -54,6 +82,7 @@ message Deal {
   crm.core.v2.ActorOrTeamOwner owner = 17;
   SalesRoutingDecision initial_routing = 18;
   CommercialCloseFact commercial_close_fact = 19;
+  repeated OpportunityParticipant opportunity_team = 20;
 }
 
 message CommercialDimension {
@@ -115,6 +144,19 @@ message UpdateDealRequest {
 }
 
 message UpdateDealResponse {
+  Deal deal = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+// Absence of role explicitly revokes the participant. Enrollment version
+// is captured by the original Sales owner, never provided by the caller.
+message SetOpportunityParticipantRequest {
+  string deal_id = 1;
+  string email = 2;
+  optional OpportunityTeamRole role = 3;
+  crm.core.v2.MutationPrecondition precondition = 4;
+}
+message SetOpportunityParticipantResponse {
   Deal deal = 1;
   crm.core.v2.MutationReceipt receipt = 2;
 }
@@ -205,6 +247,8 @@ message DealEvent {
   SalesRoutingDecision initial_routing = 14;
   // Original close fact, or the same fact being reversed by reopening.
   CommercialCloseFact commercial_close_fact = 15;
+  // Present only when the roster changed, including an empty revocation.
+  OpportunityTeamSnapshot opportunity_team_after = 16;
 }
 message ListDealEventsRequest {
   string deal_id = 1;
@@ -226,6 +270,7 @@ message GetDealResponse {
   // Positive proof for this tenant, record and key only. Absence is not
   // proof that a previously uncertain command was rejected or rolled back.
   crm.core.v2.MutationCommitEvidence confirmed_mutation = 2;
+  DealCapabilities capabilities = 3;
 }
 
 message ListDealsRequest {
@@ -1372,6 +1417,9 @@ service DealService {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
   rpc CreateDeal(CreateDealRequest) returns (CreateDealResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc SetOpportunityParticipant(SetOpportunityParticipantRequest) returns (SetOpportunityParticipantResponse) {
     option idempotency_level = IDEMPOTENT;
   }
   rpc UpdateDeal(UpdateDealRequest) returns (UpdateDealResponse) {

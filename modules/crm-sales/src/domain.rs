@@ -38,6 +38,73 @@ pub enum DealOwner {
     Team(TeamId),
 }
 
+/// Commercial collaboration is independent of the single accountable owner.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OpportunityTeamRole {
+    Observer,
+    Contributor,
+    Lead,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OpportunityPermission {
+    Edit,
+    Commercial,
+    Advance,
+}
+
+impl OpportunityTeamRole {
+    pub fn permits(self, permission: OpportunityPermission) -> bool {
+        match self {
+            Self::Observer => false,
+            Self::Contributor => permission == OpportunityPermission::Edit,
+            Self::Lead => true,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Observer => "observer",
+            Self::Contributor => "contributor",
+            Self::Lead => "lead",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct OpportunityParticipant {
+    pub email: String,
+    pub role: OpportunityTeamRole,
+    // Pin the enrolled member version; deactivation/re-enrollment cannot
+    // silently restore an old Deal grant.
+    pub member_version: i64,
+}
+
+pub const MAX_OPPORTUNITY_PARTICIPANTS: usize = 32;
+
+pub fn validate_opportunity_team(team: &[OpportunityParticipant]) -> Result<(), SdkError> {
+    let valid = team.len() <= MAX_OPPORTUNITY_PARTICIPANTS
+        && team.iter().all(|member| {
+            member.member_version > 0
+                && member.email.contains('@')
+                && !member.email.starts_with("service:")
+                && member.email == member.email.trim()
+                && member.email == member.email.to_ascii_lowercase()
+                && ActorId::try_new(member.email.clone()).is_ok()
+        })
+        && team.windows(2).all(|pair| pair[0].email < pair[1].email);
+    if !valid {
+        return Err(invalid(
+            "SALES_OPPORTUNITY_TEAM_INVALID",
+            "deal.opportunity_team",
+            "a bounded, unique, sorted roster of enrolled human identities is required",
+        ));
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DealStage {
     pipeline_id: PipelineId,
@@ -167,6 +234,7 @@ pub struct Deal {
     name: String,
     owner: DealOwner,
     initial_routing: Option<crate::SalesRoutingDecision>,
+    opportunity_team: Vec<OpportunityParticipant>,
     account: Option<ResourceRef>,
     primary_contact: Option<ResourceRef>,
     stage: DealStage,
@@ -187,6 +255,7 @@ pub struct DealSnapshot {
     pub name: String,
     pub owner: DealOwner,
     pub initial_routing: Option<crate::SalesRoutingDecision>,
+    pub opportunity_team: Vec<OpportunityParticipant>,
     pub account: Option<ResourceRef>,
     pub primary_contact: Option<ResourceRef>,
     pub stage: DealStage,
@@ -305,6 +374,56 @@ impl Deal {
     pub fn owner(&self) -> &DealOwner {
         &self.owner
     }
+    pub fn opportunity_team(&self) -> &[OpportunityParticipant] {
+        &self.opportunity_team
+    }
+
+    pub fn opportunity_participant(&self, email: &str) -> Option<&OpportunityParticipant> {
+        self.opportunity_team
+            .iter()
+            .find(|member| member.email == email)
+    }
+
+    /// Grant, change or revoke without changing owner, status, or commercial
+    /// attribution. Revocation is permitted even for a closed Deal.
+    pub fn set_opportunity_participant(
+        &mut self,
+        expected_version: i64,
+        email: &str,
+        participant: Option<OpportunityParticipant>,
+        occurred_at_unix_nanos: i64,
+    ) -> Result<(), SdkError> {
+        self.require_version(expected_version)?;
+        self.require_monotonic_time(occurred_at_unix_nanos)?;
+        let mut team = self.opportunity_team.clone();
+        match team.binary_search_by(|member| member.email.as_str().cmp(email)) {
+            Ok(index) => {
+                if let Some(member) = participant {
+                    team[index] = member;
+                } else {
+                    team.remove(index);
+                }
+            }
+            Err(index) => {
+                let member = participant.ok_or_else(|| {
+                    conflict("SALES_OPPORTUNITY_PARTICIPANT_NOT_FOUND", "participant is not assigned")
+                })?;
+                team.insert(index, member);
+            }
+        }
+        validate_opportunity_team(&team)?;
+        if team == self.opportunity_team {
+            return Err(conflict(
+                "SALES_OPPORTUNITY_TEAM_UNCHANGED",
+                "the grant already has the requested role and enrollment version",
+            ));
+        }
+        self.opportunity_team = team;
+        self.updated_at_unix_nanos = occurred_at_unix_nanos;
+        self.version += 1;
+        Ok(())
+    }
+
     pub fn initial_routing(&self) -> Option<&crate::SalesRoutingDecision> {
         self.initial_routing.as_ref()
     }
@@ -349,6 +468,7 @@ impl Deal {
     }
 
     pub fn rehydrate(snapshot: DealSnapshot) -> Result<Self, SdkError> {
+        validate_opportunity_team(&snapshot.opportunity_team)?;
         validate_name(&snapshot.name)?;
         validate_optional_resource("deal.account", snapshot.account.as_ref())?;
         validate_optional_resource("deal.primary_contact", snapshot.primary_contact.as_ref())?;
@@ -444,6 +564,7 @@ impl Deal {
             name: snapshot.name,
             owner: snapshot.owner,
             initial_routing: snapshot.initial_routing,
+            opportunity_team: snapshot.opportunity_team,
             account: snapshot.account,
             primary_contact: snapshot.primary_contact,
             stage: snapshot.stage,
@@ -465,6 +586,7 @@ impl Deal {
             name: self.name.clone(),
             owner: self.owner.clone(),
             initial_routing: self.initial_routing.clone(),
+            opportunity_team: self.opportunity_team.clone(),
             account: self.account.clone(),
             primary_contact: self.primary_contact.clone(),
             stage: self.stage.clone(),
@@ -503,6 +625,7 @@ impl Deal {
             name: command.name,
             owner: command.owner,
             initial_routing: None,
+            opportunity_team: Vec::new(),
             account: command.account,
             primary_contact: command.primary_contact,
             stage: command.stage,

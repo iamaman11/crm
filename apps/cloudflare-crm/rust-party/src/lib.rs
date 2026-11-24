@@ -1023,13 +1023,19 @@ const RPC_POLICIES: &[(&str, RpcPolicy)] = &[
     (
         "/crm.sales.v2.DealService/UpdateDeal",
         RpcPolicy {
+            permission: RpcPermission::SelfWrite,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/SetOpportunityParticipant",
+        RpcPolicy {
             permission: RpcPermission::Write,
         },
     ),
     (
         "/crm.sales.v2.DealService/AdvanceStage",
         RpcPolicy {
-            permission: RpcPermission::Write,
+            permission: RpcPermission::SelfWrite,
         },
     ),
     (

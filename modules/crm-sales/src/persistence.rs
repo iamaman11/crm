@@ -9,10 +9,10 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 pub const DEAL_STATE_SCHEMA_ID: &str = "crm.sales.deal.state";
-pub const DEAL_STATE_SCHEMA_VERSION: &str = "1.3.0";
+pub const DEAL_STATE_SCHEMA_VERSION: &str = "1.4.0";
 pub const DEAL_STATE_MAXIMUM_BYTES: u64 = 256 * 1024;
 pub const DEAL_STATE_RETENTION_POLICY_ID: &str = "crm.sales.business_record";
-const DEAL_STATE_DESCRIPTOR: &[u8] = b"crm.sales.deal.state/v1.3:deal_id,name,owner,account,primary_contact,stage,status,amount,expected_close_date,probability_basis_points,probability_source,forecast_category,close_outcome,created_at_unix_nanos,updated_at_unix_nanos,version,initial_routing,close_outcome.commercial_fact";
+const DEAL_STATE_DESCRIPTOR: &[u8] = b"crm.sales.deal.state/v1.4:deal_id,name,owner,account,primary_contact,stage,status,amount,expected_close_date,probability_basis_points,probability_source,forecast_category,close_outcome,created_at_unix_nanos,updated_at_unix_nanos,version,initial_routing,close_outcome.commercial_fact,opportunity_team";
 
 pub fn deal_state_descriptor_hash() -> [u8; 32] {
     Sha256::digest(DEAL_STATE_DESCRIPTOR).into()
@@ -31,6 +31,10 @@ const DEAL_DIAGNOSTIC_FIELDS: &[&str] = &[
     "name",
     "owner",
     "initial_routing",
+    "opportunity_team",
+    "email",
+    "role",
+    "member_version",
     "source",
     "selected_owner",
     "target",
@@ -104,6 +108,8 @@ struct DealStateV1 {
     owner: OwnerState,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     initial_routing: Option<crate::SalesRoutingDecision>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    opportunity_team: Vec<crate::OpportunityParticipant>,
     account: Option<ResourceState>,
     primary_contact: Option<ResourceState>,
     stage: StageState,
@@ -185,6 +191,7 @@ impl From<DealSnapshot> for DealStateV1 {
             name: value.name,
             owner: value.owner.into(),
             initial_routing: value.initial_routing,
+            opportunity_team: value.opportunity_team,
             account: value.account.map(Into::into),
             primary_contact: value.primary_contact.map(Into::into),
             stage: value.stage.into(),
@@ -211,6 +218,7 @@ impl TryFrom<DealStateV1> for DealSnapshot {
             name: value.name,
             owner: value.owner.try_into()?,
             initial_routing: value.initial_routing,
+            opportunity_team: value.opportunity_team,
             account: value.account.map(Into::into),
             primary_contact: value.primary_contact.map(Into::into),
             stage: value.stage.try_into()?,

@@ -904,6 +904,7 @@ struct SalesV2Service {
     env: Arc<Env>,
     tenant: String,
     actor: String,
+    admin: bool,
     request_id: String,
 }
 
@@ -1324,6 +1325,19 @@ impl SalesV2Service {
         })
     }
 
+    fn opportunity_participant_wire(value: &crm_sales::OpportunityParticipant) -> sale_wire::OpportunityParticipant {
+        sale_wire::OpportunityParticipant {
+            email: value.email.clone(),
+            role: match value.role {
+                crm_sales::OpportunityTeamRole::Observer => sale_wire::OpportunityTeamRole::OPPORTUNITY_TEAM_ROLE_OBSERVER,
+                crm_sales::OpportunityTeamRole::Contributor => sale_wire::OpportunityTeamRole::OPPORTUNITY_TEAM_ROLE_CONTRIBUTOR,
+                crm_sales::OpportunityTeamRole::Lead => sale_wire::OpportunityTeamRole::OPPORTUNITY_TEAM_ROLE_LEAD,
+            }.into(),
+            member_version: value.member_version,
+            ..Default::default()
+        }
+    }
+
     fn convert(deal: &DomainDeal) -> std::result::Result<sale_wire::Deal, ConnectError> {
         let stage = deal.stage();
         let status = match deal.status() {
@@ -1348,6 +1362,7 @@ impl SalesV2Service {
             .transpose()?;
         Ok(sale_wire::Deal {
             deal_id: deal.deal_id().as_str().to_owned(),
+            opportunity_team: deal.opportunity_team().iter().map(Self::opportunity_participant_wire).collect(),
             commercial_close_fact: deal
                 .close_outcome()
                 .and_then(|outcome| outcome.commercial_fact())
@@ -1683,6 +1698,7 @@ pub(super) fn router(
         env: Arc::clone(&env),
         tenant: tenant.to_owned(),
         actor: actor.to_owned(),
+        admin: verified.role == "admin",
         request_id: request_id.to_owned(),
     }))
     .router

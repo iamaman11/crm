@@ -2941,6 +2941,45 @@ impl sale_wire::DealService for SalesV2Service {
         })
     }
     #[worker::send]
+    async fn set_opportunity_participant(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, sale_wire::SetOpportunityParticipantRequest>,
+    ) -> ServiceResult<sale_wire::SetOpportunityParticipantResponse> {
+        let input = req.to_owned_message();
+        let id = Self::id(&input.deal_id)?;
+        let (key, version) = wire_precondition(input.precondition.as_option(), false)?;
+        let role = input.role.map(|role| {
+            match role.as_known() {
+                Some(sale_wire::OpportunityTeamRole::OPPORTUNITY_TEAM_ROLE_OBSERVER) => Ok(crm_sales::OpportunityTeamRole::Observer),
+                Some(sale_wire::OpportunityTeamRole::OPPORTUNITY_TEAM_ROLE_CONTRIBUTOR) => Ok(crm_sales::OpportunityTeamRole::Contributor),
+                Some(sale_wire::OpportunityTeamRole::OPPORTUNITY_TEAM_ROLE_LEAD) => Ok(crm_sales::OpportunityTeamRole::Lead),
+                _ => Err(ConnectError::invalid_argument("SALES_OPPORTUNITY_ROLE_INVALID")),
+            }
+        }).transpose()?;
+        let saved = sales_deals::set_participant(
+            sales_deals::ParticipantInput {
+                expected_version: version.unwrap_or_default(),
+                email: input.email,
+                role,
+            },
+            &key, &self.d1()?, &self.tenant, &id, &self.actor, &self.request_id,
+        )
+        .await
+        .map_err(|_| diagnostics::mutation_preparation_failure("SetOpportunityParticipant", &self.request_id))?
+        .map_err(|failure| diagnostics::mutation_error("SetOpportunityParticipant", &self.request_id, failure))?;
+        RpcResponse::ok(sale_wire::SetOpportunityParticipantResponse {
+            deal: Some(Self::convert(&saved.deal)?).into(),
+            receipt: Some(diagnostics::receipt(
+                "SetOpportunityParticipant", &self.request_id,
+                saved.original_request_id.as_deref(), saved.deal.version(),
+                saved.replayed, saved.d1_statement_changes,
+            )).into(),
+            ..Default::default()
+        })
+    }
+
+    #[worker::send]
     async fn update_deal(
         &self,
         _ctx: RequestContext,
@@ -3033,6 +3072,7 @@ impl sale_wire::DealService for SalesV2Service {
             &id,
             &self.actor,
             &self.request_id,
+            self.admin,
         )
         .await
         .map_err(|_| diagnostics::mutation_preparation_failure("UpdateDeal", &self.request_id))?
@@ -3085,6 +3125,7 @@ impl sale_wire::DealService for SalesV2Service {
             &id,
             &self.actor,
             &self.request_id,
+            self.admin,
         )
         .await
         .map_err(|_| diagnostics::mutation_preparation_failure("AdvanceStage", &self.request_id))?
@@ -3363,6 +3404,16 @@ impl sale_wire::DealService for SalesV2Service {
                     .into(),
                     catalog_version: row.catalog_version.unwrap_or_default(),
                     linked_task_id: row.linked_task_id.unwrap_or_default(),
+                    opportunity_team_after: row.opportunity_team_after.as_deref().map(|raw| {
+                        let team: Vec<crm_sales::OpportunityParticipant> = serde_json::from_str(raw)
+                            .map_err(|_| ConnectError::internal("SALES_OPPORTUNITY_EVENT_INVALID"))?;
+                        crm_sales::validate_opportunity_team(&team)
+                            .map_err(|_| ConnectError::internal("SALES_OPPORTUNITY_EVENT_INVALID"))?;
+                        Ok::<_, ConnectError>(sale_wire::OpportunityTeamSnapshot {
+                            participants: team.iter().map(Self::opportunity_participant_wire).collect(),
+                            ..Default::default()
+                        })
+                    }).transpose()?.into(),
                     commercial_close_fact: row
                         .commercial_close_fact
                         .as_deref()
@@ -3442,9 +3493,23 @@ impl sale_wire::DealService for SalesV2Service {
             }
             Some(_) => return Err(ConnectError::invalid_argument("IDEMPOTENCY_KEY_REQUIRED")),
         };
+        let grant = sales_deals::active_participant(&db, &self.tenant, &deal, &self.actor)
+            .await.map_err(|_| ConnectError::internal("SALES_DELEGATION_READ_FAILED"))?;
+        let open = deal.status() == DomainDealStatus::Open;
+        let permits = |permission| self.admin || grant.as_ref().is_some_and(|grant| grant.role.permits(permission));
         RpcResponse::ok(sale_wire::GetDealResponse {
             deal: Some(Self::convert(&deal)?).into(),
             confirmed_mutation: confirmed_mutation.into(),
+            capabilities: Some(sale_wire::DealCapabilities {
+                edit: open && permits(crm_sales::OpportunityPermission::Edit),
+                edit_commercial: open && permits(crm_sales::OpportunityPermission::Commercial),
+                advance: open && permits(crm_sales::OpportunityPermission::Advance),
+                assign_owner: open && self.admin,
+                close: open && self.admin,
+                reopen: !open && self.admin,
+                manage_opportunity_team: self.admin,
+                ..Default::default()
+            }).into(),
             ..Default::default()
         })
     }

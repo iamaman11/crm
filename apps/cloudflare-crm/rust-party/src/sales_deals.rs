@@ -686,6 +686,156 @@ pub(super) async fn create_typed(
     )
     .await)
 }
+#[derive(Serialize)]
+pub(super) struct ParticipantInput {
+    pub expected_version: i64,
+    pub email: String,
+    pub role: Option<crm_sales::OpportunityTeamRole>,
+}
+
+#[derive(Deserialize)]
+struct MemberVersion {
+    version: String,
+}
+
+async fn member_version(db: &D1Database, tenant: &str, email: &str) -> Result<Option<i64>> {
+    if super::access_members::email(email).ok().as_deref() != Some(email) {
+        return Ok(None);
+    }
+    let value = bind(
+        db,
+        "SELECT CAST(version AS TEXT) version FROM crm_users WHERE tenant_id=? AND email=? AND active=1",
+        &[JsValue::from_str(tenant), JsValue::from_str(email)],
+    )?
+    .first::<MemberVersion>(None)
+    .await?;
+    value
+        .map(|row| row.version.parse().map_err(|_| worker::Error::RustError("invalid enrollment version".into())))
+        .transpose()
+}
+
+pub(super) async fn active_participant(
+    db: &D1Database,
+    tenant: &str,
+    deal: &Deal,
+    actor: &str,
+) -> Result<Option<crm_sales::OpportunityParticipant>> {
+    let Some(grant) = deal.opportunity_participant(actor) else {
+        return Ok(None);
+    };
+    Ok((member_version(db, tenant, actor).await? == Some(grant.member_version))
+        .then(|| grant.clone()))
+}
+
+// No global viewer role expansion. Authorization is checked before receipt
+// replay, then the original CAS repeats the SAME grant/enrollment evidence.
+async fn delegation(
+    db: &D1Database,
+    tenant: &str,
+    id: &str,
+    actor: &str,
+    admin: bool,
+    permission: crm_sales::OpportunityPermission,
+) -> Result<std::result::Result<Option<crm_sales::OpportunityParticipant>, MutationFailure>> {
+    if admin {
+        return Ok(Ok(None));
+    }
+    let Some(deal) = load(db, tenant, id).await? else {
+        return Ok(rejected("SALES_DELEGATION_DENIED", ErrorCategory::Authorization));
+    };
+    let grant = active_participant(db, tenant, &deal, actor).await?;
+    Ok(match grant {
+        Some(grant) if grant.role.permits(permission) => Ok(Some(grant)),
+        _ => rejected("SALES_DELEGATION_DENIED", ErrorCategory::Authorization),
+    })
+}
+
+fn append_delegation_guard(
+    sql: &mut String,
+    values: &mut Vec<JsValue>,
+    tenant: &str,
+    grant: Option<&crm_sales::OpportunityParticipant>,
+) {
+    if let Some(grant) = grant {
+        sql.push_str(" AND EXISTS (SELECT 1 FROM json_each(crm_sales_deal_records.state,'$.opportunity_team') g JOIN crm_users u ON u.tenant_id=? AND u.email=json_extract(g.value,'$.email') AND u.active=1 AND u.version=CAST(json_extract(g.value,'$.member_version') AS INTEGER) WHERE u.email=? AND u.version=CAST(? AS INTEGER) AND json_extract(g.value,'$.role')=?)");
+        values.extend([
+            JsValue::from_str(tenant),
+            JsValue::from_str(&grant.email),
+            JsValue::from_str(&grant.member_version.to_string()),
+            JsValue::from_str(grant.role.as_str()),
+        ]);
+    }
+}
+
+/// The roster uses the original Deal CAS, immutable receipt, audit and
+/// lifecycle trigger. A grant cannot race member deactivation or role change.
+pub(super) async fn set_participant(
+    input: ParticipantInput,
+    key: &str,
+    db: &D1Database,
+    tenant: &str,
+    id: &str,
+    actor: &str,
+    trace: &str,
+) -> Result<std::result::Result<SalesSaved, MutationFailure>> {
+    let digest = hash("opportunity_participant", id, &input)?;
+    match prior(db, tenant, key).await {
+        Ok(Some(receipt)) => return Ok(replay(receipt, &digest)),
+        Ok(None) => (),
+        Err(_) => return Ok(Err(unconfirmed(ReceiptUncertainty::ReadFailed))),
+    }
+    let Some(mut deal) = load(db, tenant, id).await? else {
+        return Ok(rejected("NOT_FOUND", ErrorCategory::NotFound));
+    };
+    if super::access_members::email(&input.email).ok().as_deref() != Some(input.email.as_str()) {
+        return Ok(rejected("SALES_OPPORTUNITY_MEMBER_INVALID", ErrorCategory::InvalidArgument));
+    }
+    let participant = if let Some(role) = input.role {
+        let Some(member_version) = member_version(db, tenant, &input.email).await? else {
+            return Ok(rejected("SALES_OPPORTUNITY_MEMBER_INELIGIBLE", ErrorCategory::InvalidArgument));
+        };
+        Some(crm_sales::OpportunityParticipant {
+            email: input.email.clone(),
+            role,
+            member_version,
+        })
+    } else {
+        None
+    };
+    if let Err(error) = deal.set_opportunity_participant(
+        input.expected_version, &input.email, participant.clone(), now_nanos(),
+    ) {
+        return Ok(rejected_sdk(error));
+    }
+    let mut sql = String::from("UPDATE crm_sales_deal_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=?,last_action='sales_deals.update' WHERE tenant=? AND id=? AND version=?");
+    let saved = encode(&deal)?;
+    let mut values = vec![
+        JsValue::from_str(&saved),
+        JsValue::from_str(&deal.version().to_string()),
+        JsValue::from_str(key),
+        JsValue::from_str(&digest),
+        JsValue::from_str(trace),
+        JsValue::from_str(actor),
+        JsValue::from_str(tenant),
+        JsValue::from_str(id),
+        JsValue::from_str(&input.expected_version.to_string()),
+    ];
+    if let Some(grant) = participant {
+        sql.push_str(" AND EXISTS (SELECT 1 FROM crm_users WHERE tenant_id=? AND email=? AND active=1 AND version=CAST(? AS INTEGER))");
+        values.extend([
+            JsValue::from_str(tenant),
+            JsValue::from_str(&grant.email),
+            JsValue::from_str(&grant.member_version.to_string()),
+        ]);
+    }
+    let result = bind(db, &sql, &values)?.run().await;
+    let count = result.as_ref().ok().and_then(changes);
+    if let Some(changed) = count.filter(|value| *value > 0) {
+        return Ok(Ok(acknowledged(deal, trace, changed)));
+    }
+    Ok(reconcile(db, tenant, key, &digest, count == Some(0)).await)
+}
+
 pub(super) async fn update_typed(
     input: UpdateInput,
     key: &str,
@@ -694,6 +844,7 @@ pub(super) async fn update_typed(
     id: &str,
     actor: &str,
     trace: &str,
+    admin: bool,
 ) -> Result<std::result::Result<SalesSaved, MutationFailure>> {
     if !(8..=120).contains(&key.len()) {
         return Ok(rejected(
@@ -701,7 +852,29 @@ pub(super) async fn update_typed(
             ErrorCategory::InvalidArgument,
         ));
     }
-    let digest = hash("update", id, &input)?;
+    if !admin && input.owner.is_some() {
+        return Ok(rejected("SALES_DELEGATION_OWNER_DENIED", ErrorCategory::Authorization));
+    }
+    let permission = if input.amount_minor_units.is_some()
+        || input.currency.is_some()
+        || input.clear_amount == Some(true)
+        || input.probability_bps.is_some()
+        || input.use_stage_probability
+        || input.forecast_category.is_some()
+    {
+        crm_sales::OpportunityPermission::Commercial
+    } else {
+        crm_sales::OpportunityPermission::Edit
+    };
+    let grant = match delegation(db, tenant, id, actor, admin, permission).await? {
+        Ok(grant) => grant,
+        Err(error) => return Ok(Err(error)),
+    };
+    let digest = if grant.is_some() {
+        hash("update_delegated", id, &(actor, &input))?
+    } else {
+        hash("update", id, &input)?
+    };
     match prior(db, tenant, key).await {
         Ok(Some(p)) => return Ok(replay(p, &digest)),
         Ok(None) => (),
@@ -848,7 +1021,7 @@ pub(super) async fn update_typed(
         return Ok(rejected_sdk(e));
     }
     let saved = encode(&deal)?;
-    let sql = format!(
+    let mut sql = format!(
         "UPDATE crm_sales_deal_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=?,last_action='sales_deals.update' WHERE tenant=? AND id=? AND version=?{}",
         owner_guard(input.owner.as_ref())
     );
@@ -864,6 +1037,7 @@ pub(super) async fn update_typed(
         JsValue::from_f64(input.expected_version as f64),
     ];
     owner_parameters(&mut values, tenant, input.owner.as_ref());
+    append_delegation_guard(&mut sql, &mut values, tenant, grant.as_ref());
     let result = bind(db, &sql, &values)?.run().await;
     let count = result.as_ref().ok().and_then(changes);
     if let Some(changed) = count.filter(|value| *value > 0) {
@@ -894,6 +1068,7 @@ pub(super) async fn advance_typed(
     id: &str,
     actor: &str,
     trace: &str,
+    admin: bool,
 ) -> Result<std::result::Result<AdvanceSaved, MutationFailure>> {
     stage_mutation(
         StageMutation::Move(input),
@@ -903,6 +1078,7 @@ pub(super) async fn advance_typed(
         id,
         actor,
         trace,
+        admin,
     )
     .await
 }
@@ -923,6 +1099,7 @@ pub(super) async fn close_typed(
         id,
         actor,
         trace,
+        true,
     )
     .await
 }
@@ -1216,6 +1393,7 @@ async fn stage_mutation(
     id: &str,
     actor: &str,
     trace: &str,
+    admin: bool,
 ) -> Result<std::result::Result<AdvanceSaved, MutationFailure>> {
     if !(8..=120).contains(&key.len()) {
         return Ok(rejected(
@@ -1225,7 +1403,14 @@ async fn stage_mutation(
     }
     // Only client-owned typed input contributes to the digest. The stage at
     // replay time cannot alter the idempotent identity of a CloseDeal request.
+    let grant = match delegation(
+        db, tenant, id, actor, admin, crm_sales::OpportunityPermission::Advance,
+    ).await? {
+        Ok(grant) => grant,
+        Err(error) => return Ok(Err(error)),
+    };
     let digest = match &input {
+        StageMutation::Move(value) if grant.is_some() => hash("advance_delegated", id, &(actor, value))?,
         StageMutation::Move(value) => hash("advance", id, value)?,
         StageMutation::Close(value) => hash("close", id, value)?,
     };
@@ -1381,6 +1566,7 @@ async fn stage_mutation(
     if let Some(credit) = &credit {
         credit.append_guard(&mut update_sql, &mut update_values, tenant);
     }
+    append_delegation_guard(&mut update_sql, &mut update_values, tenant, grant.as_ref());
     let update = bind(db, &update_sql, &update_values)?;
     let mut writes = vec![update];
     if let Some(task) = &prepared.task {
@@ -1600,6 +1786,7 @@ pub(super) struct DealEventRow {
     pub(super) linked_task_id: Option<String>,
     pub(super) initial_routing: Option<String>,
     pub(super) commercial_close_fact: Option<String>,
+    pub(super) opportunity_team_after: Option<String>,
 }
 
 /// A single tenant-scoped keyset stream backed by the D1 composite PK.
@@ -1613,7 +1800,7 @@ pub(super) async fn list_events(
     size: usize,
 ) -> Result<(Vec<DealEventRow>, Option<String>)> {
     let mut rows=bind(db,
-        "SELECT e.deal_version,e.action,e.pipeline_id,e.previous_stage_id,e.stage_id,e.previous_status,e.status,e.reason_code,e.actor,e.request_id,CAST(e.occurred_at_unix_nanos AS TEXT) AS occurred_at_unix_nanos,e.catalog_version,l.task_id AS linked_task_id,e.initial_routing,e.commercial_close_fact FROM crm_sales_deal_events e LEFT JOIN crm_sales_link_delivery_records l ON l.tenant=e.tenant AND l.deal_id=e.deal_id AND l.deal_version=e.deal_version WHERE e.tenant=? AND e.deal_id=? AND e.deal_version<CAST(? AS INTEGER) ORDER BY e.deal_version DESC LIMIT ?",
+        "SELECT e.deal_version,e.action,e.pipeline_id,e.previous_stage_id,e.stage_id,e.previous_status,e.status,e.reason_code,e.actor,e.request_id,CAST(e.occurred_at_unix_nanos AS TEXT) AS occurred_at_unix_nanos,e.catalog_version,l.task_id AS linked_task_id,e.initial_routing,e.commercial_close_fact,e.opportunity_team_after FROM crm_sales_deal_events e LEFT JOIN crm_sales_link_delivery_records l ON l.tenant=e.tenant AND l.deal_id=e.deal_id AND l.deal_version=e.deal_version WHERE e.tenant=? AND e.deal_id=? AND e.deal_version<CAST(? AS INTEGER) ORDER BY e.deal_version DESC LIMIT ?",
         &[
             JsValue::from_str(tenant),
             JsValue::from_str(id),

@@ -1,6 +1,6 @@
 import {useCallback,useEffect,useRef,useState} from "react";
 import {Button,Card,RecordPanel,FormGrid,PageHeader,SelectField,TextField} from "@ultimate-crm/ui";
-import type {Deal,SalesPipeline,SalesDealView,PreviewSalesRoutingResponse} from "@ultimate-crm/client/cloudflare";
+import type {Deal,DealCapabilities,SalesPipeline,SalesDealView,PreviewSalesRoutingResponse} from "@ultimate-crm/client/cloudflare";
 import {DealStatus,ProbabilitySource,ForecastCategory} from "@ultimate-crm/client/cloudflare";
 import {api,field,newId} from "./api";
 import {enumValue} from "./enumFields";
@@ -78,6 +78,7 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
   const [viewDraftId,setViewDraftId]=useState(newId);
   const [createViewOpen,setCreateViewOpen]=useState(false);
   const [selected,setSelected]=useState<Deal>();
+  const [editCapabilities,setEditCapabilities]=useState<DealCapabilities>();
   const [advance,setAdvance]=useState<Deal>();
   const [editorMode,setEditorMode]=useState<EditorMode>(null);
   const [draftId,setDraftId]=useState(newId);
@@ -289,9 +290,11 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
   const open=async(dealId:string,mode:"edit"|"advance"|"close"|"reopen",droppedOn="")=>{
     if(mutation.busy||mutation.pending)return;
     const value=await editorRead.run(async signal=>{
-      const deal=(await api.deals.getDeal({dealId},{signal})).deal;
-      if(!deal)throw Error("Сделка не найдена");
-      return deal;
+      const response=await api.deals.getDeal({dealId},{signal});
+      if(!response.deal||!response.capabilities)throw Error("Сделка или полномочия недоступны");
+      if(!response.capabilities[mode])throw Error("Нет полномочий для этой операции со сделкой");
+      setEditCapabilities(response.capabilities);
+      return response.deal;
     });
     if(!value)return;
     setSelected(mode==="edit"?value:undefined);
@@ -363,6 +366,7 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
       <PageHeader title="Карточка сделки" actions={<a href="#sales">К списку сделок</a>}/>
       <DealDetails currencies={currencyDefinitions} pipelines={pipelines} key={focusedDealId+":"+detailRevision} dealId={focusedDealId}
         onEdit={()=>void open(focusedDealId,"edit")}
+        onAdvance={()=>void open(focusedDealId,"advance")}
         onClose={()=>void open(focusedDealId,"close")}
         onReopen={()=>void open(focusedDealId,"reopen")}/>
     </section>:<>
@@ -889,18 +893,19 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
         e.preventDefault();const data=new FormData(e.currentTarget);
         void mutation.runIntent(()=>{
           const currencyCode=field(data,"currency"),amountText=field(data,"amount");
-          const mode=selected?field(data,"amountMode"):"set";
+          const commercial=!selected||editCapabilities?.editCommercial===true;
+          const mode=selected?(commercial?field(data,"amountMode"):"keep"):"set";
           const amount=mode==="set"&&amountText?{
             minorUnits:minorUnits(amountText,currencyCode,currencyDefinitions),currencyCode
           }:undefined;
           const sourceValue=field(data,"probabilitySource");
-          const source=selected&&sourceValue==="keep"?undefined:enumValue(sourceValue,
+          const source=!commercial||selected&&sourceValue==="keep"?undefined:enumValue(sourceValue,
             [ProbabilitySource.MANUAL,ProbabilitySource.STAGE_DEFAULT],"Источник вероятности");
-          const forecastCategory=enumValue(field(data,"forecastCategory"),
+          const forecastCategory=commercial?enumValue(field(data,"forecastCategory"),
             [ForecastCategory.PIPELINE,ForecastCategory.BEST_CASE,ForecastCategory.COMMIT,ForecastCategory.OMITTED],
-            "Категория прогноза");
-          const owner=ownerWire(field(data,"dealOwner"));
-          const common={...(owner?{owner}:{}),forecastCategory,...(source===ProbabilitySource.MANUAL?
+            "Категория прогноза"):undefined;
+          const owner=!selected||editCapabilities?.assignOwner?ownerWire(field(data,"dealOwner")):undefined;
+          const common={...(owner?{owner}:{}),...(forecastCategory===undefined?{}:{forecastCategory}),...(source===ProbabilitySource.MANUAL?
             {probabilityBasisPoints:basisPoints(field(data,"probability"))}:{})};
           // A disabled native <select> is excluded from FormData while
           // Account/ContactPoint choices are loading. Keep the original
@@ -956,11 +961,11 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
               <option value={stage.stageId} key={stage.stageId}>{stage.name}</option>)}
           </SelectField>
         </>}
-        <SelectField label="Ответственный за сделку" name="dealOwner" defaultValue="" onChange={e=>{setAutoRouting(!selected&&e.target.value==="automatic");setPreviewVisible(false);}}>
+        {(!selected||editCapabilities?.assignOwner)&&<SelectField label="Ответственный за сделку" name="dealOwner" defaultValue="" onChange={e=>{setAutoRouting(!selected&&e.target.value==="automatic");setPreviewVisible(false);}}>
           <option value="">{selected?"Оставить текущего ответственного":"Создатель — подписанный актор"}</option>
           {!selected&&<option value="automatic">Автоматическое распределение</option>}
           {ownerChoices.filter(c=>c.eligible).map(c=><option key={c.value} value={c.value}>{c.label}</option>)}
-        </SelectField>
+        </SelectField>}
         {!selected&&autoRouting&&<>
           <QueryNotice query={territories}/>
           <SelectField label="Территория маршрутизации" name="routingTerritory" disabled={territories.busy||!!territories.error}>
@@ -980,6 +985,7 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
           initialContactId={selected?.primaryContactId??""}/>
         <TextField label="Ожидаемая дата закрытия" name="expectedCloseDate" type="date"
           defaultValue={inputDate(selected?.expectedCloseDate)}/>
+        {(!selected||editCapabilities?.editCommercial)&&<>
         {selected&&<SelectField label="Изменение суммы" name="amountMode" defaultValue="keep">
           <option value="keep">Сохранить прежнюю</option><option value="set">Установить</option>
           <option value="clear">Убрать</option>
@@ -1006,6 +1012,7 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
           {[ForecastCategory.PIPELINE,ForecastCategory.BEST_CASE,ForecastCategory.COMMIT,ForecastCategory.OMITTED].map(category=>
             <option key={category} value={category}>{forecastCategoryText(category)}</option>)}
         </SelectField>
+        </>}
       </FormGrid></fieldset>
         <Button type="submit" disabled={mutation.busy||mutation.pending}>Сохранить сделку</Button>{" "}
         {selected&&<Button variant="secondary" type="button" disabled={mutation.busy||mutation.pending} onClick={()=>{

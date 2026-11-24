@@ -26,7 +26,8 @@ export type { PartyRelationship } from "../gen/crm/party_relationships/v2/relati
 export type { Task } from "../gen/crm/activities/v2/task_pb";
 export type { Member, Team } from "../gen/crm/access/v2/member_pb";
 export type { Interaction } from "../gen/crm/activities/v2/interaction_pb";
-export type { Deal } from "../gen/crm/sales/v2/deal_pb";
+export type { Deal, DealCapabilities, OpportunityParticipant } from "../gen/crm/sales/v2/deal_pb";
+export { OpportunityTeamRole } from "../gen/crm/sales/v2/deal_pb";
 export type { SalesQuota, SalesQuotaConfiguration, SalesQuotaScope, SalesQuotaFactCursor, GetSalesQuotaPerformanceResponse } from "../gen/crm/sales/v2/deal_pb";
 export type { SalesPerformanceReport, GetSalesPerformanceReportResponse, PreviewSalesPerformanceReportResponse, SalesForecastSource } from "../gen/crm/sales/v2/deal_pb";
 export type { ExportSalesAnalyticsRequest, ExportSalesAnalyticsResponse } from "../gen/crm/sales/v2/deal_pb";

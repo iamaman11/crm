@@ -1,12 +1,12 @@
 import {useCallback,useState} from "react";
 import {Button,SelectField} from "@ultimate-crm/ui";
 import type {ContactPoint,Deal,SalesPipeline,CommercialCloseFact} from "@ultimate-crm/client/cloudflare";
-import {DealEventKind} from "@ultimate-crm/client/cloudflare";
+import {DealEventKind,OpportunityTeamRole} from "@ultimate-crm/client/cloudflare";
 import {ContactPointStatus,DealStatus,ForecastCategory,ProbabilitySource} from "@ultimate-crm/client/cloudflare";
 import {api,dateText} from "./api";
 import {contactKindLabel} from "./contactLabels";
 import {AccountName} from "./Pickers";
-import {useQuery,QueryNotice} from "./hooks";
+import {useQuery,useMutation,prepareMutation,MutationNotice,QueryNotice} from "./hooks";
 import {moneyText,percent} from "./money";
 import type {CurrencyCatalog} from "./money";
 import {inputDate} from "./calendarInput";
@@ -15,6 +15,54 @@ import {stageName as stageLabel} from "./salesPipelineCatalog";
 import {InteractionTimeline} from "./InteractionTimeline";
 import {allOwners,ownerLabel} from "./ownerCatalog";
 import {RoutingExplanation} from "./SalesRouting";
+import {enumValue} from "./enumFields";
+
+const opportunityRoles=[OpportunityTeamRole.OBSERVER,OpportunityTeamRole.CONTRIBUTOR,OpportunityTeamRole.LEAD] as const;
+function opportunityRoleText(role:OpportunityTeamRole):string {
+  switch(role){
+    case OpportunityTeamRole.OBSERVER:return "Наблюдатель";
+    case OpportunityTeamRole.CONTRIBUTOR:return "Участник";
+    case OpportunityTeamRole.LEAD:return "Руководитель сделки";
+    default:return "Неизвестная роль";
+  }
+}
+
+function OpportunityTeam({deal,canManage,choices,refresh}:{deal:Deal;canManage:boolean;choices:Awaited<ReturnType<typeof allOwners>>["choices"];refresh:()=>Promise<unknown>}){
+  const [email,setEmail]=useState("");
+  const [role,setRole]=useState<OpportunityTeamRole>(OpportunityTeamRole.CONTRIBUTOR);
+  const mutation=useMutation({
+    storageKey:"crm.deal.opportunity.pending.v1",
+    lookup:async({resourceId,key},signal)=>(await api.deals.getDeal({dealId:resourceId,receiptIdempotencyKey:key},{signal})).confirmedMutation,
+    refresh:async()=>{await refresh();}
+  });
+  const change=(member:string,next?:OpportunityTeamRole)=>void mutation.runIntent(()=>prepareMutation(
+    api.deals.setOpportunityParticipant,{
+      dealId:deal.dealId,email:member,...(next===undefined?{}:{role:next}),
+      precondition:{idempotencyKey:mutation.key,expectedVersion:deal.version}
+    },deal.dealId
+  ),async()=>{await refresh();setEmail("");});
+  return <section aria-label="Команда сделки">
+    <h4>Команда сделки</h4>
+    <p>Отдельно от единственного ответственного. Наблюдатель читает; участник меняет название, контакт и дату; руководитель также меняет коммерческие поля и этап. Закрытие, повторное открытие, смена ответственного и управление доступом — только администратор. Изменение версии сотрудника прекращает прежнее делегирование.</p>
+    {deal.opportunityTeam.length===0?<p>Участники не назначены.</p>:<ul>
+      {deal.opportunityTeam.map(member=><li key={member.email}>{member.email} — {opportunityRoleText(member.role)} · версия сотрудника {member.memberVersion.toString()}
+        {canManage&&<Button variant="secondary" disabled={mutation.busy||mutation.pending} onClick={()=>change(member.email)}>Отозвать доступ {member.email}</Button>}
+      </li>)}
+    </ul>}
+    {canManage&&<form aria-label="Назначить участника сделки" onSubmit={event=>{event.preventDefault();change(email,role);}}>
+      <SelectField label="Участник сделки" value={email} onChange={event=>{setEmail(event.target.value);mutation.changed();}} required>
+        <option value="">Выберите сотрудника</option>
+        {choices.filter(choice=>choice.eligible&&choice.value.startsWith("actor:")).map(choice=>
+          <option key={choice.value} value={choice.value.slice(6)}>{choice.label}</option>)}
+      </SelectField>
+      <SelectField label="Коммерческая роль" value={role} onChange={event=>{setRole(enumValue(event.target.value,opportunityRoles,"Коммерческая роль"));mutation.changed();}}>
+        {opportunityRoles.map(value=><option key={value} value={value}>{opportunityRoleText(value)}</option>)}
+      </SelectField>
+      <Button type="submit" disabled={!email||mutation.busy||mutation.pending}>Назначить роль сделки</Button>
+    </form>}
+    <MutationNotice state={mutation}/>
+  </section>;
+}
 
 export function dealStatusText(status:DealStatus):string {
   switch(status){
@@ -133,6 +181,7 @@ export function DealHistory({dealId,accountId,pipeline,currencies,choices=[]}:{
         {event.reasonCode&&<p>Причина: {event.reasonCode}</p>}
         {event.initialRouting&&<RoutingExplanation decision={event.initialRouting} choices={choices}/>}
         {event.commercialCloseFact?<CommercialAttribution fact={event.commercialCloseFact} currencies={currencies} reversal={event.kind===DealEventKind.REOPENED}/>:((event.kind===DealEventKind.CLOSED||event.kind===DealEventKind.REOPENED)&&<p>Историческая коммерческая атрибуция неизвестна.</p>)}
+        {event.opportunityTeamAfter&&<><p>Изменение команды сделки:</p><ul>{event.opportunityTeamAfter.participants.map(member=><li key={member.email}>{member.email} — {opportunityRoleText(member.role)} · версия {member.memberVersion.toString()}</li>)}</ul>{event.opportunityTeamAfter.participants.length===0&&<p>Все делегированные права отозваны.</p>}</>}
         <p>Исполнитель: {event.actor} · запрос: {event.requestId}</p>
         {event.linkedTaskId&&<p>Связанная задача: <a href={taskHref(event.linkedTaskId,accountId)}>
           {event.linkedTaskId}</a></p>}
@@ -145,19 +194,21 @@ export function DealHistory({dealId,accountId,pipeline,currencies,choices=[]}:{
 }
 
 // One canonical GetDeal/ContactPoint read projection for inline/full page.
-export function DealDetails({dealId,currencies,pipelines,onEdit,onClose,onReopen}:{
+export function DealDetails({dealId,currencies,pipelines,onEdit,onAdvance,onClose,onReopen}:{
  dealId:string;currencies:CurrencyCatalog;pipelines:readonly SalesPipeline[];
- onEdit?:()=>void;onClose?:()=>void;onReopen?:()=>void;
+ onEdit?:()=>void;onAdvance?:()=>void;onClose?:()=>void;onReopen?:()=>void;
 }) {
   const details=useQuery(useCallback(async(signal:AbortSignal)=>{
-    const deal=(await api.deals.getDeal({dealId},{signal})).deal;
-    if(!deal)throw Error("Сделка не найдена");
+    const response=await api.deals.getDeal({dealId},{signal});
+    const deal=response.deal;
+    if(!deal||!response.capabilities)throw Error("Сделка или полномочия недоступны");
     const contact=deal.primaryContactId?
       (await api.contactPoints.getContactPoint({contactPointId:deal.primaryContactId},{signal})).contactPoint:
       undefined;
-    return {deal,contact};
+    return {deal,contact,capabilities:response.capabilities};
   },[dealId]));
   const deal:Deal|undefined=details.data?.deal;
+  const capabilities=details.data?.capabilities;
   const owners=useQuery(useCallback(allOwners,[]));
   const choices=owners.data?.choices??[];
   // The parent SalesScreen already owns the paginated ListPipelines read.
@@ -186,12 +237,14 @@ export function DealDetails({dealId,currencies,pipelines,onEdit,onClose,onReopen
       <p><a href={dealTasksHref(deal.dealId,deal.accountId)}>Задачи этой сделки</a>
         {" · "}<a href={scopeHref("tasks",deal.accountId)}>Все задачи клиента</a></p>
       {deal.status===DealStatus.OPEN?<div>
-        {onEdit&&<Button variant="secondary" onClick={onEdit}>Редактировать сделку</Button>}
-        {" "}{onClose&&<Button variant="secondary" onClick={onClose}>Завершить сделку</Button>}
-      </div>:onReopen?<Button variant="secondary" onClick={onReopen}>
+        {onEdit&&capabilities?.edit&&<Button variant="secondary" onClick={onEdit}>Редактировать сделку</Button>}
+        {" "}{onAdvance&&capabilities?.advance&&<Button variant="secondary" onClick={onAdvance}>Изменить этап сделки</Button>}
+        {" "}{onClose&&capabilities?.close&&<Button variant="secondary" onClick={onClose}>Завершить сделку</Button>}
+      </div>:onReopen&&capabilities?.reopen?<Button variant="secondary" onClick={onReopen}>
         Открыть повторно
       </Button>:null}
-      <DealHistory key={deal.dealId} dealId={deal.dealId} accountId={deal.accountId} pipeline={pipeline} currencies={currencies} choices={choices}/>
+      <OpportunityTeam deal={deal} canManage={capabilities?.manageOpportunityTeam??false} choices={choices} refresh={details.reload}/>
+      <DealHistory key={deal.dealId+":"+deal.version} dealId={deal.dealId} accountId={deal.accountId} pipeline={pipeline} currencies={currencies} choices={choices}/>
       <InteractionTimeline accountId={deal.accountId} dealId={deal.dealId}/>
     </>}
   </section>;
