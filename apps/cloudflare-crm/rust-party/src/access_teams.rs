@@ -236,11 +236,15 @@ pub(super) async fn get_projected(
     id: &str,
 ) -> Result<Option<TeamProjection>> {
     let sql = format!("{} WHERE tm.tenant=? AND tm.id=?", team_projection());
-    bind(db, &sql, &[JsValue::from_str(tenant), JsValue::from_str(id)])?
-        .first::<ProjectionRow>(None)
-        .await?
-        .map(ProjectionRow::decode)
-        .transpose()
+    bind(
+        db,
+        &sql,
+        &[JsValue::from_str(tenant), JsValue::from_str(id)],
+    )?
+    .first::<ProjectionRow>(None)
+    .await?
+    .map(ProjectionRow::decode)
+    .transpose()
 }
 
 pub(super) async fn list(
