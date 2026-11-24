@@ -344,9 +344,14 @@ async function prepareE2e(){
       params:[b,tb]}
   ];
   const changed=await cf(endpoint,"POST",{batch});
+  // D1 meta.changes is sqlite3_total_changes(), which INCLUDES writes made
+  // by triggers. Migration 0034 intentionally advances one forecast fence
+  // for each member mutation, so exact equality with the direct row count
+  // (1) is incorrect. Require at least the direct mutation, then verify the
+  // exact actor rows and the independently observable tenant-local fences.
   if(!Array.isArray(changed)||changed.length!==4||
-      changed.some(x=>x.success!==true)||changed[2].meta?.changes!==1||
-      changed[3].meta?.changes!==1)
+      changed.some(x=>x.success!==true)||
+      changed.slice(2).some(x=>!Number.isInteger(x.meta?.changes)||x.meta.changes<1))
     throw Error("E2E explicit service enrollment failed for isolated actors");
   const readback=await query(
     "SELECT email,tenant_id,role,active FROM crm_users WHERE email IN (?,?) ORDER BY email",[a,b]);
@@ -354,6 +359,15 @@ async function prepareE2e(){
     x.role!=="admin"||x.active!==1||
     (x.email===a?x.tenant_id!==ta:x.email===b?x.tenant_id!==tb:true)))
     throw Error("E2E enrolled actors do not match the two isolated tenants");
+  const fences=await query(
+    "SELECT tenant,revision FROM crm_sales_forecast_revisions WHERE tenant IN (?,?) ORDER BY tenant",[ta,tb]);
+  if(fences.length!==2||fences.some(x=>
+    (x.tenant===ta||x.tenant===tb)&&x.revision!==1))
+    throw Error("E2E member enrollment did not advance each tenant forecast fence exactly once");
+  console.log(JSON.stringify({event:"crm.e2e-enrollment",result:"PASS",
+    isolated_tenants:2,direct_member_mutations:2,
+    d1_total_changes:changed.slice(2).map(x=>x.meta.changes),
+    tenant_fence_revisions:fences.map(x=>x.revision)}));
   // Verify the real Cloudflare Access signature and Rust service lookup after
   // the exact trusted D1 enrollment, never by forging an actor from the UI.
   for(const n of ["A","B"]){
