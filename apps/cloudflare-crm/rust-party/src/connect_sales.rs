@@ -4,7 +4,7 @@
 use super::{
     access, access_members, access_teams, accounts, activity_tasks, consents, contact_points,
     data_quality, identity_resolution, parties, party_relationships, sales_deals, sales_pipelines,
-    sales_territories, sales_views,
+    sales_routing, sales_territories, sales_views,
 };
 use axum::Router;
 use buffa_types::google::protobuf::Timestamp;
@@ -154,6 +154,7 @@ enum CrudReceiptOwner {
     SalesView,
     Territory,
     AccountAssignment,
+    RoutingRule,
     Team,
 }
 impl CrudReceiptOwner {
@@ -205,6 +206,10 @@ impl CrudReceiptOwner {
             ),
             Self::AccountAssignment => concat!(
                 "SELECT state,original_request_id FROM crm_sales_account_assignment_receipts",
+                " WHERE tenant=? AND key=?"
+            ),
+            Self::RoutingRule => concat!(
+                "SELECT state,original_request_id FROM crm_sales_routing_rule_receipts",
                 " WHERE tenant=? AND key=?"
             ),
             Self::SalesView => concat!(
@@ -973,6 +978,112 @@ impl SalesV2Service {
             crm_sales::SalesOwnerScope::Team(id) => Owner::TeamId(id.clone()),
         })
     }
+    fn dispatch_wire(value: crm_sales::SalesDispatchMode) -> sale_wire::SalesDispatchMode {
+        match value {
+            crm_sales::SalesDispatchMode::Direct => sale_wire::SalesDispatchMode::SALES_DISPATCH_MODE_DIRECT,
+            crm_sales::SalesDispatchMode::LeastOpenDeals => sale_wire::SalesDispatchMode::SALES_DISPATCH_MODE_LEAST_OPEN_DEALS,
+        }
+    }
+    fn routing_draft(id: String, cfg: &sale_wire::SalesRoutingRuleConfiguration)
+        -> std::result::Result<sales_territories::Record, ConnectError> {
+        let criteria = cfg.criteria.as_option().ok_or_else(|| ConnectError::invalid_argument("SALES_ROUTING_CRITERIA_REQUIRED"))?;
+        let dispatch = if cfg.dispatch == sale_wire::SalesDispatchMode::SALES_DISPATCH_MODE_DIRECT {
+            crm_sales::SalesDispatchMode::Direct
+        } else if cfg.dispatch == sale_wire::SalesDispatchMode::SALES_DISPATCH_MODE_LEAST_OPEN_DEALS {
+            crm_sales::SalesDispatchMode::LeastOpenDeals
+        } else {
+            return Err(ConnectError::invalid_argument("SALES_ROUTING_DISPATCH_INVALID"));
+        };
+        let overflow = if cfg.overflow == sale_wire::SalesCapacityOverflow::SALES_CAPACITY_OVERFLOW_REJECT {
+            crm_sales::SalesCapacityOverflow::Reject
+        } else if cfg.overflow == sale_wire::SalesCapacityOverflow::SALES_CAPACITY_OVERFLOW_TEAM_QUEUE {
+            crm_sales::SalesCapacityOverflow::TeamQueue
+        } else {
+            return Err(ConnectError::invalid_argument("SALES_ROUTING_OVERFLOW_INVALID"));
+        };
+        let target = Self::owner_scope(cfg.target.as_option())?
+            .ok_or_else(|| ConnectError::invalid_argument("SALES_ROUTING_TARGET_REQUIRED"))?;
+        Ok(sales_territories::Record::RoutingRule(crm_sales::SalesRoutingRule {
+            rule_id: id,
+            name: cfg.name.clone(),
+            priority: cfg.priority,
+            criteria: crm_sales::SalesRoutingCriteria {
+                territory_id: criteria.territory_id.clone(),
+                pipeline_id: criteria.pipeline_id.clone(),
+                stage_id: criteria.stage_id.clone(),
+                currency_code: criteria.currency_code.clone(),
+                minimum_minor_units: criteria.minimum_minor_units,
+                maximum_minor_units: criteria.maximum_minor_units,
+            },
+            target,
+            dispatch,
+            maximum_open_deals: cfg.maximum_open_deals,
+            overflow,
+            archived: cfg.archived,
+            version: 1,
+        }))
+    }
+    fn routing_rule_wire(record: sales_territories::Record) -> std::result::Result<sale_wire::SalesRoutingRule, ConnectError> {
+        let sales_territories::Record::RoutingRule(rule) = record else {
+            return Err(ConnectError::internal("SALES_ROUTING_RULE_STATE_INVALID"));
+        };
+        let criteria = rule.criteria;
+        Ok(sale_wire::SalesRoutingRule {
+            rule_id: rule.rule_id,
+            version: rule.version,
+            configuration: Some(sale_wire::SalesRoutingRuleConfiguration {
+                name: rule.name,
+                priority: rule.priority,
+                criteria: Some(sale_wire::SalesRoutingCriteria {
+                    territory_id: criteria.territory_id,
+                    pipeline_id: criteria.pipeline_id,
+                    stage_id: criteria.stage_id,
+                    currency_code: criteria.currency_code,
+                    minimum_minor_units: criteria.minimum_minor_units,
+                    maximum_minor_units: criteria.maximum_minor_units,
+                    ..Default::default()
+                }).into(),
+                target: Some(Self::owner_wire(&rule.target)).into(),
+                dispatch: Self::dispatch_wire(rule.dispatch).into(),
+                maximum_open_deals: rule.maximum_open_deals,
+                overflow: match rule.overflow {
+                    crm_sales::SalesCapacityOverflow::Reject => sale_wire::SalesCapacityOverflow::SALES_CAPACITY_OVERFLOW_REJECT,
+                    crm_sales::SalesCapacityOverflow::TeamQueue => sale_wire::SalesCapacityOverflow::SALES_CAPACITY_OVERFLOW_TEAM_QUEUE,
+                }.into(),
+                archived: rule.archived,
+                ..Default::default()
+            }).into(),
+            ..Default::default()
+        })
+    }
+    fn routing_decision_wire(value: &crm_sales::SalesRoutingDecision) -> sale_wire::SalesRoutingDecision {
+        use crm_sales::SalesRoutingSource as Source;
+        use sale_wire::SalesRoutingSource as Wire;
+        sale_wire::SalesRoutingDecision {
+            source: match value.source {
+                Source::Rule => Wire::SALES_ROUTING_SOURCE_RULE,
+                Source::Account => Wire::SALES_ROUTING_SOURCE_ACCOUNT,
+                Source::Territory => Wire::SALES_ROUTING_SOURCE_TERRITORY,
+                Source::Manual => Wire::SALES_ROUTING_SOURCE_MANUAL,
+                Source::Creator => Wire::SALES_ROUTING_SOURCE_CREATOR,
+            }.into(),
+            selected_owner: Some(Self::owner_wire(&value.selected_owner)).into(),
+            target: Some(Self::owner_wire(&value.target)).into(),
+            rule_id: value.rule_id.clone(),
+            rule_version: value.rule_version,
+            rule_name: value.rule_name.clone(),
+            territory_id: value.territory_id.clone(),
+            territory_version: value.territory_version,
+            territory_name: value.territory_name.clone(),
+            assignment_version: value.assignment_version,
+            dispatch: Self::dispatch_wire(value.dispatch).into(),
+            selected_open_deals: value.selected_open_deals,
+            maximum_open_deals: value.maximum_open_deals,
+            capacity_overflow: value.capacity_overflow,
+            ..Default::default()
+        }
+    }
+
     fn convert(deal: &DomainDeal) -> std::result::Result<sale_wire::Deal, ConnectError> {
         let stage = deal.stage();
         let status = match deal.status() {
@@ -997,6 +1108,7 @@ impl SalesV2Service {
             .transpose()?;
         Ok(sale_wire::Deal {
             deal_id: deal.deal_id().as_str().to_owned(),
+            initial_routing: deal.initial_routing().map(Self::routing_decision_wire).into(),
             owner: Some(Self::owner_wire(&match deal.owner() {
                 crm_sales::DealOwner::Actor(id) => {
                     crm_sales::SalesOwnerScope::Actor(id.as_str().to_owned())

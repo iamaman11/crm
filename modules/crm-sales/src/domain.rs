@@ -161,6 +161,7 @@ pub struct Deal {
     deal_id: RecordId,
     name: String,
     owner: DealOwner,
+    initial_routing: Option<crate::SalesRoutingDecision>,
     account: Option<ResourceRef>,
     primary_contact: Option<ResourceRef>,
     stage: DealStage,
@@ -180,6 +181,7 @@ pub struct DealSnapshot {
     pub deal_id: RecordId,
     pub name: String,
     pub owner: DealOwner,
+    pub initial_routing: Option<crate::SalesRoutingDecision>,
     pub account: Option<ResourceRef>,
     pub primary_contact: Option<ResourceRef>,
     pub stage: DealStage,
@@ -297,6 +299,9 @@ impl Deal {
     pub fn owner(&self) -> &DealOwner {
         &self.owner
     }
+    pub fn initial_routing(&self) -> Option<&crate::SalesRoutingDecision> {
+        self.initial_routing.as_ref()
+    }
     pub fn account(&self) -> Option<&ResourceRef> {
         self.account.as_ref()
     }
@@ -359,6 +364,12 @@ impl Deal {
             ));
         }
 
+        if let Some(decision) = &snapshot.initial_routing {
+            decision.validate()?;
+            if snapshot.version == 1 && decision.selected_owner.domain_owner()? != snapshot.owner {
+                return Err(invalid("SALES_ROUTING_OWNER_MISMATCH", "deal.owner", "initial owner must match routing"));
+            }
+        }
         let close_outcome = match (snapshot.status, snapshot.close_outcome) {
             (DealStatus::Open, None) => None,
             (DealStatus::Open, Some(_)) => {
@@ -408,6 +419,7 @@ impl Deal {
             deal_id: snapshot.deal_id,
             name: snapshot.name,
             owner: snapshot.owner,
+            initial_routing: snapshot.initial_routing,
             account: snapshot.account,
             primary_contact: snapshot.primary_contact,
             stage: snapshot.stage,
@@ -428,6 +440,7 @@ impl Deal {
             deal_id: self.deal_id.clone(),
             name: self.name.clone(),
             owner: self.owner.clone(),
+            initial_routing: self.initial_routing.clone(),
             account: self.account.clone(),
             primary_contact: self.primary_contact.clone(),
             stage: self.stage.clone(),
@@ -464,6 +477,7 @@ impl Deal {
             deal_id: command.deal_id,
             name: command.name,
             owner: command.owner,
+            initial_routing: None,
             account: command.account,
             primary_contact: command.primary_contact,
             stage: command.stage,
@@ -477,6 +491,16 @@ impl Deal {
             updated_at_unix_nanos: command.occurred_at_unix_nanos,
             version: 1,
         })
+    }
+
+    pub fn create_with_routing(command: CreateDeal, decision: crate::SalesRoutingDecision) -> Result<Self, SdkError> {
+        decision.validate()?;
+        if command.owner != decision.selected_owner.domain_owner()? {
+            return Err(invalid("SALES_ROUTING_OWNER_MISMATCH", "deal.owner", "initial owner must match routing"));
+        }
+        let mut deal = Self::create(command)?;
+        deal.initial_routing = Some(decision);
+        Ok(deal)
     }
 
     pub fn apply_update(&mut self, command: UpdateDeal) -> Result<(), SdkError> {

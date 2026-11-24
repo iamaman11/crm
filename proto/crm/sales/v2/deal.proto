@@ -52,6 +52,7 @@ message Deal {
   ProbabilitySource probability_source = 15;
   ForecastCategory forecast_category = 16;
   crm.core.v2.ActorOrTeamOwner owner = 17;
+  SalesRoutingDecision initial_routing = 18;
 }
 
 message CreateDealRequest {
@@ -67,6 +68,7 @@ message CreateDealRequest {
   crm.core.v2.CalendarDate expected_close_date = 9;
   optional ForecastCategory forecast_category = 10;
   crm.core.v2.ActorOrTeamOwner owner = 11;
+  AutomaticSalesRouting automatic_routing = 12;
 }
 
 message CreateDealResponse {
@@ -154,6 +156,7 @@ message DealEvent {
   google.protobuf.Timestamp occurred_at = 11;
   int64 catalog_version = 12;
   string linked_task_id = 13;
+  SalesRoutingDecision initial_routing = 14;
 }
 message ListDealEventsRequest {
   string deal_id = 1;
@@ -566,7 +569,131 @@ message ListSalesAccountAssignmentsResponse {
   crm.core.v2.PageInfo page_info = 2;
 }
 
+// Closed, typed routing vocabulary. All criteria are conjunctive.
+// Absence of criteria is an explicitly configured catch-all.
+message SalesRoutingCriteria {
+  optional string territory_id = 1;
+  optional string pipeline_id = 2;
+  optional string stage_id = 3;
+  optional string currency_code = 4;
+  optional int64 minimum_minor_units = 5;
+  optional int64 maximum_minor_units = 6;
+}
+enum SalesDispatchMode {
+  SALES_DISPATCH_MODE_UNSPECIFIED = 0;
+  SALES_DISPATCH_MODE_DIRECT = 1;
+  SALES_DISPATCH_MODE_LEAST_OPEN_DEALS = 2;
+}
+enum SalesCapacityOverflow {
+  SALES_CAPACITY_OVERFLOW_UNSPECIFIED = 0;
+  SALES_CAPACITY_OVERFLOW_REJECT = 1;
+  SALES_CAPACITY_OVERFLOW_TEAM_QUEUE = 2;
+}
+message SalesRoutingRuleConfiguration {
+  string name = 1;
+  uint32 priority = 2;
+  SalesRoutingCriteria criteria = 3;
+  crm.core.v2.ActorOrTeamOwner target = 4;
+  SalesDispatchMode dispatch = 5;
+  optional uint32 maximum_open_deals = 6;
+  SalesCapacityOverflow overflow = 7;
+  bool archived = 8;
+}
+message SalesRoutingRule {
+  string rule_id = 1;
+  SalesRoutingRuleConfiguration configuration = 2;
+  int64 version = 3;
+}
+enum SalesRoutingSource {
+  SALES_ROUTING_SOURCE_UNSPECIFIED = 0;
+  SALES_ROUTING_SOURCE_RULE = 1;
+  SALES_ROUTING_SOURCE_ACCOUNT = 2;
+  SALES_ROUTING_SOURCE_TERRITORY = 3;
+  SALES_ROUTING_SOURCE_MANUAL = 4;
+  SALES_ROUTING_SOURCE_CREATOR = 5;
+}
+message SalesRoutingDecision {
+  SalesRoutingSource source = 1;
+  crm.core.v2.ActorOrTeamOwner selected_owner = 2;
+  crm.core.v2.ActorOrTeamOwner target = 3;
+  optional string rule_id = 4;
+  optional int64 rule_version = 5;
+  optional string rule_name = 6;
+  optional string territory_id = 7;
+  optional int64 territory_version = 8;
+  optional int64 assignment_version = 9;
+  SalesDispatchMode dispatch = 10;
+  optional uint64 selected_open_deals = 11;
+  optional uint32 maximum_open_deals = 12;
+  bool capacity_overflow = 13;
+  optional string territory_name = 14;
+}
+message AutomaticSalesRouting {
+  optional string territory_id = 1;
+  // Optional server-generated decision fingerprint from preview.
+  optional string expected_decision = 2;
+}
+message CreateSalesRoutingRuleRequest {
+  string rule_id = 1;
+  SalesRoutingRuleConfiguration configuration = 2;
+  crm.core.v2.MutationPrecondition precondition = 3;
+}
+message CreateSalesRoutingRuleResponse {
+  SalesRoutingRule rule = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+message UpdateSalesRoutingRuleRequest {
+  string rule_id = 1;
+  SalesRoutingRuleConfiguration configuration = 2;
+  crm.core.v2.MutationPrecondition precondition = 3;
+}
+message UpdateSalesRoutingRuleResponse {
+  SalesRoutingRule rule = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+message GetSalesRoutingRuleRequest {
+  string rule_id = 1;
+  optional string receipt_idempotency_key = 2;
+}
+message GetSalesRoutingRuleResponse {
+  SalesRoutingRule rule = 1;
+  crm.core.v2.MutationCommitEvidence confirmed_mutation = 2;
+}
+message ListSalesRoutingRulesRequest {
+  crm.core.v2.PageRequest page = 1;
+  bool include_archived = 2;
+}
+message ListSalesRoutingRulesResponse {
+  repeated SalesRoutingRule rules = 1;
+  crm.core.v2.PageInfo page_info = 2;
+}
+message PreviewSalesRoutingRequest {
+  string account_id = 1;
+  DealStage stage = 2;
+  crm.core.v2.ExactMoney amount = 3;
+  optional string territory_id = 4;
+}
+message PreviewSalesRoutingResponse {
+  SalesRoutingDecision decision = 1;
+  string expected_decision = 2;
+}
+
 service DealService {
+  rpc CreateSalesRoutingRule(CreateSalesRoutingRuleRequest) returns (CreateSalesRoutingRuleResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc UpdateSalesRoutingRule(UpdateSalesRoutingRuleRequest) returns (UpdateSalesRoutingRuleResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc GetSalesRoutingRule(GetSalesRoutingRuleRequest) returns (GetSalesRoutingRuleResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListSalesRoutingRules(ListSalesRoutingRulesRequest) returns (ListSalesRoutingRulesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc PreviewSalesRouting(PreviewSalesRoutingRequest) returns (PreviewSalesRoutingResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   rpc CreateTerritory(CreateTerritoryRequest) returns (CreateTerritoryResponse) {
     option idempotency_level = IDEMPOTENT;
   }

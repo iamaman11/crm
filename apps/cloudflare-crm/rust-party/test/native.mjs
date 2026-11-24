@@ -5572,6 +5572,126 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    console.log(JSON.stringify({event:"crm.native-sk07d1-coverage",result:"PASS",
      typed_ownership:true,hierarchy:true,tenant_ab:true,archive_guard:true,overlay:true,cas_replay:true,atomic_audit_rollback:true}));
  }
+ {
+   // D2: typed rules, exact money, preview, deterministic dispatch, capacity,
+   // replay and receipt/event/audit are tested on the same signed D1 path.
+   const suffix=randomUUID(),team="routing-team-"+suffix,pipeline="routing-pipeline-"+suffix;
+   const emailA="routing-a-"+suffix+"@example.test",emailB="routing-b-"+suffix+"@example.test";
+   const ruleId="routing-rule-"+suffix,secondId="routing-second-"+suffix;
+   const territoryId="routing-territory-"+suffix;
+   const actor=email=>({owner:{case:"assigneeIdentity",value:email}});
+   const target={owner:{case:"teamId",value:team}};
+   const pre=(label,version)=>({idempotencyKey:"routing-"+label+"-"+suffix,...(version===undefined?{}:{expectedVersion:version})});
+   const call=async(method,identity,input,status=200)=>{
+     const response=await salesV2(method,identity,input);
+     assert.equal(response.status,status,method+": "+describeProtobuf(response.body));
+     return response.body;
+   };
+   for(const [label,email] of [["a",emailA],["b",emailB]])assert.equal((await memberV2("ProvisionMember",admin,{email,role:1,precondition:pre("member-"+label)})).status,200);
+   assert.equal((await memberV2("CreateTeam",admin,{teamId:team,name:"Routing QA "+suffix,roster:{memberEmails:[emailA,emailB]},precondition:pre("team")})).status,200);
+   await call("CreatePipeline",admin,{pipelineId:pipeline,name:"Routing "+suffix,stages:[{stageId:"lead",name:"Lead",probabilityBasisPoints:5000}],precondition:pre("pipeline")});
+   await call("CreateTerritory",admin,{territoryId,configuration:{name:"Routing territory "+suffix,defaultOwner:actor(emailB)},precondition:pre("territory")});
+   const stage={pipelineId:pipeline,stageId:"lead",ordinal:1};
+   const facts={accountId,stage,territoryId,amount:{currencyCode:"EUR",minorUnits:100n}};
+   const cfg={name:"Routing workload "+suffix,priority:10,criteria:{territoryId,pipelineId:pipeline,stageId:"lead",currencyCode:"EUR",minimumMinorUnits:100n,maximumMinorUnits:100n},target,dispatch:2,maximumOpenDeals:1,overflow:1};
+   const fallback={...cfg,name:"Routing fallback "+suffix,priority:20,criteria:{pipelineId:pipeline},target:actor(emailB),dispatch:1,overflow:1};
+   delete fallback.maximumOpenDeals;
+   const req={ruleId,configuration:cfg,precondition:pre("rule")};
+   const created=await call("CreateSalesRoutingRule",admin,req);
+   assert.equal(created.rule.version,1n);
+   assert.equal((await call("CreateSalesRoutingRule",admin,req)).receipt.replayed,true);
+   const get=await call("GetSalesRoutingRule",viewer,{ruleId,receiptIdempotencyKey:req.precondition.idempotencyKey});
+   assert.deepEqual(get.rule,created.rule);assert.equal(get.confirmedMutation.resourceVersion,1n);
+   await call("GetSalesRoutingRule",tenantB,{ruleId},404);
+   assert.equal((await call("ListSalesRoutingRules",tenantB,{})).rules.length,0);
+   await call("CreateSalesRoutingRule",viewer,{...req,ruleId:"denied-"+suffix,precondition:pre("denied")},403);
+   await call("CreateSalesRoutingRule",admin,{ruleId:secondId,configuration:{...fallback,priority:10},precondition:pre("duplicate")},409);
+   await call("CreateSalesRoutingRule",admin,{ruleId:secondId,configuration:fallback,precondition:pre("second")});
+   assert.equal((await call("ListSalesRoutingRules",viewer,{})).rules.length,2);
+   await call("UpdateTerritory",admin,{territoryId,configuration:{name:"Routing territory "+suffix,defaultOwner:actor(emailB),archived:true},precondition:pre("blocked-territory",1n)},409);
+   await call("UpdatePipeline",admin,{pipelineId:pipeline,name:"Routing "+suffix,archived:true,stages:[{stageId:"lead",name:"Lead",probabilityBasisPoints:5000}],precondition:pre("blocked-pipeline",1n)},409);
+   assert.equal((await memberV2("UpdateTeam",admin,{teamId:team,active:false,precondition:pre("blocked-team",1n)})).status,409);
+   const before=(await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=?","tenant-a"))[0].n;
+   const preview=await call("PreviewSalesRouting",viewer,facts);
+   assert.equal(preview.decision.ruleId,ruleId);assert.equal(preview.decision.selectedOwner.owner.value,emailA);
+   assert.equal(preview.decision.selectedOpenDeals,0n);
+   assert.deepEqual(await call("PreviewSalesRouting",admin,facts),preview);
+   assert.equal((await call("PreviewSalesRouting",viewer,{...facts,amount:{currencyCode:"USD",minorUnits:100n}})).decision.ruleId,secondId);
+   assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=?","tenant-a"))[0].n,before);
+   const deal=(label,expected)=>({dealId:"routing-"+label+"-"+suffix,name:"Routing "+label+" "+suffix,accountId,stage,amount:facts.amount,automaticRouting:{territoryId,...(expected?{expectedDecision:expected}:{})},precondition:pre("deal-"+label)});
+   const one=deal("one",preview.expectedDecision);
+   const first=await call("CreateDeal",admin,one);
+   assert.deepEqual(first.deal.initialRouting,preview.decision);
+   assert.equal(first.deal.owner.owner.value,emailA);
+   const p2=await call("PreviewSalesRouting",viewer,facts);
+   assert.equal(p2.decision.selectedOwner.owner.value,emailB);
+   const race=[deal("race-a",p2.expectedDecision),deal("race-b",p2.expectedDecision)];
+   const results=await Promise.all(race.map(input=>salesV2("CreateDeal",admin,input)));
+   assert.equal(results.filter(r=>r.status===200).length,1);
+   assert.equal(results.filter(r=>r.status===409).length,1);
+   const winner=race[results.findIndex(r=>r.status===200)];
+   assert.equal((await call("GetDeal",viewer,{dealId:winner.dealId})).deal.owner.owner.value,emailB);
+   await call("PreviewSalesRouting",viewer,facts,409);
+   await call("CreateDeal",admin,deal("full"),409);
+   const update={ruleId,configuration:{...cfg,overflow:2},precondition:pre("overflow",1n)};
+   const ruleBefore=await sql("SELECT state,version FROM crm_sales_routing_rule_records WHERE tenant=? AND id=?","tenant-a",ruleId);
+   await sql("CREATE TRIGGER fixture_fail_rule_audit BEFORE INSERT ON crm_audit WHEN NEW.action='sales.routing_rule.update' BEGIN SELECT RAISE(ABORT,'fixture routing rule audit rollback'); END;");
+   try{
+     assertUnconfirmed(await salesV2("UpdateSalesRoutingRule",admin,{...update,precondition:pre("rule-fault",1n)}),"SALES_ROUTING_RULE_WRITE_UNCONFIRMED");
+     assert.deepEqual(await sql("SELECT state,version FROM crm_sales_routing_rule_records WHERE tenant=? AND id=?","tenant-a",ruleId),ruleBefore);
+     assert.equal((await sql("SELECT COUNT(*) n FROM crm_sales_routing_rule_receipts WHERE tenant=? AND key=?","tenant-a",pre("rule-fault",1n).idempotencyKey))[0].n,0);
+   }finally{await sql("DROP TRIGGER fixture_fail_rule_audit");}
+   assert.equal((await call("UpdateSalesRoutingRule",admin,update)).rule.version,2n);
+   assert.equal((await call("UpdateSalesRoutingRule",admin,update)).receipt.replayed,true);
+   assert.equal((await call("CreateDeal",admin,one)).receipt.replayed,true);
+   assert.deepEqual((await call("CreateDeal",admin,one)).deal.initialRouting,first.deal.initialRouting);
+   await call("CreateDeal",admin,deal("stale",preview.expectedDecision),409);
+   const p3=await call("PreviewSalesRouting",viewer,facts);
+   assert.equal(p3.decision.capacityOverflow,true);
+   assert.equal(p3.decision.selectedOwner.owner.value,team);
+   const overflow=deal("overflow",p3.expectedDecision);
+   const pooled=await call("CreateDeal",admin,overflow);
+   assert.equal(pooled.deal.owner.owner.value,team);
+   const manual=deal("manual");delete manual.automaticRouting;manual.owner=actor(emailB);
+   const manualSaved=await call("CreateDeal",admin,manual);
+   assert.equal(manualSaved.deal.initialRouting.source,4);
+   const events=await call("ListDealEvents",viewer,{dealId:one.dealId});
+   assert.deepEqual(events.events[0].initialRouting,first.deal.initialRouting);
+   const stored=await sql("SELECT json_extract(state,'$.initial_routing.rule_id') rule_id FROM crm_sales_deal_records WHERE tenant=? AND id=?","tenant-a",one.dealId);
+   assert.equal(stored[0].rule_id,ruleId);
+   await sql("CREATE TRIGGER fixture_fail_routing_audit BEFORE INSERT ON crm_audit WHEN NEW.subject_id='routing-fault-"+suffix+"' BEGIN SELECT RAISE(ABORT,'fixture routing audit rollback'); END;");
+   try{
+     assertUnconfirmed(await salesV2("CreateDeal",admin,deal("fault")),"SALES_COMMIT_UNCONFIRMED");
+     assert.equal((await sql("SELECT COUNT(*) n FROM crm_sales_deal_records WHERE tenant=? AND id=?","tenant-a","routing-fault-"+suffix))[0].n,0);
+     assert.equal((await sql("SELECT COUNT(*) n FROM crm_sales_deal_receipts WHERE tenant=? AND key=?","tenant-a",pre("deal-fault").idempotencyKey))[0].n,0);
+     assert.equal((await sql("SELECT COUNT(*) n FROM crm_sales_deal_events WHERE tenant=? AND deal_id=?","tenant-a","routing-fault-"+suffix))[0].n,0);
+   }finally{await sql("DROP TRIGGER fixture_fail_routing_audit");}
+   await call("UpdateSalesRoutingRule",admin,{ruleId,configuration:{...cfg,overflow:2,archived:true},precondition:pre("archive-rule",2n)});
+   await call("UpdateSalesRoutingRule",admin,{ruleId:secondId,configuration:{...fallback,archived:true},precondition:pre("archive-second",1n)});
+   assert.equal((await call("PreviewSalesRouting",viewer,facts)).decision.source,3);
+   const noTerritory={accountId,stage,amount:facts.amount};
+   await call("PreviewSalesRouting",viewer,noTerritory,409);
+   const previousAssignment=(await call("GetSalesAccountAssignment",viewer,{accountId})).assignment;
+   await call("UpdateSalesAccountAssignment",admin,{accountId,configuration:{territoryId,primaryOwner:actor(emailB),overlays:[],archived:false},precondition:pre("assignment",previousAssignment.version)});
+   assert.equal((await call("PreviewSalesRouting",viewer,noTerritory)).decision.source,2);
+   await call("PreviewSalesRouting",viewer,{...facts,territoryId:"conflicting-"+suffix},409);
+   await call("PreviewSalesRouting",tenantB,facts,409);
+   const activeAssignment=(await call("GetSalesAccountAssignment",viewer,{accountId})).assignment;
+   await call("UpdateSalesAccountAssignment",admin,{accountId,configuration:{...activeAssignment.configuration,archived:true},precondition:pre("assignment-archive",activeAssignment.version)});
+   const reassigned=await call("UpdateDeal",admin,{dealId:one.dealId,owner:actor(emailB),precondition:pre("manual-reassign",1n)});
+   assert.equal(reassigned.deal.owner.owner.value,emailB);
+   assert.deepEqual(reassigned.deal.initialRouting,first.deal.initialRouting);
+   for(const [index,input] of [one,winner,overflow,manual].entries()){
+     const version=index===0?2n:1n;
+     await call("CloseDeal",admin,{dealId:input.dealId,outcome:3,reasonCode:"qa.cleanup",precondition:pre("close-"+index,version)});
+     assert.equal((await sql("SELECT COUNT(*) n FROM crm_sales_deal_events WHERE tenant=? AND deal_id=?","tenant-a",input.dealId))[0].n,Number(version)+1);
+     assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=?","tenant-a",input.dealId))[0].n,Number(version)+1);
+   }
+   await call("UpdateTerritory",admin,{territoryId,configuration:{name:"Routing territory "+suffix,defaultOwner:actor(emailB),archived:true},precondition:pre("archive-territory",1n)});
+   assert.equal((await memberV2("UpdateTeam",admin,{teamId:team,active:false,precondition:pre("archive-team",1n)})).status,200);
+   for(const [label,email] of [["a",emailA],["b",emailB]])assert.equal((await memberV2("UpdateMember",admin,{email,active:false,precondition:pre("deactivate-"+label,1n)})).status,200);
+   console.log(JSON.stringify({event:"crm.native-sk07d2-routing",result:"PASS",priority:true,exact_money:true,capacity_race:true,overflow:true,stale_preview:true,immutable_attribution:true,tenant_ab:true,receipt_event_audit:true}));
+ }
  assert.deepEqual([...writesWithReceipt].sort(),[...mutationPaths].sort(),
    "every write method must exercise a committed response with a typed receipt");
  assert.deepEqual([...successfulCalls].sort(),[...rpc.registered_methods].sort(),

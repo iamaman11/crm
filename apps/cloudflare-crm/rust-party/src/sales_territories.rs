@@ -1,7 +1,7 @@
 //! Sales coverage persistence: one original aggregate, CAS and atomic receipt/audit.
 use super::{bind, d1_write, sales_deals};
 use connectrpc::ErrorCode;
-use crm_sales::{SalesAccountAssignment, SalesOwnerScope, SalesTerritory};
+use crm_sales::{SalesAccountAssignment, SalesOwnerScope, SalesRoutingRule, SalesTerritory};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use wasm_bindgen::JsValue;
@@ -13,6 +13,7 @@ pub(super) type Failure = d1_write::OwnerFailure;
 pub(super) enum Kind {
     Territory,
     Assignment,
+    RoutingRule,
 }
 
 impl Kind {
@@ -20,6 +21,7 @@ impl Kind {
         match self {
             Self::Territory => "crm_sales_territory_records",
             Self::Assignment => "crm_sales_account_assignment_records",
+            Self::RoutingRule => "crm_sales_routing_rule_records",
         }
     }
 
@@ -27,6 +29,7 @@ impl Kind {
         match self {
             Self::Territory => "crm_sales_territory_receipts",
             Self::Assignment => "crm_sales_account_assignment_receipts",
+            Self::RoutingRule => "crm_sales_routing_rule_receipts",
         }
     }
 
@@ -34,6 +37,7 @@ impl Kind {
         match self {
             Self::Territory => SalesTerritory::decode(state).map(Record::Territory),
             Self::Assignment => SalesAccountAssignment::decode(state).map(Record::Assignment),
+            Self::RoutingRule => SalesRoutingRule::decode(state).map(Record::RoutingRule),
         }
         .map_err(|e| worker::Error::RustError(e.code))
     }
@@ -42,6 +46,7 @@ impl Kind {
 pub(super) enum Record {
     Territory(SalesTerritory),
     Assignment(SalesAccountAssignment),
+    RoutingRule(SalesRoutingRule),
 }
 
 impl Record {
@@ -49,6 +54,7 @@ impl Record {
         match self {
             Self::Territory(_) => Kind::Territory,
             Self::Assignment(_) => Kind::Assignment,
+            Self::RoutingRule(_) => Kind::RoutingRule,
         }
     }
 
@@ -56,6 +62,7 @@ impl Record {
         match self {
             Self::Territory(value) => &value.territory_id,
             Self::Assignment(value) => &value.account_id,
+            Self::RoutingRule(value) => &value.rule_id,
         }
     }
 
@@ -63,6 +70,7 @@ impl Record {
         match self {
             Self::Territory(value) => value.version,
             Self::Assignment(value) => value.version,
+            Self::RoutingRule(value) => value.version,
         }
     }
 
@@ -70,6 +78,7 @@ impl Record {
         match self {
             Self::Territory(value) => value.archived,
             Self::Assignment(value) => value.archived,
+            Self::RoutingRule(value) => value.archived,
         }
     }
 
@@ -79,6 +88,7 @@ impl Record {
             Self::Assignment(value) => std::iter::once(&value.primary_owner)
                 .chain(value.overlays.iter().map(|overlay| &overlay.owner))
                 .collect(),
+            Self::RoutingRule(value) => vec![&value.target],
         }
     }
 
@@ -86,6 +96,7 @@ impl Record {
         match self {
             Self::Territory(value) => serde_json::to_string(value),
             Self::Assignment(value) => serde_json::to_string(value),
+            Self::RoutingRule(value) => serde_json::to_string(value),
         }
         .map_err(|e| worker::Error::RustError(e.to_string()))
     }
@@ -103,6 +114,10 @@ impl Record {
             (Self::Assignment(value), None) => value.revise(None, expected).map(Self::Assignment),
             (Self::Assignment(value), Some(Self::Assignment(old))) => {
                 value.revise(Some(old), expected).map(Self::Assignment)
+            }
+            (Self::RoutingRule(value), None) => value.revise(None, expected).map(Self::RoutingRule),
+            (Self::RoutingRule(value), Some(Self::RoutingRule(old))) => {
+                value.revise(Some(old), expected).map(Self::RoutingRule)
             }
             _ => {
                 return Err(Failure::domain(
@@ -179,6 +194,8 @@ async fn receipt(ctx: &Context<'_>, kind: Kind, key: &str) -> Result<Option<d1_w
 const TERRITORY_GUARD: &str = " AND (json_extract(?3,'$.parent_id') IS NULL OR EXISTS (SELECT 1 FROM crm_sales_territory_records p WHERE p.tenant=?1 AND p.id=json_extract(?3,'$.parent_id') AND (json_extract(?3,'$.archived')=1 OR json_extract(p.state,'$.archived')=0))) AND NOT EXISTS (WITH RECURSIVE ancestors(id) AS (SELECT json_extract(?3,'$.parent_id') UNION SELECT json_extract(p.state,'$.parent_id') FROM crm_sales_territory_records p JOIN ancestors a ON p.id=a.id WHERE p.tenant=?1) SELECT 1 FROM ancestors WHERE id=?2) AND (json_extract(?3,'$.archived')=0 OR (NOT EXISTS (SELECT 1 FROM crm_sales_territory_records c WHERE c.tenant=?1 AND json_extract(c.state,'$.parent_id')=?2 AND json_extract(c.state,'$.archived')=0) AND NOT EXISTS (SELECT 1 FROM crm_sales_account_assignment_records a WHERE a.tenant=?1 AND json_extract(a.state,'$.territory_id')=?2 AND json_extract(a.state,'$.archived')=0)))";
 const ASSIGNMENT_GUARD: &str = " AND EXISTS (SELECT 1 FROM crm_account_records a WHERE a.tenant=?1 AND a.id=?2) AND (json_extract(?3,'$.territory_id') IS NULL OR EXISTS (SELECT 1 FROM crm_sales_territory_records t WHERE t.tenant=?1 AND t.id=json_extract(?3,'$.territory_id') AND (json_extract(?3,'$.archived')=1 OR json_extract(t.state,'$.archived')=0)))";
 
+const ROUTING_GUARD: &str = " AND (json_extract(?3,'$.archived')=1 OR (NOT EXISTS (SELECT 1 FROM crm_sales_routing_rule_records r WHERE r.tenant=?1 AND r.id<>?2 AND json_extract(r.state,'$.archived')=0 AND json_extract(r.state,'$.priority')=json_extract(?3,'$.priority')) AND (json_extract(?3,'$.criteria.territory_id') IS NULL OR EXISTS (SELECT 1 FROM crm_sales_territory_records t WHERE t.tenant=?1 AND t.id=json_extract(?3,'$.criteria.territory_id') AND json_extract(t.state,'$.archived')=0)) AND (json_extract(?3,'$.criteria.pipeline_id') IS NULL OR EXISTS (SELECT 1 FROM crm_sales_pipeline_records p WHERE p.tenant=?1 AND p.id=json_extract(?3,'$.criteria.pipeline_id') AND json_extract(p.state,'$.archived')=0 AND (json_extract(?3,'$.criteria.stage_id') IS NULL OR EXISTS (SELECT 1 FROM json_each(p.state,'$.stages') s WHERE json_extract(s.value,'$.stage_id')=json_extract(?3,'$.criteria.stage_id') AND json_extract(s.value,'$.archived')=0))))))";
+
 pub(super) async fn mutate(
     ctx: &Context<'_>,
     draft: Record,
@@ -224,6 +241,7 @@ pub(super) async fn mutate(
     let mut guard = match kind {
         Kind::Territory => TERRITORY_GUARD.to_owned(),
         Kind::Assignment => ASSIGNMENT_GUARD.to_owned(),
+        Kind::RoutingRule => ROUTING_GUARD.to_owned(),
     };
     let state = record.encode()?;
     let mut values = vec![
@@ -237,6 +255,9 @@ pub(super) async fn mutate(
         JsValue::from_str(ctx.actor),
         JsValue::from_f64(expected.unwrap_or(0) as f64),
     ];
+    if matches!(kind, Kind::Territory) && record.archived() {
+        guard.push_str(" AND NOT EXISTS (SELECT 1 FROM crm_sales_routing_rule_records r WHERE r.tenant=?1 AND json_extract(r.state,'$.archived')=0 AND json_extract(r.state,'$.criteria.territory_id')=?2)");
+    }
     if !record.archived() {
         for owner in record.owners() {
             if !sales_deals::eligible_owner(ctx.db, ctx.tenant, owner).await? {
@@ -263,8 +284,16 @@ pub(super) async fn mutate(
     match d1_write::confirm(
         write,
         receipt(ctx, kind, key),
-        "SALES_COVERAGE_CONFLICT",
-        "SALES_COVERAGE_WRITE_UNCONFIRMED",
+        if matches!(kind, Kind::RoutingRule) {
+            "SALES_ROUTING_RULE_CONFLICT"
+        } else {
+            "SALES_COVERAGE_CONFLICT"
+        },
+        if matches!(kind, Kind::RoutingRule) {
+            "SALES_ROUTING_RULE_WRITE_UNCONFIRMED"
+        } else {
+            "SALES_COVERAGE_WRITE_UNCONFIRMED"
+        },
     )
     .await
     {
@@ -331,6 +360,6 @@ pub(super) async fn list(
 pub(super) fn owner_in_use(tenant: &str, id: &str, team: bool) -> String {
     let field = if team { "team" } else { "actor" };
     format!(
-        "(EXISTS (SELECT 1 FROM crm_sales_territory_records t WHERE t.tenant={tenant} AND json_extract(t.state,'$.archived')=0 AND json_extract(t.state,'$.default_owner.{field}')={id}) OR EXISTS (SELECT 1 FROM crm_sales_account_assignment_records a WHERE a.tenant={tenant} AND json_extract(a.state,'$.archived')=0 AND (json_extract(a.state,'$.primary_owner.{field}')={id} OR EXISTS (SELECT 1 FROM json_each(a.state,'$.overlays') o WHERE json_extract(o.value,'$.owner.{field}')={id}))))"
+        "(EXISTS (SELECT 1 FROM crm_sales_territory_records t WHERE t.tenant={tenant} AND json_extract(t.state,'$.archived')=0 AND json_extract(t.state,'$.default_owner.{field}')={id}) OR EXISTS (SELECT 1 FROM crm_sales_routing_rule_records r WHERE r.tenant={tenant} AND json_extract(r.state,'$.archived')=0 AND json_extract(r.state,'$.target.{field}')={id}) OR EXISTS (SELECT 1 FROM crm_sales_account_assignment_records a WHERE a.tenant={tenant} AND json_extract(a.state,'$.archived')=0 AND (json_extract(a.state,'$.primary_owner.{field}')={id} OR EXISTS (SELECT 1 FROM json_each(a.state,'$.overlays') o WHERE json_extract(o.value,'$.owner.{field}')={id}))))"
     )
 }

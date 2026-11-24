@@ -1,6 +1,6 @@
 import {useCallback,useEffect,useState} from "react";
 import {Button,Card,RecordPanel,FormGrid,PageHeader,SelectField,TextField} from "@ultimate-crm/ui";
-import type {Deal,SalesPipeline,SalesDealView} from "@ultimate-crm/client/cloudflare";
+import type {Deal,SalesPipeline,SalesDealView,PreviewSalesRoutingResponse} from "@ultimate-crm/client/cloudflare";
 import {DealStatus,ProbabilitySource,ForecastCategory} from "@ultimate-crm/client/cloudflare";
 import {api,field,newId} from "./api";
 import {enumValue} from "./enumFields";
@@ -15,6 +15,8 @@ import {minorUnits,decimalUnits,moneyText,basisPoints,percent,weightedMoneyText}
 import {allPipelines} from "./salesPipelineCatalog";
 import styles from "./App.module.css";
 import {allOwners,ownerValue,ownerWire,ownerLabel} from "./ownerCatalog";
+import {allTerritories} from "./SalesCoverage";
+import {RoutingExplanation} from "./SalesRouting";
 
 type EditorMode="create"|"edit"|"advance"|"close"|"reopen"|null;
 type StageDraft={stageId:string;name:string;probability:string;archived:boolean};
@@ -80,6 +82,10 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
   const [editorMode,setEditorMode]=useState<EditorMode>(null);
   const [draftId,setDraftId]=useState(newId);
   const [formAccountId,setFormAccountId]=useState("");
+  const [autoRouting,setAutoRouting]=useState(false);
+  const [previewVisible,setPreviewVisible]=useState(false);
+  const routingPreview=useReadAction<{key:string;response:PreviewSalesRoutingResponse}>();
+  const territories=useQuery(useCallback(allTerritories,[]));
   const [probabilityChoice,setProbabilityChoice]=useState(String(ProbabilitySource.STAGE_DEFAULT));
   const [expandedDeal,setExpandedDeal]=useState("");
   const [detailRevision,setDetailRevision]=useState(0);
@@ -322,6 +328,16 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
     <MutationNotice state={mutation}/>
   </>;
   const currencyDefinitions=pipelinesQuery.data.currencies;
+  const routingInput=(data:FormData)=>{
+    const stage=activePipeline?.stages.find(s=>s.stageId===field(data,"stageId"));
+    if(!activePipeline||!stage||stage.archived)throw Error("Выберите активный этап");
+    const accountId=field(data,"accountId");if(!accountId)throw Error("Выберите клиента");
+    const territoryId=field(data,"routingTerritory"),currencyCode=field(data,"currency"),text=field(data,"amount");
+    const amount=text?{currencyCode,minorUnits:minorUnits(text,currencyCode,currencyDefinitions)}:undefined;
+    const request={accountId,stage:{pipelineId:activePipeline.pipelineId,stageId:stage.stageId,ordinal:stage.ordinal},...(territoryId?{territoryId}:{}),...(amount?{amount}:{})};
+    const key=JSON.stringify([accountId,request.stage.pipelineId,request.stage.stageId,territoryId,amount?.currencyCode,amount?.minorUnits.toString()]);
+    return {key,request};
+  };
   return <>
     <QueryNotice query={editorRead}/>
     {focusedDealId?<section>
@@ -339,6 +355,7 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
       <Button disabled={mutation.busy||mutation.pending||editorRead.busy||!activePipeline||!readyStage} onClick={()=>{
         setSelected(undefined);setAdvance(undefined);setFormAccountId(accountId);
         setProbabilityChoice(String(ProbabilitySource.STAGE_DEFAULT));
+        setAutoRouting(false);setPreviewVisible(false);
         setEditorMode("create");mutation.changed();
       }}>Новая сделка</Button>
     </>}/>
@@ -823,7 +840,7 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
              editorMode==="reopen"?"Открыть повторно":"Сохранить этап"}
         </Button>{" "}
         <Button variant="secondary" type="button" disabled={mutation.busy||mutation.pending} onClick={()=>{setEditorMode(null);setAdvance(undefined);mutation.changed();}}>Отмена</Button>
-      </form>:<form key={selected?selected.dealId+selected.version:draftId} onChange={mutation.changed} onSubmit={e=>{
+      </form>:<form key={selected?selected.dealId+selected.version:draftId} onChange={()=>{mutation.changed();setPreviewVisible(false);}} onSubmit={e=>{
         e.preventDefault();const data=new FormData(e.currentTarget);
         void mutation.runIntent(()=>{
           const currencyCode=field(data,"currency"),amountText=field(data,"amount");
@@ -872,10 +889,14 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
           }
           const stage=activePipeline?.stages.find(s=>s.stageId===field(data,"stageId"));
           if(!activePipeline||!stage||stage.archived)throw Error("Выберите существующий активный этап");
+          const route=autoRouting?routingInput(data):undefined;
+          const preview=routingPreview.data;
+          if(route&&(!previewVisible||preview?.key!==route.key||!preview.response.expectedDecision))throw Error("Сначала проверьте автоматическое назначение");
           return prepareMutation(api.deals.createDeal,{
             dealId:draftId,name:field(data,"name"),accountId:field(data,"accountId"),
             stage:{pipelineId:activePipeline.pipelineId,stageId:stage.stageId,ordinal:stage.ordinal},
             ...(amount?{amount}:{}),...common,
+            ...(route&&preview?{automaticRouting:{...(route.request.territoryId?{territoryId:route.request.territoryId}:{}),expectedDecision:preview.response.expectedDecision}}:{}),
             ...(contactId?{primaryContactId:contactId}:{}),
             ...(expectedCloseDate?{expectedCloseDate}:{}),
             precondition:{idempotencyKey:mutation.key}
@@ -884,16 +905,31 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
       }}><fieldset className={styles.intentFields} disabled={mutation.busy||mutation.pending}><FormGrid>
         <TextField label="Название сделки" name="name" defaultValue={selected?.name??""} required/>
         {!selected&&<>
-          <AccountPicker value={formAccountId} onSelect={setFormAccountId}/>
+          <AccountPicker value={formAccountId} onSelect={id=>{setFormAccountId(id);setPreviewVisible(false);}}/>
           <SelectField label="Этап" name="stageId" defaultValue={readyStage?.stageId??""} required>
             {activePipeline?.stages.filter(stage=>!stage.archived).map(stage=>
               <option value={stage.stageId} key={stage.stageId}>{stage.name}</option>)}
           </SelectField>
         </>}
-        <SelectField label="Ответственный за сделку" name="dealOwner" defaultValue="">
+        <SelectField label="Ответственный за сделку" name="dealOwner" defaultValue="" onChange={e=>{setAutoRouting(!selected&&e.target.value==="automatic");setPreviewVisible(false);}}>
           <option value="">{selected?"Оставить текущего ответственного":"Создатель — подписанный актор"}</option>
+          {!selected&&<option value="automatic">Автоматическое распределение</option>}
           {ownerChoices.filter(c=>c.eligible).map(c=><option key={c.value} value={c.value}>{c.label}</option>)}
         </SelectField>
+        {!selected&&autoRouting&&<>
+          <QueryNotice query={territories}/>
+          <SelectField label="Территория маршрутизации" name="routingTerritory" disabled={territories.busy||!!territories.error}>
+            <option value="">По портфелю клиента</option>
+            {territories.data?.filter(t=>!t.configuration?.archived).map(t=><option key={t.territoryId} value={t.territoryId}>{t.configuration?.name}</option>)}
+          </SelectField>
+          <Button type="button" variant="secondary" disabled={routingPreview.busy||territories.busy||!!territories.error} onClick={e=>{
+            const form=e.currentTarget.form;if(!form)return;
+            const data=new FormData(form);setPreviewVisible(false);
+            void routingPreview.run(async signal=>{const {key,request}=routingInput(data);return {key,response:await api.deals.previewSalesRouting(request,{signal})};}).then(value=>setPreviewVisible(!!value));
+          }}>Проверить распределение</Button>
+          {routingPreview.error&&<p role="alert">{routingPreview.error}</p>}
+          {previewVisible&&routingPreview.data?.response.decision&&<RoutingExplanation decision={routingPreview.data.response.decision} choices={ownerChoices}/>}
+        </>}
         <DealContactPicker key={selected?.dealId??formAccountId}
           accountId={selected?.accountId??formAccountId}
           initialContactId={selected?.primaryContactId??""}/>

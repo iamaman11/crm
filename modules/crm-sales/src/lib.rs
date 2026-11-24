@@ -5,12 +5,14 @@ pub const MODULE_ID: &str = "crm.sales";
 pub mod domain;
 pub mod persistence;
 pub mod pipeline;
+pub mod routing;
 pub mod territories;
 pub mod views;
 
 pub use domain::*;
 pub use persistence::*;
 pub use pipeline::*;
+pub use routing::*;
 pub use territories::*;
 pub use views::*;
 

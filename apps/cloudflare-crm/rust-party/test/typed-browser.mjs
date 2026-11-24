@@ -2918,6 +2918,42 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      await mutation(coverage.getByRole("button",{name:"Сохранить территорию",exact:true}),"UpdateTerritory");
      await coverage.getByRole("row").filter({hasText:territoryName}).getByText("Архив",{exact:true}).waitFor();
      checkpoint("SK-07.D1 territory and account responsibility UI, overlay, drill-down, reload and archive");
+     // D2: real rule creation and preview through the generated client.
+     const routingRegion=page.getByRole("region",{name:"Правила распределения продаж",exact:true});
+     const ruleName="Browser routing "+runId;
+     await routingRegion.getByRole("button",{name:"Создать правило распределения",exact:true}).click();
+     await routingRegion.getByLabel("Название правила",{exact:true}).fill(ruleName);
+     await routingRegion.getByLabel("Воронка правила",{exact:true}).selectOption(newPipelineId);
+     await routingRegion.getByLabel("Получатель правила",{exact:true}).selectOption("actor:native-a@example.test");
+     await mutation(routingRegion.getByRole("button",{name:"Сохранить правило",exact:true}),"CreateSalesRoutingRule");
+     const ruleId=await firstId("crm_sales_routing_rule_records","name",ruleName);
+     await routingRegion.getByRole("row").filter({hasText:ruleName}).waitFor();
+     await navigate("sales","Сделки");
+     await page.getByLabel("Воронка продаж",{exact:true}).selectOption(newPipelineId);
+     await page.getByRole("button",{name:"Новая сделка",exact:true}).click();
+     const autoName="Browser routed deal "+runId;
+     await page.getByLabel("Название сделки",{exact:true}).fill(autoName);
+     await selectPagedPicker(page,"Клиент",accountId,"account");
+     await page.getByLabel("Ответственный за сделку",{exact:true}).selectOption("automatic");
+     await page.getByRole("button",{name:"Проверить распределение",exact:true}).click();
+     await page.getByText("Источник назначения: Правило: "+ruleName+" · версия 1",{exact:true}).waitFor();
+     await mutation(page.getByRole("button",{name:"Сохранить сделку",exact:true}),"CreateDeal");
+     const autoId=await firstId("crm_sales_deal_records","name",autoName);
+     await navigate("sales/"+encodeURIComponent(autoId),"Карточка сделки");
+     await page.getByText("Источник назначения: Правило: "+ruleName+" · версия 1",{exact:true}).first().waitFor();
+     await reloadDocument();
+     await page.getByRole("region",{name:"История сделки "+autoId,exact:true}).getByText("Источник назначения: Правило: "+ruleName+" · версия 1",{exact:true}).waitFor();
+     assert.deepEqual(await sql("SELECT json_extract(state,'$.initial_routing.rule_id') AS rule_id,json_extract(state,'$.owner.actor_id') AS owner FROM crm_sales_deal_records WHERE tenant=? AND id=?",tenantA,autoId),[{rule_id:ruleId,owner:"native-a@example.test"}]);
+     await page.getByRole("button",{name:"Завершить сделку",exact:true}).click();
+     await page.getByLabel("Результат сделки",{exact:true}).selectOption("3");
+     await page.getByLabel("Причина закрытия",{exact:true}).fill("qa.routing");
+     await mutation(page.locator("dialog").getByRole("button",{name:"Завершить сделку",exact:true}),"CloseDeal");
+     await navigate("team","Команда и распределение работы");
+     await routingRegion.getByRole("row").filter({hasText:ruleName}).getByRole("button",{name:"Изменить правило",exact:true}).click();
+     await routingRegion.getByLabel("Архивное правило",{exact:true}).check();
+     await mutation(routingRegion.getByRole("button",{name:"Сохранить правило",exact:true}),"UpdateSalesRoutingRule");
+     checkpoint("SK-07.D2 routing administration, automatic preview, atomic Deal attribution, history and archive");
+
 
    }
 

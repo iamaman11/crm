@@ -21,7 +21,7 @@ fn conflict(code: &'static str) -> SdkError {
     )
 }
 
-fn check_id(id: &str) -> Result<(), SdkError> {
+pub(crate) fn check_id(id: &str) -> Result<(), SdkError> {
     if id != id.trim()
         || id.contains(['/', '\\', '%'])
         || id.chars().any(char::is_control)
@@ -32,7 +32,7 @@ fn check_id(id: &str) -> Result<(), SdkError> {
     Ok(())
 }
 
-fn next_version(previous: Option<i64>, expected: Option<i64>) -> Result<i64, SdkError> {
+pub(crate) fn next_version(previous: Option<i64>, expected: Option<i64>) -> Result<i64, SdkError> {
     if previous != expected {
         return Err(conflict("SALES_COVERAGE_VERSION_CONFLICT"));
     }

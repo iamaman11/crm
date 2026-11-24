@@ -54,6 +54,7 @@ mod sales_contract;
 mod sales_deals;
 #[cfg(feature = "native")]
 mod sales_pipelines;
+mod sales_routing;
 #[cfg(feature = "native")]
 mod sales_territories;
 #[cfg(feature = "native")]
@@ -791,6 +792,36 @@ const RPC_POLICIES: &[(&str, RpcPolicy)] = &[
     ),
     (
         "/crm.consents.v2.ConsentAuthorizationService/ListConsentAuthorizations",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/CreateSalesRoutingRule",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/UpdateSalesRoutingRule",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/GetSalesRoutingRule",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/ListSalesRoutingRules",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/PreviewSalesRouting",
         RpcPolicy {
             permission: RpcPermission::Read,
         },

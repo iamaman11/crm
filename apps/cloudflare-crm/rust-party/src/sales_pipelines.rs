@@ -235,7 +235,17 @@ SELECT 1 FROM crm_sales_deal_records d
           AND (json_extract(d.state,'$.status')!='open'
             OR json_extract(s.value,'$.archived')=0)
       )
-    ))",
+    )) AND NOT EXISTS (
+SELECT 1 FROM crm_sales_routing_rule_records r
+ WHERE r.tenant=crm_sales_pipeline_records.tenant
+ AND json_extract(r.state,'$.archived')=0
+ AND json_extract(r.state,'$.criteria.pipeline_id')=crm_sales_pipeline_records.id
+ AND (json_extract(?1,'$.archived')=1 OR
+      (json_extract(r.state,'$.criteria.stage_id') IS NOT NULL AND NOT EXISTS (
+        SELECT 1 FROM json_each(?1,'$.stages') s
+        WHERE json_extract(s.value,'$.stage_id')=json_extract(r.state,'$.criteria.stage_id')
+        AND json_extract(s.value,'$.archived')=0)))
+ )",
         &[
             JsValue::from_str(&state),
             JsValue::from_f64(changed.version as f64),

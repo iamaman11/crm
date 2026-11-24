@@ -7,7 +7,7 @@ use super::{
     now_nanos,
 };
 use crm_core_contracts::{BasisPoints, CalendarDate, CurrencyCode, Money, Patch};
-use crm_module_sdk::{ActorId, ErrorCategory, RecordId, ResourceRef, SdkError};
+use crm_module_sdk::{ErrorCategory, RecordId, ResourceRef, SdkError};
 use crm_sales::{
     AdvanceDealStage, CloseDeal, CreateDeal, Deal, DealOwner, DealStage, DealStatus,
     ForecastCategory, PipelineId, ProbabilityEstimate, ProbabilitySource, ReasonCode, ReopenDeal,
@@ -38,6 +38,8 @@ pub(super) struct CreateInput {
     pub(super) expected_close_date: Option<DateInput>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(super) owner: Option<SalesOwnerScope>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) automatic_routing: Option<super::sales_routing::AutomaticRouting>,
 }
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -435,6 +437,23 @@ fn append_owner_filter(
     }
 }
 
+// A concurrent identical automatic request can commit between the first
+// receipt lookup and route resolution. Its receipt still wins over a new
+// capacity/no-match/stale-preview error.
+async fn routing_rejection(
+    db: &D1Database,
+    tenant: &str,
+    key: &str,
+    digest: &str,
+    error: SdkError,
+) -> std::result::Result<SalesSaved, MutationFailure> {
+    match prior(db, tenant, key).await {
+        Ok(Some(receipt)) => replay(receipt, digest),
+        Ok(None) => rejected_sdk(error),
+        Err(_) => Err(unconfirmed(ReceiptUncertainty::ReadFailed)),
+    }
+}
+
 pub(super) async fn create_typed(
     input: CreateInput,
     k: &str,
@@ -479,28 +498,55 @@ pub(super) async fn create_typed(
             ErrorCategory::InvalidArgument,
         ));
     }
-    let owner = if let Some(selection) = &input.owner {
-        if !eligible_owner(db, tenant, selection).await? {
-            return Ok(rejected(
-                "SALES_OWNER_NOT_ELIGIBLE",
-                ErrorCategory::InvalidArgument,
-            ));
+    if input.owner.is_some() && input.automatic_routing.is_some() {
+        return Ok(rejected("SALES_ROUTING_MANUAL_AUTO_CONFLICT", ErrorCategory::InvalidArgument));
+    }
+    let resolution = if let Some(auto) = &input.automatic_routing {
+        let facts = crm_sales::SalesRoutingFacts {
+            account_id: input.account_id.clone(),
+            pipeline_id: input.pipeline_id.clone(),
+            stage_id: input.stage_id.clone(),
+            territory_id: auto.territory_id.clone(),
+            currency_code: input.currency.clone(),
+            amount_minor_units: input.amount_minor_units,
+        };
+        let resolved = match super::sales_routing::resolve(db, tenant, &facts).await? {
+            Ok(value) => value,
+            Err(error) => return Ok(routing_rejection(db, tenant, k, &digest, error).await),
+        };
+        if auto
+            .expected_decision
+            .as_ref()
+            .is_some_and(|expected| expected != &resolved.fingerprint)
+        {
+            let error = SdkError::new(
+                "SALES_ROUTING_PREVIEW_STALE",
+                ErrorCategory::Conflict,
+                false,
+                "Routing preview changed.",
+            );
+            return Ok(routing_rejection(db, tenant, k, &digest, error).await);
         }
-        match selection.domain_owner() {
-            Ok(owner) => owner,
-            Err(e) => return Ok(rejected_sdk(e)),
-        }
+        Some(resolved)
     } else {
-        match ActorId::try_new(actor) {
-            Ok(x) => DealOwner::Actor(x),
-            Err(_) => {
-                return Ok(rejected(
-                    "SALES_OWNER_INVALID",
-                    ErrorCategory::InvalidArgument,
-                ));
-            }
-        }
+        None
     };
+    let decision = if let Some(resolved) = &resolution {
+        resolved.decision.clone()
+    } else if let Some(selection) = &input.owner {
+        if !eligible_owner(db, tenant, selection).await? {
+            return Ok(rejected("SALES_OWNER_NOT_ELIGIBLE", ErrorCategory::InvalidArgument));
+        }
+        crm_sales::SalesRoutingDecision::explicit(selection.clone(), crm_sales::SalesRoutingSource::Manual)
+    } else {
+        crm_sales::SalesRoutingDecision::explicit(
+            SalesOwnerScope::Actor(actor.to_owned()), crm_sales::SalesRoutingSource::Creator)
+    };
+    let owner = match decision.selected_owner.domain_owner() {
+        Ok(owner) => owner,
+        Err(e) => return Ok(rejected_sdk(e)),
+    };
+    let guarded_owner = resolution.as_ref().map(|r| &r.decision.selected_owner).or(input.owner.as_ref());
     let Some(catalog_stage) =
         super::sales_pipelines::active_stage(db, tenant, &input.pipeline_id, &input.stage_id)
             .await?
@@ -553,7 +599,7 @@ pub(super) async fn create_typed(
             Err(code) => return Ok(rejected(code, ErrorCategory::InvalidArgument)),
         },
     };
-    let deal = match Deal::create(CreateDeal {
+    let deal = match Deal::create_with_routing(CreateDeal {
         deal_id: id,
         name: input.name,
         owner,
@@ -569,14 +615,14 @@ pub(super) async fn create_typed(
         probability,
         forecast_category: input.forecast_category,
         occurred_at_unix_nanos: now_nanos(),
-    }) {
+    }, decision) {
         Ok(x) => x,
         Err(e) => return Ok(rejected_sdk(e)),
     };
     let saved = encode(&deal)?;
-    let sql = format!(
-        "INSERT INTO crm_sales_deal_records(tenant,id,account_id,state,version,idem_key,idem_digest,request_id,actor) SELECT ?,?,?,?,?,?,?,?,? WHERE 1=1{} ON CONFLICT(tenant,id) DO NOTHING",
-        owner_guard(input.owner.as_ref())
+    let mut sql = format!(
+        "INSERT INTO crm_sales_deal_records(tenant,id,account_id,state,version,idem_key,idem_digest,request_id,actor) SELECT ?,?,?,?,?,?,?,?,? WHERE 1=1{}",
+        owner_guard(guarded_owner)
     );
     let mut values = vec![
         JsValue::from_str(tenant),
@@ -589,7 +635,11 @@ pub(super) async fn create_typed(
         JsValue::from_str(trace),
         JsValue::from_str(actor),
     ];
-    owner_parameters(&mut values, tenant, input.owner.as_ref());
+    owner_parameters(&mut values, tenant, guarded_owner);
+    if let Some(resolved) = &resolution {
+        resolved.append_guard(&mut sql, &mut values, tenant);
+    }
+    sql.push_str(" ON CONFLICT(tenant,id) DO NOTHING");
     let r = bind(db, &sql, &values)?.run().await;
     if let Some(count) = r.as_ref().ok().and_then(changes).filter(|count| *count > 0) {
         // Discard the genuine D1 write acknowledgement in isolated CI only.
@@ -598,6 +648,13 @@ pub(super) async fn create_typed(
             return Ok(reconcile(db, tenant, k, &digest, false).await);
         }
         return Ok(Ok(acknowledged(deal, trace, count)));
+    }
+    if resolution.is_some() && r.as_ref().ok().and_then(changes) == Some(0) {
+        return Ok(match prior(db, tenant, k).await {
+            Ok(Some(receipt)) => replay(receipt, &digest),
+            Ok(None) => rejected("SALES_ROUTING_WRITE_CONFLICT", ErrorCategory::Conflict),
+            Err(_) => Err(unconfirmed(ReceiptUncertainty::ReadFailed)),
+        });
     }
     Ok(reconcile(
         db,
@@ -1201,6 +1258,7 @@ pub(super) struct DealEventRow {
     pub(super) occurred_at_unix_nanos: String,
     pub(super) catalog_version: Option<i64>,
     pub(super) linked_task_id: Option<String>,
+    pub(super) initial_routing: Option<String>,
 }
 
 /// A single tenant-scoped keyset stream backed by the D1 composite PK.
@@ -1214,7 +1272,7 @@ pub(super) async fn list_events(
     size: usize,
 ) -> Result<(Vec<DealEventRow>, Option<String>)> {
     let mut rows=bind(db,
-        "SELECT e.deal_version,e.action,e.pipeline_id,e.previous_stage_id,e.stage_id,e.previous_status,e.status,e.reason_code,e.actor,e.request_id,CAST(e.occurred_at_unix_nanos AS TEXT) AS occurred_at_unix_nanos,e.catalog_version,l.task_id AS linked_task_id FROM crm_sales_deal_events e LEFT JOIN crm_sales_link_delivery_records l ON l.tenant=e.tenant AND l.deal_id=e.deal_id AND l.deal_version=e.deal_version WHERE e.tenant=? AND e.deal_id=? AND e.deal_version<CAST(? AS INTEGER) ORDER BY e.deal_version DESC LIMIT ?",
+        "SELECT e.deal_version,e.action,e.pipeline_id,e.previous_stage_id,e.stage_id,e.previous_status,e.status,e.reason_code,e.actor,e.request_id,CAST(e.occurred_at_unix_nanos AS TEXT) AS occurred_at_unix_nanos,e.catalog_version,l.task_id AS linked_task_id,e.initial_routing FROM crm_sales_deal_events e LEFT JOIN crm_sales_link_delivery_records l ON l.tenant=e.tenant AND l.deal_id=e.deal_id AND l.deal_version=e.deal_version WHERE e.tenant=? AND e.deal_id=? AND e.deal_version<CAST(? AS INTEGER) ORDER BY e.deal_version DESC LIMIT ?",
         &[
             JsValue::from_str(tenant),
             JsValue::from_str(id),

@@ -14,6 +14,7 @@ import {scopeHref,contactHref,taskHref,dealTasksHref} from "./routes";
 import {stageName as stageLabel} from "./salesPipelineCatalog";
 import {InteractionTimeline} from "./InteractionTimeline";
 import {allOwners,ownerLabel} from "./ownerCatalog";
+import {RoutingExplanation} from "./SalesRouting";
 
 export function dealStatusText(status:DealStatus):string {
   switch(status){
@@ -99,8 +100,8 @@ function eventLabel(kind:DealEventKind):string {
 // to that exact stored ID, never an invented historical name.
 // One original, owner-authorized event projection for inline/full Deal pages.
 // No reconstruction of history from mutable client-side snapshots.
-export function DealHistory({dealId,accountId,pipeline}:{
-  dealId:string;accountId:string;pipeline:SalesPipeline|undefined;
+export function DealHistory({dealId,accountId,pipeline,choices=[]}:{
+  dealId:string;accountId:string;pipeline:SalesPipeline|undefined;choices?:Awaited<ReturnType<typeof allOwners>>["choices"];
 }){
   const [cursor,setCursor]=useState("");
   const history=useQuery(useCallback(
@@ -119,6 +120,7 @@ export function DealHistory({dealId,accountId,pipeline}:{
         {" · "}{dateText(event.occurredAt)}
         <p>Этап: {event.previousStageId?stageLabel(pipeline,event.previousStageId)+" → ":""}{stageLabel(pipeline,event.stageId)}</p>
         {event.reasonCode&&<p>Причина: {event.reasonCode}</p>}
+        {event.initialRouting&&<RoutingExplanation decision={event.initialRouting} choices={choices}/>}
         <p>Исполнитель: {event.actor} · запрос: {event.requestId}</p>
         {event.linkedTaskId&&<p>Связанная задача: <a href={taskHref(event.linkedTaskId,accountId)}>
           {event.linkedTaskId}</a></p>}
@@ -144,6 +146,8 @@ export function DealDetails({dealId,currencies,pipelines,onEdit,onClose,onReopen
     return {deal,contact};
   },[dealId]));
   const deal:Deal|undefined=details.data?.deal;
+  const owners=useQuery(useCallback(allOwners,[]));
+  const choices=owners.data?.choices??[];
   // The parent SalesScreen already owns the paginated ListPipelines read.
   // Use that catalog for all three Deal projections, no extra RPC.
   const pipeline=pipelines.find(p=>p.pipelineId===deal?.stage?.pipelineId);
@@ -151,7 +155,8 @@ export function DealDetails({dealId,currencies,pipelines,onEdit,onClose,onReopen
     <QueryNotice query={details}/>
     {deal&&<>
       <h3>{deal.name}</h3>
-      <DealOwnerLabel deal={deal}/>
+      <p>Ответственный: {ownerLabel(deal.owner,choices)}</p>
+      {deal.initialRouting&&<RoutingExplanation decision={deal.initialRouting} choices={choices}/>}
       <p>ID: {deal.dealId} · версия {deal.version.toString()}</p>
       <p>Клиент: <AccountName accountId={deal.accountId}/></p>
       <p>Основной контакт: {details.data?.contact?
@@ -173,13 +178,9 @@ export function DealDetails({dealId,currencies,pipelines,onEdit,onClose,onReopen
       </div>:onReopen?<Button variant="secondary" onClick={onReopen}>
         Открыть повторно
       </Button>:null}
-      <DealHistory key={deal.dealId} dealId={deal.dealId} accountId={deal.accountId} pipeline={pipeline}/>
+      <DealHistory key={deal.dealId} dealId={deal.dealId} accountId={deal.accountId} pipeline={pipeline} choices={choices}/>
       <InteractionTimeline accountId={deal.accountId} dealId={deal.dealId}/>
     </>}
   </section>;
 }
 
-function DealOwnerLabel({deal}:{deal:Deal}) {
-  const query=useQuery(useCallback(allOwners,[]));
-  return <p>Ответственный: {ownerLabel(deal.owner,query.data?.choices??[])}</p>;
-}

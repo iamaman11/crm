@@ -5,6 +5,138 @@ use crate::diagnostics;
 
 impl sale_wire::DealService for SalesV2Service {
     #[worker::send]
+    async fn create_sales_routing_rule(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, sale_wire::CreateSalesRoutingRuleRequest>,
+    ) -> ServiceResult<sale_wire::CreateSalesRoutingRuleResponse> {
+        let input = req.to_owned_message();
+        let id = Self::id(&input.rule_id)?;
+        let (key, expected) = wire_precondition(input.precondition.as_option(), true)?;
+        let cfg = input.configuration.as_option().ok_or_else(|| ConnectError::invalid_argument("SALES_ROUTING_CONFIGURATION_REQUIRED"))?;
+        let record = Self::routing_draft(id, cfg)?;
+        let db = self.d1()?;
+        let saved = sales_territories::mutate(
+            &sales_territories::Context { db: &db, tenant: &self.tenant, actor: &self.actor, request_id: &self.request_id },
+            record, &key, expected,
+        ).await
+            .map_err(|_| ConnectError::unavailable("SALES_ROUTING_WRITE_FAILED"))?
+            .map_err(|failure| failure.connect("CreateSalesRoutingRule", &self.request_id))?;
+        let receipt = self.coverage_receipt(&saved);
+        RpcResponse::ok(sale_wire::CreateSalesRoutingRuleResponse {
+            rule: Some(Self::routing_rule_wire(saved.record)?).into(),
+            receipt: Some(receipt).into(),
+            ..Default::default()
+        })
+    }
+
+    #[worker::send]
+    async fn update_sales_routing_rule(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, sale_wire::UpdateSalesRoutingRuleRequest>,
+    ) -> ServiceResult<sale_wire::UpdateSalesRoutingRuleResponse> {
+        let input = req.to_owned_message();
+        let id = Self::id(&input.rule_id)?;
+        let (key, expected) = wire_precondition(input.precondition.as_option(), false)?;
+        let cfg = input.configuration.as_option().ok_or_else(|| ConnectError::invalid_argument("SALES_ROUTING_CONFIGURATION_REQUIRED"))?;
+        let record = Self::routing_draft(id, cfg)?;
+        let db = self.d1()?;
+        let saved = sales_territories::mutate(
+            &sales_territories::Context { db: &db, tenant: &self.tenant, actor: &self.actor, request_id: &self.request_id },
+            record, &key, expected,
+        ).await
+            .map_err(|_| ConnectError::unavailable("SALES_ROUTING_WRITE_FAILED"))?
+            .map_err(|failure| failure.connect("UpdateSalesRoutingRule", &self.request_id))?;
+        let receipt = self.coverage_receipt(&saved);
+        RpcResponse::ok(sale_wire::UpdateSalesRoutingRuleResponse {
+            rule: Some(Self::routing_rule_wire(saved.record)?).into(),
+            receipt: Some(receipt).into(),
+            ..Default::default()
+        })
+    }
+
+    #[worker::send]
+    async fn get_sales_routing_rule(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, sale_wire::GetSalesRoutingRuleRequest>,
+    ) -> ServiceResult<sale_wire::GetSalesRoutingRuleResponse> {
+        let input = req.to_owned_message();
+        let id = Self::id(&input.rule_id)?;
+        let db = self.d1()?;
+        let kind = sales_territories::Kind::RoutingRule;
+        let record = sales_territories::get(&db, &self.tenant, kind, &id).await
+            .map_err(|_| ConnectError::internal("SALES_ROUTING_READ_FAILED"))?
+            .ok_or_else(|| ConnectError::not_found("SALES_ROUTING_RULE_NOT_FOUND"))?;
+        let confirmed_mutation = match receipt_key(input.receipt_idempotency_key.as_deref())? {
+            None => None,
+            Some(key) => {
+                let row = crud_receipt(&db, &self.tenant, key, CrudReceiptOwner::RoutingRule)
+                    .await.map_err(|_| ConnectError::unavailable("SALES_ROUTING_RECEIPT_READ_FAILED"))?;
+                crud_commit_evidence(row, &id, &self.request_id, |state| {
+                    let record = kind.decode(state)?;
+                    Ok((record.id().to_owned(), record.version()))
+                }).map_err(|_| ConnectError::unavailable("SALES_ROUTING_RECEIPT_DECODE_FAILED"))?
+            }
+        };
+        RpcResponse::ok(sale_wire::GetSalesRoutingRuleResponse {
+            rule: Some(Self::routing_rule_wire(record)?).into(),
+            confirmed_mutation: confirmed_mutation.into(),
+            ..Default::default()
+        })
+    }
+
+    #[worker::send]
+    async fn list_sales_routing_rules(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, sale_wire::ListSalesRoutingRulesRequest>,
+    ) -> ServiceResult<sale_wire::ListSalesRoutingRulesResponse> {
+        let size = if req.page.page_size == 0 { 25 } else { req.page.page_size };
+        if size > 100 { return Err(ConnectError::invalid_argument("page_size exceeds 100")); }
+        if !req.page.page_token.is_empty() { Self::id(req.page.page_token)?; }
+        let (items, next) = sales_territories::list(
+            &self.d1()?, &self.tenant, sales_territories::Kind::RoutingRule,
+            sales_territories::Filter { after: req.page.page_token, limit: size as usize,
+                include_archived: req.include_archived, territory_id: None, primary_owner: None },
+        ).await.map_err(|_| ConnectError::internal("SALES_ROUTING_LIST_FAILED"))?;
+        RpcResponse::ok(sale_wire::ListSalesRoutingRulesResponse {
+            rules: items.into_iter().map(Self::routing_rule_wire).collect::<std::result::Result<Vec<_>, _>>()?,
+            page_info: Some(core_v2::PageInfo { next_page_token: next.unwrap_or_default(), ..Default::default() }).into(),
+            ..Default::default()
+        })
+    }
+
+    #[worker::send]
+    async fn preview_sales_routing(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, sale_wire::PreviewSalesRoutingRequest>,
+    ) -> ServiceResult<sale_wire::PreviewSalesRoutingResponse> {
+        let input = req.to_owned_message();
+        let stage = input.stage.as_option().ok_or_else(|| ConnectError::invalid_argument("stage required"))?;
+        let (pipeline_id, stage_id) = Self::stage(stage);
+        let facts = crm_sales::SalesRoutingFacts {
+            account_id: Self::id(&input.account_id)?,
+            pipeline_id, stage_id,
+            territory_id: input.territory_id.clone(),
+            currency_code: input.amount.as_option().map(|m| m.currency_code.clone()),
+            amount_minor_units: input.amount.as_option().map(|m| m.minor_units),
+        };
+        let result = sales_routing::resolve(&self.d1()?, &self.tenant, &facts).await
+            .map_err(|_| ConnectError::internal("SALES_ROUTING_PREVIEW_FAILED"))?
+            .map_err(|e| if e.category == crm_module_sdk::ErrorCategory::Conflict {
+                ConnectError::new(connectrpc::ErrorCode::Aborted, e.code)
+            } else { ConnectError::invalid_argument(e.code) })?;
+        RpcResponse::ok(sale_wire::PreviewSalesRoutingResponse {
+            decision: Some(Self::routing_decision_wire(&result.decision)).into(),
+            expected_decision: result.fingerprint,
+            ..Default::default()
+        })
+    }
+
+    #[worker::send]
     async fn create_territory(
         &self,
         _ctx: RequestContext,
@@ -942,6 +1074,10 @@ impl sale_wire::DealService for SalesV2Service {
                 name: input.name,
                 account_id: input.account_id,
                 owner: Self::owner_scope(input.owner.as_option())?,
+                automatic_routing: input.automatic_routing.as_option().map(|routing| sales_routing::AutomaticRouting {
+                    territory_id: routing.territory_id.clone(),
+                    expected_decision: routing.expected_decision.clone(),
+                }),
                 pipeline_id,
                 stage_id,
                 probability_bps,
@@ -1340,6 +1476,12 @@ impl sale_wire::DealService for SalesV2Service {
                     .into(),
                     catalog_version: row.catalog_version.unwrap_or_default(),
                     linked_task_id: row.linked_task_id.unwrap_or_default(),
+                    initial_routing: row.initial_routing.as_deref().map(|raw| {
+                        let value: crm_sales::SalesRoutingDecision = serde_json::from_str(raw)
+                            .map_err(|_| ConnectError::internal("SALES_ROUTING_EVENT_INVALID"))?;
+                        value.validate().map_err(|_| ConnectError::internal("SALES_ROUTING_EVENT_INVALID"))?;
+                        Ok::<_, ConnectError>(Self::routing_decision_wire(&value))
+                    }).transpose()?.into(),
                     ..Default::default()
                 })
             })
