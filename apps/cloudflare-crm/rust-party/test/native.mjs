@@ -6,6 +6,7 @@ import {createTestHarness} from "wrangler";
 import {dirname,join} from "node:path";
 import {fileURLToPath} from "node:url";
 import assert from "node:assert/strict";
+import {mock} from "node:test";
 import {chromium} from "playwright";
 import {typedBrowser} from "./typed-browser.mjs";
 import {installUiDiagnostics,assertUiPanel} from "./ui-diagnostics.mjs";
@@ -130,7 +131,7 @@ const partySnapshot=async()=>(await sql("SELECT "+
   "(SELECT COUNT(*) FROM crm_audit) AS audits"));
 const {privateKey,publicKey}=generateKeyPairSync("rsa",{modulusLength:2048});
 const kid="local-signed-rsa-fixture";
-const jwks=JSON.stringify({keys:[{...publicKey.export({format:"jwk"}),kid,alg:"RS256",use:"sig"}]});
+const jwks={keys:[{...publicKey.export({format:"jwk"}),kid,alg:"RS256",use:"sig"}]};
 const iss="https://royal-limit-ea43.cloudflareaccess.com";
 const aud="e0a664cf4f46f0d13d0ac0d8dd621c718c70842a377bf6738d1a24f0d16cedc7";
 const now=Math.floor(Date.now()/1000);
@@ -149,12 +150,22 @@ assert.equal(config.d1_databases.length,1);
 assert.equal(config.d1_databases[0].binding,"DB");
 assert.equal(config.d1_databases[0].database_id,"00000000-0000-4000-8000-000000000001");
 assert.equal(config.vars.CRM_CI_LOCAL_ONLY,"yes");
+// Use the same provider boundary as production-access.mjs. Do not inject
+// authentication keys into the Worker or bypass its normal JWKS fetch.
 const testHarness=createTestHarness({
  root:cwd,
- workers:[{
-   configPath,
-   vars:{CRM_NATIVE_CI_JWKS:jwks,GIT_SHA:sourceSha},
- }]
+ workers:[{configPath,vars:{GIT_SHA:sourceSha}}]
+});
+let jwksRequests=0;
+const fetchOriginal=globalThis.fetch.bind(globalThis);
+mock.method(globalThis,"fetch",async(input,init)=>{
+ const url=typeof input==="string"?input:input instanceof URL?input.href:input.url;
+ if(url===iss+"/cdn-cgi/access/certs"){
+   assert.equal(init?.method??input?.method??"GET","GET");
+   jwksRequests++;
+   return Response.json(jwks);
+ }
+ return fetchOriginal(input,init);
 });
 try{
  const {url}=await testHarness.listen();
@@ -163,7 +174,7 @@ try{
  await worker.applyD1Migrations("DB");
  const env=await worker.getEnv();
  assert.equal(env.CRM_CI_LOCAL_ONLY,"yes");
- assert.equal(env.CRM_NATIVE_CI_JWKS,jwks);
+ assert.equal(env.CRM_NATIVE_CI_JWKS,undefined);
  assert.equal(env.GIT_SHA,sourceSha);
  fixtureDb=env.DB;
  assert.ok(fixtureDb,"Wrangler test harness did not expose the configured D1 binding");
@@ -214,6 +225,7 @@ try{
  assert.equal((await call("/api/session",signedJwt({
    sub:"",common_name:"ci-fixture.access",aud:"wrong-app-audience"
  }))).status,401,"Cross-application service JWT must be denied");
+ assert.ok(jwksRequests>=2,"signed service fixtures must exercise the ordinary JWKS provider");
  const version=await rpcFetch("/api/version",{headers:{"cf-access-jwt-assertion":admin}});
  assert.equal(version.status,200);
  assert.equal(version.headers.get("x-crm-source-sha"),sourceSha,"Worker must receive the tested checkout SHA");
@@ -6726,6 +6738,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    unauthenticated_denials:unauthenticatedDenials.sort(),
    viewer_denials:viewerDenials.sort(),
    fixture_access:"D1 binding",runtime:"Wrangler createTestHarness/workerd",
+   jwks_requests:jwksRequests,authentication:"production JWKS path",
   scenarios:"existing signed workerd assertions completed"
  },null,2)+"\n");
  console.log(JSON.stringify({event:"crm.signed-connect-acceptance",
@@ -6735,5 +6748,5 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  testHarness.debug();
  throw error;
 }finally{
- await testHarness.close();
+ try{await testHarness.close();}finally{mock.restoreAll();}
 }

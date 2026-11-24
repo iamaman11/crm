@@ -6,9 +6,7 @@ use serde_json::Value;
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{Crypto, CryptoKey};
-#[cfg(not(feature = "native-ci"))]
-use worker::Fetch;
-use worker::{D1Database, Date, Env, Request, Result};
+use worker::{D1Database, Date, Env, Fetch, Request, Result};
 
 const ISSUER: &str = "https://royal-limit-ea43.cloudflareaccess.com";
 const AUDIENCE: &str = "e0a664cf4f46f0d13d0ac0d8dd621c718c70842a377bf6738d1a24f0d16cedc7";
@@ -212,7 +210,7 @@ fn invalid_claim_reason(claims: &Value) -> &'static str {
     "jwt_claims_invalid_other"
 }
 
-async fn verify(req: &Request, env: &Env) -> Result<Option<String>> {
+async fn verify(req: &Request, _env: &Env) -> Result<Option<String>> {
     // Only the release version probe emits a safe, static rejection category.
     // Never log or expose Access assertions, service credentials, or claims.
     let reject = |reason: &'static str| -> Result<Option<String>> {
@@ -258,20 +256,19 @@ async fn verify(req: &Request, env: &Env) -> Result<Option<String>> {
     else {
         return reject("jwt_key_id_invalid");
     };
+    // Keep CI-only fault probes restricted to the isolated local runtime.
+    // Both builds fetch and validate JWKS through the same production path;
+    // the Wrangler test harness supplies only the external provider response.
     #[cfg(feature = "native-ci")]
-    let jwks: Value = {
-        // Fail-closed: test public keys are accepted by a CI-only binary on loopback.
+    {
         let host = req.url()?.host_str().unwrap_or_default().to_owned();
         if host != "localhost" && host != "127.0.0.1" {
             return reject("ci_host_invalid");
         }
-        if env.var("CRM_CI_LOCAL_ONLY")?.to_string() != "yes" {
+        if _env.var("CRM_CI_LOCAL_ONLY")?.to_string() != "yes" {
             return reject("ci_fixture_missing");
         }
-        serde_json::from_str(&env.var("CRM_NATIVE_CI_JWKS")?.to_string())
-            .map_err(|_| invalid("invalid local JWKS fixture"))?
-    };
-    #[cfg(not(feature = "native-ci"))]
+    }
     let jwks: Value = {
         let url = format!("{ISSUER}/cdn-cgi/access/certs");
         let mut response = Fetch::Url(url.parse()?).send().await?;
