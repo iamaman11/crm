@@ -6463,10 +6463,10 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    const dealMove={dealId,owner:targetOwner,teamDistribution:scope,precondition:pre("deal-move",1n)};
    assert.equal((await taskV2("UpdateTask",target,taskMove(taskId,"nonlead"))).status,403);
    assert.equal((await taskV2("UpdateTask",lead,{...taskMove(taskId,"field"),subject:{operation:{case:"set",value:"Forbidden"}}})).status,403);
-   assert.equal((await taskV2("UpdateTask",lead,taskMove(taskId,"outside",{owner:{owner:{case:"assigneeIdentity",value:otherEmail}}}))).status,403);
+   assert.equal((await taskV2("UpdateTask",lead,taskMove(taskId,"outside",{owner:{case:"assigneeIdentity",value:otherEmail}}))).status,403);
    assert.equal((await taskV2("UpdateTask",lead,taskMove("foreign-task-"+suffix,"cross-team"))).status,403);
    assert.equal((await salesV2("UpdateDeal",lead,{...dealMove,probabilityBasisPoints:5000,precondition:pre("money",1n)})).status,403);
-   assert.equal((await salesV2("UpdateDeal",lead,{...dealMove,owner:{owner:{case:"assigneeIdentity",value:otherEmail}},precondition:pre("outside-deal",1n)})).status,403);
+   assert.equal((await salesV2("UpdateDeal",lead,{...dealMove,owner:{case:"assigneeIdentity",value:otherEmail},precondition:pre("outside-deal",1n)})).status,403);
    assert.equal((await taskV2("UpdateTask",tenantB,taskMove(taskId,"cross-tenant-task"))).status,403);
    assert.equal((await salesV2("UpdateDeal",tenantB,{...dealMove,precondition:pre("cross-tenant-deal",1n)})).status,403);
    assert.deepEqual(await effects(),beforeDenied);
