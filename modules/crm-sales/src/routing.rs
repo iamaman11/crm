@@ -6,11 +6,21 @@ use crm_module_sdk::{ErrorCategory, SdkError};
 use serde::{Deserialize, Serialize};
 
 fn invalid(code: &'static str) -> SdkError {
-    SdkError::new(code, ErrorCategory::InvalidArgument, false, "Invalid sales routing.")
+    SdkError::new(
+        code,
+        ErrorCategory::InvalidArgument,
+        false,
+        "Invalid sales routing.",
+    )
 }
 
 fn conflict(code: &'static str) -> SdkError {
-    SdkError::new(code, ErrorCategory::Conflict, false, "Sales routing conflict.")
+    SdkError::new(
+        code,
+        ErrorCategory::Conflict,
+        false,
+        "Sales routing conflict.",
+    )
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -65,12 +75,27 @@ impl SalesRoutingCriteria {
     }
 
     pub fn matches(&self, facts: &SalesRoutingFacts, territory: Option<&str>) -> bool {
-        self.territory_id.as_deref().is_none_or(|id| Some(id) == territory)
-            && self.pipeline_id.as_deref().is_none_or(|id| id == facts.pipeline_id)
-            && self.stage_id.as_deref().is_none_or(|id| id == facts.stage_id)
-            && self.currency_code.as_deref().is_none_or(|code| Some(code) == facts.currency_code.as_deref())
-            && self.minimum_minor_units.is_none_or(|min| facts.amount_minor_units.is_some_and(|n| n >= min))
-            && self.maximum_minor_units.is_none_or(|max| facts.amount_minor_units.is_some_and(|n| n <= max))
+        self.territory_id
+            .as_deref()
+            .is_none_or(|id| Some(id) == territory)
+            && self
+                .pipeline_id
+                .as_deref()
+                .is_none_or(|id| id == facts.pipeline_id)
+            && self
+                .stage_id
+                .as_deref()
+                .is_none_or(|id| id == facts.stage_id)
+            && self
+                .currency_code
+                .as_deref()
+                .is_none_or(|code| Some(code) == facts.currency_code.as_deref())
+            && self
+                .minimum_minor_units
+                .is_none_or(|min| facts.amount_minor_units.is_some_and(|n| n >= min))
+            && self
+                .maximum_minor_units
+                .is_none_or(|max| facts.amount_minor_units.is_some_and(|n| n <= max))
     }
 }
 
@@ -108,7 +133,8 @@ impl SalesRoutingRule {
             || self.dispatch == SalesDispatchMode::LeastOpenDeals
                 && !matches!(self.target, SalesOwnerScope::Team(_))
             || self.maximum_open_deals == Some(0)
-            || self.overflow == SalesCapacityOverflow::TeamQueue && self.maximum_open_deals.is_none()
+            || self.overflow == SalesCapacityOverflow::TeamQueue
+                && self.maximum_open_deals.is_none()
         {
             return Err(invalid("SALES_ROUTING_DISPATCH_INVALID"));
         }
@@ -137,8 +163,8 @@ impl SalesRoutingRule {
     }
 
     pub fn decode(state: &str) -> Result<Self, SdkError> {
-        let value: Self = serde_json::from_str(state)
-            .map_err(|_| invalid("SALES_ROUTING_STATE_INVALID"))?;
+        let value: Self =
+            serde_json::from_str(state).map_err(|_| invalid("SALES_ROUTING_STATE_INVALID"))?;
         value.validate()?;
         Ok(value)
     }
@@ -249,15 +275,20 @@ impl SalesRoutingDecision {
         }
         if (self.source == SalesRoutingSource::Rule) != rule
             || self.source != SalesRoutingSource::Rule
-                && (self.rule_id.is_some() || self.rule_version.is_some() || self.rule_name.is_some())
+                && (self.rule_id.is_some()
+                    || self.rule_version.is_some()
+                    || self.rule_name.is_some())
             || self.territory_id.is_some() != self.territory_version.is_some_and(|v| v > 0)
-            || self.territory_id.is_some() != self.territory_name.as_ref().is_some_and(|v| !v.is_empty())
+            || self.territory_id.is_some()
+                != self.territory_name.as_ref().is_some_and(|v| !v.is_empty())
             || self.assignment_version.is_some_and(|v| v <= 0)
             || self.source == SalesRoutingSource::Account && self.assignment_version.is_none()
             || self.source == SalesRoutingSource::Territory && self.territory_id.is_none()
             || self.source != SalesRoutingSource::Rule && self.dispatch != SalesDispatchMode::Direct
-            || matches!(self.source, SalesRoutingSource::Manual | SalesRoutingSource::Creator)
-                && (self.assignment_version.is_some() || self.territory_id.is_some())
+            || matches!(
+                self.source,
+                SalesRoutingSource::Manual | SalesRoutingSource::Creator
+            ) && (self.assignment_version.is_some() || self.territory_id.is_some())
             || self.source == SalesRoutingSource::Creator
                 && !matches!(self.selected_owner, SalesOwnerScope::Actor(_))
             || self.maximum_open_deals == Some(0)
@@ -269,12 +300,15 @@ impl SalesRoutingDecision {
             || self.dispatch == SalesDispatchMode::LeastOpenDeals
                 && (!matches!(self.target, SalesOwnerScope::Team(_))
                     || if self.capacity_overflow {
-                        self.target != self.selected_owner || self.selected_open_deals.is_some()
+                        self.target != self.selected_owner
+                            || self.selected_open_deals.is_some()
                             || self.maximum_open_deals.is_none()
                     } else {
                         !matches!(self.selected_owner, SalesOwnerScope::Actor(_))
                             || self.selected_open_deals.is_none()
-                            || self.maximum_open_deals.zip(self.selected_open_deals)
+                            || self
+                                .maximum_open_deals
+                                .zip(self.selected_open_deals)
                                 .is_some_and(|(max, n)| n >= u64::from(max))
                     })
         {
@@ -309,7 +343,11 @@ impl SalesRoutingSelection {
         if self.decision.dispatch == SalesDispatchMode::LeastOpenDeals {
             let candidate = candidates
                 .iter()
-                .filter(|c| self.decision.maximum_open_deals.is_none_or(|max| c.open_deals < u64::from(max)))
+                .filter(|c| {
+                    self.decision
+                        .maximum_open_deals
+                        .is_none_or(|max| c.open_deals < u64::from(max))
+                })
                 .min_by(|a, b| (a.open_deals, &a.email).cmp(&(b.open_deals, &b.email)));
             if let Some(candidate) = candidate {
                 self.decision.selected_owner = SalesOwnerScope::Actor(candidate.email.clone());
@@ -336,13 +374,22 @@ pub fn select_sales_route(
     facts.validate()?;
     let assignment = assignment.filter(|a| !a.archived);
     let effective = facts.effective_territory(assignment)?;
-    if effective.is_some() && !territory.is_some_and(|t| !t.archived && Some(t.territory_id.as_str()) == effective) {
+    if effective.is_some()
+        && !territory.is_some_and(|t| !t.archived && Some(t.territory_id.as_str()) == effective)
+    {
         return Err(conflict("SALES_ROUTING_TERRITORY_UNAVAILABLE"));
     }
-    let rule = rules.iter().filter(|r| !r.archived && r.criteria.matches(facts, effective))
+    let rule = rules
+        .iter()
+        .filter(|r| !r.archived && r.criteria.matches(facts, effective))
         .min_by_key(|r| r.priority);
     if let Some(rule) = rule {
-        if rules.iter().filter(|r| !r.archived && r.priority == rule.priority).count() != 1 {
+        if rules
+            .iter()
+            .filter(|r| !r.archived && r.priority == rule.priority)
+            .count()
+            != 1
+        {
             return Err(conflict("SALES_ROUTING_PRIORITY_CONFLICT"));
         }
     }
@@ -415,25 +462,51 @@ mod tests {
             rule.validate().unwrap();
         }
         let candidates = [
-            SalesRoutingCandidate { email: "b@example.test".into(), open_deals: 1 },
-            SalesRoutingCandidate { email: "a@example.test".into(), open_deals: 1 },
+            SalesRoutingCandidate {
+                email: "b@example.test".into(),
+                open_deals: 1,
+            },
+            SalesRoutingCandidate {
+                email: "a@example.test".into(),
+                open_deals: 1,
+            },
         ];
-        let chosen = select_sales_route(&facts(), &rules, None, None).unwrap()
-            .dispatch(true, &candidates).unwrap();
+        let chosen = select_sales_route(&facts(), &rules, None, None)
+            .unwrap()
+            .dispatch(true, &candidates)
+            .unwrap();
         assert_eq!(chosen.rule_id.as_deref(), Some("rule-10"));
-        assert_eq!(chosen.selected_owner, SalesOwnerScope::Actor("a@example.test".into()));
+        assert_eq!(
+            chosen.selected_owner,
+            SalesOwnerScope::Actor("a@example.test".into())
+        );
         let mut full = candidates;
-        for c in &mut full { c.open_deals = 2; }
-        assert!(select_sales_route(&facts(), &rules, None, None).unwrap()
-            .dispatch(true, &full).is_err());
+        for c in &mut full {
+            c.open_deals = 2;
+        }
+        assert!(
+            select_sales_route(&facts(), &rules, None, None)
+                .unwrap()
+                .dispatch(true, &full)
+                .is_err()
+        );
         let mut overflow = rule(1);
         overflow.overflow = SalesCapacityOverflow::TeamQueue;
-        assert!(select_sales_route(&facts(), &[overflow], None, None).unwrap()
-            .dispatch(true, &full).unwrap().capacity_overflow);
+        assert!(
+            select_sales_route(&facts(), &[overflow], None, None)
+                .unwrap()
+                .dispatch(true, &full)
+                .unwrap()
+                .capacity_overflow
+        );
         let mut wrong = facts();
         wrong.currency_code = Some("USD".into());
         assert!(select_sales_route(&wrong, &rules, None, None).is_err());
-        assert!(select_sales_route(&facts(), &rules, None, None).unwrap()
-            .dispatch(false, &[]).is_err());
+        assert!(
+            select_sales_route(&facts(), &rules, None, None)
+                .unwrap()
+                .dispatch(false, &[])
+                .is_err()
+        );
     }
 }

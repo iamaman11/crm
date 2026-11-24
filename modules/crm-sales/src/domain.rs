@@ -367,7 +367,11 @@ impl Deal {
         if let Some(decision) = &snapshot.initial_routing {
             decision.validate()?;
             if snapshot.version == 1 && decision.selected_owner.domain_owner()? != snapshot.owner {
-                return Err(invalid("SALES_ROUTING_OWNER_MISMATCH", "deal.owner", "initial owner must match routing"));
+                return Err(invalid(
+                    "SALES_ROUTING_OWNER_MISMATCH",
+                    "deal.owner",
+                    "initial owner must match routing",
+                ));
             }
         }
         let close_outcome = match (snapshot.status, snapshot.close_outcome) {
@@ -493,10 +497,17 @@ impl Deal {
         })
     }
 
-    pub fn create_with_routing(command: CreateDeal, decision: crate::SalesRoutingDecision) -> Result<Self, SdkError> {
+    pub fn create_with_routing(
+        command: CreateDeal,
+        decision: crate::SalesRoutingDecision,
+    ) -> Result<Self, SdkError> {
         decision.validate()?;
         if command.owner != decision.selected_owner.domain_owner()? {
-            return Err(invalid("SALES_ROUTING_OWNER_MISMATCH", "deal.owner", "initial owner must match routing"));
+            return Err(invalid(
+                "SALES_ROUTING_OWNER_MISMATCH",
+                "deal.owner",
+                "initial owner must match routing",
+            ));
         }
         let mut deal = Self::create(command)?;
         deal.initial_routing = Some(decision);
