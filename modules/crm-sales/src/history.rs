@@ -429,12 +429,14 @@ pub fn historical_window(
         .collect();
     result.stages = stages
         .into_iter()
-        .map(|((pipeline_id, stage_id, catalog_version), durations)| HistoryStage {
-            pipeline_id,
-            stage_id,
-            catalog_version,
-            duration: HistoryDuration::from_nanos(durations),
-        })
+        .map(
+            |((pipeline_id, stage_id, catalog_version), durations)| HistoryStage {
+                pipeline_id,
+                stage_id,
+                catalog_version,
+                duration: HistoryDuration::from_nanos(durations),
+            },
+        )
         .collect();
     Ok(result)
 }
@@ -443,8 +445,15 @@ pub fn historical_window(
 mod tests {
     use super::*;
 
-    fn event(version: i64, kind: HistoryKind, at: i64, status: DealStatus,
-        previous_status: Option<DealStatus>, stage: &str, previous_stage: Option<&str>) -> HistoryEvent {
+    fn event(
+        version: i64,
+        kind: HistoryKind,
+        at: i64,
+        status: DealStatus,
+        previous_status: Option<DealStatus>,
+        stage: &str,
+        previous_stage: Option<&str>,
+    ) -> HistoryEvent {
         HistoryEvent {
             version,
             kind,
@@ -463,7 +472,11 @@ mod tests {
     fn historical_reopen_and_incomplete_history_are_not_current_state() {
         use DealStatus::{Lost, Open, Won};
         use HistoryKind::{Closed, Created, Moved, Reopened, Updated};
-        let date = QuotaDate { year: 2026, month: 11, day: 1 };
+        let date = QuotaDate {
+            year: 2026,
+            month: 11,
+            day: 1,
+        };
         let period = QuotaPeriod::new(date, date, "UTC".into(), QuotaCadence::Custom).unwrap();
         let (lo, hi) = period.bounds().unwrap();
         let second = 1_000_000_000;
@@ -474,14 +487,51 @@ mod tests {
                 version: 6,
                 events: vec![
                     event(1, Created, lo, Open, None, "lead", None),
-                    event(2, Updated, lo + second, Open, Some(Open), "lead", Some("lead")),
-                    event(3, Moved, lo + 2 * second, Open, Some(Open), "offer", Some("lead")),
-                    event(4, Closed, lo + 3 * second, Won, Some(Open), "offer", Some("offer")),
+                    event(
+                        2,
+                        Updated,
+                        lo + second,
+                        Open,
+                        Some(Open),
+                        "lead",
+                        Some("lead"),
+                    ),
+                    event(
+                        3,
+                        Moved,
+                        lo + 2 * second,
+                        Open,
+                        Some(Open),
+                        "offer",
+                        Some("lead"),
+                    ),
+                    event(
+                        4,
+                        Closed,
+                        lo + 3 * second,
+                        Won,
+                        Some(Open),
+                        "offer",
+                        Some("offer"),
+                    ),
                     event(5, Reopened, hi, Open, Some(Won), "offer", Some("offer")),
-                    event(6, Closed, hi + second, Lost, Some(Open), "offer", Some("offer")),
+                    event(
+                        6,
+                        Closed,
+                        hi + second,
+                        Lost,
+                        Some(Open),
+                        "offer",
+                        Some("offer"),
+                    ),
                 ],
             },
-            DealHistory { id: "legacy".into(), pipeline_id: "p".into(), version: 2, events: vec![] },
+            DealHistory {
+                id: "legacy".into(),
+                pipeline_id: "p".into(),
+                version: 2,
+                events: vec![],
+            },
         ];
         let first = historical_window(&histories, &period, hi + second).unwrap();
         assert_eq!(first.final_closes.won, 1);
@@ -492,8 +542,13 @@ mod tests {
         assert_eq!(first.deals[0].visits[0].seconds(), 2);
         assert_eq!(first.deals[0].visits[1].seconds(), 1);
         assert_eq!(first.deals[0].final_close_version, Some(4));
-        let next_date = QuotaDate { year: 2026, month: 11, day: 2 };
-        let next = QuotaPeriod::new(next_date, next_date, "UTC".into(), QuotaCadence::Custom).unwrap();
+        let next_date = QuotaDate {
+            year: 2026,
+            month: 11,
+            day: 2,
+        };
+        let next =
+            QuotaPeriod::new(next_date, next_date, "UTC".into(), QuotaCadence::Custom).unwrap();
         let later = historical_window(&histories, &next, hi + second).unwrap();
         assert_eq!(later.final_closes.lost, 1);
         assert_eq!(later.reopen_events, 1);
