@@ -46,7 +46,10 @@ fn commercial_group_sql(candidates: &str, filter: &str, by_period: bool) -> Stri
 }
 
 impl GroupRow {
-    fn fact(&self, in_scope: bool) -> std::result::Result<crm_sales::QuotaFactGroup<'_>, ConnectError> {
+    fn fact(
+        &self,
+        in_scope: bool,
+    ) -> std::result::Result<crm_sales::QuotaFactGroup<'_>, ConnectError> {
         let invalid = || ConnectError::internal("SALES_COMMERCIAL_EVENT_INVALID");
         if self.invalid_amount != 0 || (self.amount_present == 1 && self.currency.is_none()) {
             return Err(invalid());
@@ -133,7 +136,7 @@ impl SalesV2Service {
             JsValue::from_str(&input.currency_code),
         ];
         let mut candidates = String::from(
-            " FROM crm_sales_deal_events e JOIN crm_sales_commercial_event_order o ON o.tenant=e.tenant AND o.deal_id=e.deal_id AND o.deal_version=e.deal_version WHERE e.tenant=?1 AND e.action IN ('closed','reopened') AND e.occurred_at_unix_nanos>=CAST(?2 AS INTEGER) AND e.occurred_at_unix_nanos<CAST(?3 AS INTEGER) AND e.occurred_at_unix_nanos<=CAST(?4 AS INTEGER) AND o.sequence<=CAST(?5 AS INTEGER) AND (?6 IS NULL OR e.pipeline_id=?6) AND (json_extract(e.commercial_close_fact,'$.amount.currency_code') IS NULL OR json_extract(e.commercial_close_fact,'$.amount.currency_code')=?7)"
+            " FROM crm_sales_deal_events e JOIN crm_sales_commercial_event_order o ON o.tenant=e.tenant AND o.deal_id=e.deal_id AND o.deal_version=e.deal_version WHERE e.tenant=?1 AND e.action IN ('closed','reopened') AND e.occurred_at_unix_nanos>=CAST(?2 AS INTEGER) AND e.occurred_at_unix_nanos<CAST(?3 AS INTEGER) AND e.occurred_at_unix_nanos<=CAST(?4 AS INTEGER) AND o.sequence<=CAST(?5 AS INTEGER) AND (?6 IS NULL OR e.pipeline_id=?6) AND (json_extract(e.commercial_close_fact,'$.amount.currency_code') IS NULL OR json_extract(e.commercial_close_fact,'$.amount.currency_code')=?7)",
         );
         if !detail.organization {
             candidates.push_str(&format!(
@@ -888,7 +891,11 @@ impl sale_wire::DealService for SalesV2Service {
                 ScorecardAxis::Territory,
                 "json_extract(e.commercial_close_fact,'$.credited_territory.id')",
             ),
-            _ => return Err(ConnectError::invalid_argument("SALES_SCORECARD_AXIS_INVALID")),
+            _ => {
+                return Err(ConnectError::invalid_argument(
+                    "SALES_SCORECARD_AXIS_INVALID",
+                ));
+            }
         };
         let (cadence, cadence_key) = match input.cadence {
             v if v == sale_wire::SalesQuotaCadence::SALES_QUOTA_CADENCE_MONTHLY => {
@@ -897,7 +904,11 @@ impl sale_wire::DealService for SalesV2Service {
             v if v == sale_wire::SalesQuotaCadence::SALES_QUOTA_CADENCE_QUARTERLY => {
                 (QuotaCadence::Quarterly, "quarterly")
             }
-            _ => return Err(ConnectError::invalid_argument("SALES_SCORECARD_CADENCE_INVALID")),
+            _ => {
+                return Err(ConnectError::invalid_argument(
+                    "SALES_SCORECARD_CADENCE_INVALID",
+                ));
+            }
         };
         let date = input
             .first_date
@@ -920,7 +931,8 @@ impl sale_wire::DealService for SalesV2Service {
         .map_err(|e| ConnectError::invalid_argument(e.code))?;
         if let Some(detail) = input.detail.as_option() {
             return RpcResponse::ok(
-                self.scorecard_detail(&card, &input, detail, dimension).await?,
+                self.scorecard_detail(&card, &input, detail, dimension)
+                    .await?,
             );
         }
         let failure = || ConnectError::internal("SALES_SCORECARD_READ_FAILED");
@@ -937,7 +949,12 @@ impl sale_wire::DealService for SalesV2Service {
         let ranges = card
             .buckets()
             .iter()
-            .map(|b| [&b.period.start_unix_nanos, &b.period.end_exclusive_unix_nanos])
+            .map(|b| {
+                [
+                    &b.period.start_unix_nanos,
+                    &b.period.end_exclusive_unix_nanos,
+                ]
+            })
             .collect::<Vec<_>>();
         let ranges = serde_json::to_string(&ranges).map_err(|_| failure())?;
         let pipeline = input
@@ -957,7 +974,11 @@ impl sale_wire::DealService for SalesV2Service {
         );
         let aggregate = format!(
             "{} LIMIT 8193",
-            commercial_group_sql(&candidates, " WHERE (currency IS NULL OR currency=?5)", true)
+            commercial_group_sql(
+                &candidates,
+                " WHERE (currency IS NULL OR currency=?5)",
+                true
+            )
         );
         let quota_sql = "SELECT state FROM crm_sales_quota_records WHERE tenant=?1 AND json_extract(state,'$.published')=1 AND json_extract(state,'$.currency_code')=?2 AND json_extract(state,'$.pipeline_id') IS ?3 AND json_extract(state,'$.period.time_zone')=?4 AND CAST(json_extract(state,'$.period.start_unix_nanos') AS INTEGER)>=CAST(?5 AS INTEGER) AND CAST(json_extract(state,'$.period.start_unix_nanos') AS INTEGER)<CAST(?6 AS INTEGER) AND json_extract(state,'$.period.cadence')=?7 LIMIT 2049";
         let first = card.buckets().first().ok_or_else(failure)?;
@@ -1077,7 +1098,8 @@ impl sale_wire::DealService for SalesV2Service {
                 territories.into_iter().map(|t| t.id().to_owned()).collect()
             }
         };
-        card.complete_dimensions(active_ids).map_err(domain_failure)?;
+        card.complete_dimensions(active_ids)
+            .map_err(domain_failure)?;
         let cell_wire = |cell: crm_sales::ScorecardCell|
          -> std::result::Result<sale_wire::SalesScorecardCell, ConnectError> {
             let progress = cell.target_progress().map_err(domain_failure)?;
