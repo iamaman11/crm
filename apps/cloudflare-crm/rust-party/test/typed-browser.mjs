@@ -2991,6 +2991,17 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      await difference.getByRole("row").filter({has:page.getByRole("rowheader",{name:"Выполнение",exact:true})}).getByRole("cell",{name:"0.00 п. п.",exact:true}).waitFor();
      checkpoint("SK-07.D3 commercial report forecast preview, durable save, direct link, reload and D1");
      checkpoint("SK-07.D3 frozen report comparison through typed Connect");
+     const reportDownloadPending=page.waitForEvent("download");
+     await reportDetail.getByRole("button",{name:"Скачать отчёт CSV",exact:true}).click();
+     const reportDownload=await reportDownloadPending;
+     assert.equal(reportDownload.suggestedFilename(),"crm-sales-report.csv");
+     assert.equal(await reportDownload.failure(),null);
+     assert.ok((await readFile(await reportDownload.path(),"utf8")).includes("section,record_id,field,value\n"));
+     const compareDownloadPending=page.waitForEvent("download");
+     await reportDetail.getByRole("button",{name:"Скачать сравнение CSV",exact:true}).click();
+     const compareDownload=await compareDownloadPending;
+     assert.equal(compareDownload.suggestedFilename(),"crm-sales-comparison.csv");
+     assert.ok((await readFile(await compareDownload.path(),"utf8")).includes(",status,comparable\n"));
      const scoreRegion=quotaRegion.getByRole("region",{name:"Коммерческая эффективность",exact:true});
      await scoreRegion.getByLabel("Измерение эффективности",{exact:true}).selectOption("2");
      await scoreRegion.getByLabel("Воронка эффективности",{exact:true}).selectOption(newPipelineId);
@@ -3008,6 +3019,19 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      await scoreRegion.getByLabel("Период scorecard",{exact:true}).selectOption("1");
      await actorRow.getByRole("cell",{name:"0.00 EUR",exact:true}).first().waitFor();
      checkpoint("SK-07.D3 scorecard historical credit, period trends and event detail");
+     const scoreDownloadPending=page.waitForEvent("download");
+     await scoreRegion.getByRole("button",{name:"Скачать Scorecard CSV",exact:true}).click();
+     const scoreDownload=await scoreDownloadPending;
+     assert.equal(scoreDownload.suggestedFilename(),"crm-sales-scorecard.csv");
+     const scoreCsv=await readFile(await scoreDownload.path(),"utf8");
+     assert.ok(scoreCsv.includes(",axis,actor\n"));
+     await scoreRegion.getByText("Показан новый согласованный срез, использованный для выгрузки.",{exact:true}).waitFor();
+     await reloadDocument();
+     await scoreRegion.getByRole("region",{name:"Таблица коммерческой эффективности",exact:true}).waitFor();
+     assert.equal(await scoreRegion.getByLabel("Измерение эффективности",{exact:true}).inputValue(),"2");
+     assert.equal(await scoreRegion.getByLabel("Воронка эффективности",{exact:true}).inputValue(),newPipelineId);
+     await scoreRegion.getByRole("region",{name:"График плана и нетто",exact:true}).waitFor();
+     checkpoint("SK-07.D3 commercial CSV downloads through typed Connect and URL-owned filters");
 
 
    }

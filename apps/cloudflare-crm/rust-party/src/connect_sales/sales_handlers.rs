@@ -88,7 +88,473 @@ impl GroupRow {
     }
 }
 
+mod sales_export;
+
 impl SalesV2Service {
+    async fn read_scorecard(
+        &self,
+        input: sale_wire::GetSalesScorecardRequest,
+    ) -> std::result::Result<sale_wire::GetSalesScorecardResponse, ConnectError> {
+        use crm_sales::{QuotaCadence, QuotaDate, Scorecard, ScorecardAxis};
+        use sale_wire::SalesScorecardAxis as Axis;
+        use wasm_bindgen::JsValue;
+        let (axis, dimension) = match input.axis {
+            v if v == Axis::SALES_SCORECARD_AXIS_ORGANIZATION => {
+                (ScorecardAxis::Organization, "NULL")
+            }
+            v if v == Axis::SALES_SCORECARD_AXIS_ACTOR => (
+                ScorecardAxis::Actor,
+                "json_extract(e.commercial_close_fact,'$.credited_actor')",
+            ),
+            v if v == Axis::SALES_SCORECARD_AXIS_TEAM => (
+                ScorecardAxis::Team,
+                "json_extract(e.commercial_close_fact,'$.credited_team.id')",
+            ),
+            v if v == Axis::SALES_SCORECARD_AXIS_TERRITORY => (
+                ScorecardAxis::Territory,
+                "json_extract(e.commercial_close_fact,'$.credited_territory.id')",
+            ),
+            _ => {
+                return Err(ConnectError::invalid_argument(
+                    "SALES_SCORECARD_AXIS_INVALID",
+                ));
+            }
+        };
+        let (cadence, cadence_key) = match input.cadence {
+            v if v == sale_wire::SalesQuotaCadence::SALES_QUOTA_CADENCE_MONTHLY => {
+                (QuotaCadence::Monthly, "monthly")
+            }
+            v if v == sale_wire::SalesQuotaCadence::SALES_QUOTA_CADENCE_QUARTERLY => {
+                (QuotaCadence::Quarterly, "quarterly")
+            }
+            _ => {
+                return Err(ConnectError::invalid_argument(
+                    "SALES_SCORECARD_CADENCE_INVALID",
+                ));
+            }
+        };
+        let date = input
+            .first_date
+            .as_option()
+            .ok_or_else(|| ConnectError::invalid_argument("SALES_SCORECARD_DATE_REQUIRED"))?;
+        let invalid_date = || ConnectError::invalid_argument("SALES_SCORECARD_DATE_INVALID");
+        let mut card = Scorecard::new(
+            axis,
+            input.currency_code.clone(),
+            input.pipeline_id.clone(),
+            QuotaDate {
+                year: date.year,
+                month: u8::try_from(date.month).map_err(|_| invalid_date())?,
+                day: u8::try_from(date.day).map_err(|_| invalid_date())?,
+            },
+            input.time_zone.clone(),
+            cadence,
+            input.period_count as usize,
+        )
+        .map_err(|e| ConnectError::invalid_argument(e.code))?;
+        if let Some(detail) = input.detail.as_option() {
+            return self.scorecard_detail(&card, &input, detail, dimension).await;
+        }
+        let failure = || ConnectError::internal("SALES_SCORECARD_READ_FAILED");
+        let capacity = || ConnectError::resource_exhausted("SALES_SCORECARD_CAPACITY");
+        let domain_failure = |e: crm_module_sdk::SdkError| {
+            if e.code == "SALES_SCORECARD_CAPACITY" {
+                capacity()
+            } else {
+                ConnectError::internal(e.code)
+            }
+        };
+        let db = self.d1()?;
+        let as_of = crate::now_nanos();
+        let ranges = card
+            .buckets()
+            .iter()
+            .map(|b| {
+                [
+                    &b.period.start_unix_nanos,
+                    &b.period.end_exclusive_unix_nanos,
+                ]
+            })
+            .collect::<Vec<_>>();
+        let ranges = serde_json::to_string(&ranges).map_err(|_| failure())?;
+        let pipeline = input
+            .pipeline_id
+            .as_deref()
+            .map_or(JsValue::NULL, JsValue::from_str);
+        // D1 executes this read batch transactionally. Calendar instants come
+        // from the original Sales owner, never from SQL date calculations.
+        let candidates = format!(
+            "WITH periods AS (SELECT CAST(key AS INTEGER) bucket,CAST(json_extract(value,'$[0]') AS INTEGER) lo,CAST(json_extract(value,'$[1]') AS INTEGER) hi FROM json_each(?1)), candidates AS (SELECT p.bucket,e.action,e.commercial_close_fact,\
+             json_extract(e.commercial_close_fact,'$.outcome') outcome,\
+             json_extract(e.commercial_close_fact,'$.amount.currency_code') currency,\
+             json_extract(e.commercial_close_fact,'$.amount.minor_units') minor_units,{dimension} dimension_id \
+             FROM periods p JOIN crm_sales_deal_events e ON e.occurred_at_unix_nanos>=p.lo AND e.occurred_at_unix_nanos<p.hi \
+             JOIN crm_sales_commercial_event_order o ON o.tenant=e.tenant AND o.deal_id=e.deal_id AND o.deal_version=e.deal_version \
+             WHERE e.tenant=?2 AND e.action IN ('closed','reopened') AND e.occurred_at_unix_nanos<=CAST(?3 AS INTEGER) AND (?4 IS NULL OR e.pipeline_id=?4))"
+        );
+        let aggregate = format!(
+            "{} LIMIT 8193",
+            commercial_group_sql(
+                &candidates,
+                " WHERE (currency IS NULL OR currency=?5)",
+                true
+            )
+        );
+        let quota_sql = "SELECT state FROM crm_sales_quota_records WHERE tenant=?1 AND json_extract(state,'$.published')=1 AND json_extract(state,'$.currency_code')=?2 AND json_extract(state,'$.pipeline_id') IS ?3 AND json_extract(state,'$.period.time_zone')=?4 AND CAST(json_extract(state,'$.period.start_unix_nanos') AS INTEGER)>=CAST(?5 AS INTEGER) AND CAST(json_extract(state,'$.period.start_unix_nanos') AS INTEGER)<CAST(?6 AS INTEGER) AND json_extract(state,'$.period.cadence')=?7 LIMIT 2049";
+        let first = card.buckets().first().ok_or_else(failure)?;
+        let last = card.buckets().last().ok_or_else(failure)?;
+        let statements = vec![
+            crate::bind(
+                &db,
+                "SELECT CAST(COALESCE(MAX(sequence),0) AS TEXT) sequence FROM crm_sales_commercial_event_order WHERE tenant=?",
+                &[JsValue::from_str(&self.tenant)],
+            )
+            .map_err(|_| failure())?,
+            crate::bind(
+                &db,
+                &aggregate,
+                &[
+                    JsValue::from_str(&ranges),
+                    JsValue::from_str(&self.tenant),
+                    JsValue::from_str(&as_of.to_string()),
+                    pipeline.clone(),
+                    JsValue::from_str(&input.currency_code),
+                ],
+            )
+            .map_err(|_| failure())?,
+            crate::bind(
+                &db,
+                quota_sql,
+                &[
+                    JsValue::from_str(&self.tenant),
+                    JsValue::from_str(&input.currency_code),
+                    pipeline,
+                    JsValue::from_str(&input.time_zone),
+                    JsValue::from_str(&first.period.start_unix_nanos),
+                    JsValue::from_str(&last.period.end_exclusive_unix_nanos),
+                    JsValue::from_str(cadence_key),
+                ],
+            )
+            .map_err(|_| failure())?,
+        ];
+        let results = db.batch(statements).await.map_err(|_| failure())?;
+        if results.len() != 3 || !results.iter().all(worker::d1::D1Result::success) {
+            return Err(failure());
+        }
+        #[derive(serde::Deserialize)]
+        struct Watermark {
+            sequence: String,
+        }
+        #[derive(serde::Deserialize)]
+        struct QuotaRow {
+            state: String,
+        }
+        let event_sequence = results[0]
+            .results::<Watermark>()
+            .map_err(|_| failure())?
+            .first()
+            .ok_or_else(failure)?
+            .sequence
+            .parse::<i64>()
+            .map_err(|_| failure())?;
+        let groups = results[1].results::<GroupRow>().map_err(|_| failure())?;
+        let quotas = results[2].results::<QuotaRow>().map_err(|_| failure())?;
+        if groups.len() > 8192 || quotas.len() > crm_sales::MAX_SCORECARD_CELLS {
+            return Err(capacity());
+        }
+        for row in groups {
+            card.observe_group(row.bucket, row.fact(true)?)
+                .map_err(domain_failure)?;
+        }
+        for row in quotas {
+            let quota = crm_sales::SalesQuota::decode(&row.state).map_err(domain_failure)?;
+            card.attach_quota(quota).map_err(domain_failure)?;
+        }
+        // Current catalogs only add zero-activity rows. They never determine
+        // the credited owner of a historical event.
+        let limit = crm_sales::MAX_SCORECARD_CELLS / card.buckets().len();
+        let active_ids = match axis {
+            ScorecardAxis::Organization => Vec::new(),
+            ScorecardAxis::Actor => {
+                let (members, next) = access_members::list(&db, &self.tenant, "", limit, false)
+                    .await
+                    .map_err(|_| failure())?;
+                if next.is_some() {
+                    return Err(capacity());
+                }
+                members
+                    .into_iter()
+                    .filter(|m| !m.email.starts_with("service:"))
+                    .map(|m| m.email)
+                    .collect()
+            }
+            ScorecardAxis::Team => {
+                let (teams, next) = access_teams::list(&db, &self.tenant, "", limit, false)
+                    .await
+                    .map_err(|_| failure())?;
+                if next.is_some() {
+                    return Err(capacity());
+                }
+                teams.into_iter().map(|t| t.team_id).collect()
+            }
+            ScorecardAxis::Territory => {
+                let (territories, next) = sales_territories::list(
+                    &db,
+                    &self.tenant,
+                    sales_territories::Kind::Territory,
+                    sales_territories::Filter {
+                        after: "",
+                        limit,
+                        include_archived: false,
+                        territory_id: None,
+                        primary_owner: None,
+                    },
+                )
+                .await
+                .map_err(|_| failure())?;
+                if next.is_some() {
+                    return Err(capacity());
+                }
+                territories.into_iter().map(|t| t.id().to_owned()).collect()
+            }
+        };
+        card.complete_dimensions(active_ids)
+            .map_err(domain_failure)?;
+        let cell_wire = |cell: crm_sales::ScorecardCell|
+         -> std::result::Result<sale_wire::SalesScorecardCell, ConnectError> {
+            let progress = cell.target_progress().map_err(domain_failure)?;
+            let win_rate = cell.win_rate_basis_points();
+            let a = cell.actual;
+            let net = a.net().map_err(domain_failure)?;
+            Ok(sale_wire::SalesScorecardCell {
+                gross_minor_units: a.gross.to_string(),
+                reversal_minor_units: a.reversals.to_string(),
+                net_minor_units: net.to_string(),
+                won_count: a.won_count,
+                lost_count: a.lost_count,
+                reversal_count: a.reversal_count,
+                missing_amount_count: a.missing_amount_count,
+                unknown_history_count: a.unknown_history_count,
+                unallocated_count: a.unallocated_count,
+                win_rate_basis_points: win_rate,
+                source_event_count: cell.source_event_count,
+                quota: cell
+                    .quota
+                    .map(|q| Self::quota_wire(sales_territories::Record::Quota(q)))
+                    .transpose()?
+                    .into(),
+                remaining_minor_units: progress.map(|(remaining, _)| remaining.to_string()),
+                attainment_basis_points: progress.map(|(_, attainment)| attainment.to_string()),
+                ..Default::default()
+            })
+        };
+        let date_wire = |d: QuotaDate| core_v2::CalendarDate {
+            year: d.year,
+            month: u32::from(d.month),
+            day: u32::from(d.day),
+            ..Default::default()
+        };
+        let buckets = card
+            .into_buckets()
+            .into_iter()
+            .map(|b| {
+                let (start, end) = b.period.bounds().map_err(domain_failure)?;
+                Ok(sale_wire::SalesScorecardBucket {
+                    period: Some(sale_wire::SalesQuotaPeriod {
+                        start_date: Some(date_wire(b.period.start_date)).into(),
+                        end_date: Some(date_wire(b.period.end_date)).into(),
+                        time_zone: b.period.time_zone,
+                        cadence: input.cadence,
+                        ..Default::default()
+                    })
+                    .into(),
+                    start_unix_nanos: start,
+                    end_exclusive_unix_nanos: end,
+                    organization: Some(cell_wire(b.organization)?).into(),
+                    dimensions: b
+                        .dimensions
+                        .into_iter()
+                        .map(|(dimension_id, cell)| {
+                            Ok(sale_wire::SalesScorecardDimension {
+                                dimension_id,
+                                cell: Some(cell_wire(cell)?).into(),
+                                ..Default::default()
+                            })
+                        })
+                        .collect::<std::result::Result<Vec<_>, ConnectError>>()?,
+                    ..Default::default()
+                })
+            })
+            .collect::<std::result::Result<Vec<_>, ConnectError>>()?;
+        Ok(sale_wire::GetSalesScorecardResponse {
+            as_of_unix_nanos: as_of,
+            event_sequence,
+            currency_code: input.currency_code,
+            axis: input.axis,
+            buckets,
+            ..Default::default()
+        })
+    }
+
+    async fn read_performance_report(
+        &self,
+        input: sale_wire::GetSalesPerformanceReportRequest,
+    ) -> std::result::Result<sale_wire::GetSalesPerformanceReportResponse, ConnectError> {
+        let id = Self::id(&input.report_id)?;
+        let size = Self::performance_page_size(input.page_size)?;
+        if !input.forecast_after.is_empty() {
+            Self::id(&input.forecast_after)?;
+        }
+        if let Some(after) = input.actual_after.as_option() {
+            Self::id(&after.deal_id)?;
+            if after.deal_version <= 0 {
+                return Err(ConnectError::invalid_argument("SALES_QUOTA_CURSOR_INVALID"));
+            }
+        }
+        let db = self.d1()?;
+        let report = sales_performance::get(&db, &self.tenant, &id)
+            .await
+            .map_err(|_| ConnectError::internal("SALES_PERFORMANCE_REPORT_READ_FAILED"))?
+            .ok_or_else(|| ConnectError::not_found("SALES_PERFORMANCE_REPORT_NOT_FOUND"))?;
+        let comparison = if let Some(baseline_id) = input.baseline_report_id.as_deref() {
+            let baseline_id = Self::id(baseline_id)?;
+            let baseline = sales_performance::get(&db, &self.tenant, &baseline_id)
+                .await
+                .map_err(|_| ConnectError::internal("SALES_PERFORMANCE_REPORT_READ_FAILED"))?
+                .ok_or_else(|| ConnectError::not_found("SALES_PERFORMANCE_REPORT_NOT_FOUND"))?;
+            let (status, delta) = report
+                .compare(&baseline)
+                .map_err(|e| ConnectError::internal(e.code))?;
+            use crm_sales::ComparisonStatus as Domain;
+            use sale_wire::SalesPerformanceComparisonStatus as Wire;
+            Some(sale_wire::SalesPerformanceComparison {
+                status: match status {
+                    Domain::Comparable => Wire::SALES_PERFORMANCE_COMPARISON_STATUS_COMPARABLE,
+                    Domain::DifferentSeries => {
+                        Wire::SALES_PERFORMANCE_COMPARISON_STATUS_DIFFERENT_SERIES
+                    }
+                    Domain::DifferentFormula => {
+                        Wire::SALES_PERFORMANCE_COMPARISON_STATUS_DIFFERENT_FORMULA
+                    }
+                }
+                .into(),
+                baseline: Some(Self::report_wire(baseline)?).into(),
+                delta: delta
+                    .map(|d| sale_wire::SalesPerformanceDelta {
+                        target_minor_units: d.target,
+                        gross_minor_units: d.gross,
+                        reversal_minor_units: d.reversals,
+                        net_minor_units: d.net,
+                        remaining_minor_units: d.remaining,
+                        attainment_basis_points: d.attainment,
+                        open_minor_units: d.open,
+                        weighted_minor_units_times_basis_points: d.weighted,
+                        open_coverage_basis_points: d.open_coverage,
+                        weighted_coverage_basis_points: d.weighted_coverage,
+                        won_count: d.won_count,
+                        lost_count: d.lost_count,
+                        reversal_count: d.reversal_count,
+                        missing_amount_count: d.missing_amount_count,
+                        unknown_history_count: d.unknown_history_count,
+                        unallocated_count: d.unallocated_count,
+                        ..Default::default()
+                    })
+                    .into(),
+                ..Default::default()
+            })
+        } else {
+            None
+        };
+        let confirmed_mutation = match receipt_key(input.receipt_idempotency_key.as_deref())? {
+            None => None,
+            Some(key) => {
+                let row = crud_receipt(&db, &self.tenant, key, CrudReceiptOwner::PerformanceReport)
+                    .await
+                    .map_err(|_| {
+                        ConnectError::unavailable("SALES_PERFORMANCE_RECEIPT_READ_FAILED")
+                    })?;
+                crud_commit_evidence(row, &id, &self.request_id, |state| {
+                    Ok((sales_performance::decode(state)?.report_id, 1))
+                })
+                .map_err(|_| ConnectError::unavailable("SALES_PERFORMANCE_RECEIPT_DECODE_FAILED"))?
+            }
+        };
+        let count = sales_performance::membership_count(
+            &db,
+            &self.tenant,
+            &report.quota,
+            &report.captured_at,
+            &report.event_sequence,
+        )
+        .await
+        .map_err(|_| ConnectError::internal("SALES_PERFORMANCE_MEMBERSHIP_READ_FAILED"))?;
+        let mut actual_history_available = false;
+        let mut actual_facts = Vec::new();
+        let mut actual_next = Default::default();
+        // The stored totals are never replaced by a fresh calculation.
+        // Missing history (e.g. governed retention) disables drilldown.
+        if count == report.actual_candidate_count {
+            let cutoff = report
+                .captured_at
+                .parse()
+                .map_err(|_| ConnectError::internal("SALES_PERFORMANCE_REPORT_INVALID"))?;
+            let sequence = report
+                .event_sequence
+                .parse()
+                .map_err(|_| ConnectError::internal("SALES_PERFORMANCE_REPORT_INVALID"))?;
+            if let Ok((live, totals)) = self
+                .quota_performance(sale_wire::GetSalesQuotaPerformanceRequest {
+                    quota_id: report.quota.quota_id.clone(),
+                    quota_version: Some(report.quota.version),
+                    as_of_unix_nanos: Some(cutoff),
+                    event_sequence: Some(sequence),
+                    after: input.actual_after,
+                    page_size: size as u32,
+                    ..Default::default()
+                })
+                .await
+            {
+                let after_count = sales_performance::membership_count(
+                    &db,
+                    &self.tenant,
+                    &report.quota,
+                    &report.captured_at,
+                    &report.event_sequence,
+                )
+                .await
+                .map_err(|_| ConnectError::internal("SALES_PERFORMANCE_MEMBERSHIP_READ_FAILED"))?;
+                if totals == report.actuals && after_count == count {
+                    actual_history_available = true;
+                    actual_facts = live.facts;
+                    actual_next = live.next;
+                }
+            }
+        }
+        let (sources, next) = sales_performance::forecast_page(
+            &db,
+            &self.tenant,
+            &report,
+            &input.forecast_after,
+            size,
+        )
+        .await
+        .map_err(|_| ConnectError::internal("SALES_PERFORMANCE_FORECAST_READ_FAILED"))?;
+        Ok(sale_wire::GetSalesPerformanceReportResponse {
+            report: Some(Self::report_wire(report)?).into(),
+            confirmed_mutation: confirmed_mutation.into(),
+            actual_history_available,
+            actual_facts,
+            actual_next,
+            forecast_sources: sources
+                .into_iter()
+                .map(Self::forecast_source_wire)
+                .collect::<std::result::Result<Vec<_>, _>>()?,
+            forecast_next: next,
+            comparison: comparison.into(),
+            ..Default::default()
+        })
+    }
+
     async fn scorecard_detail(
         &self,
         card: &crm_sales::Scorecard,
@@ -705,6 +1171,15 @@ impl SalesV2Service {
 
 impl sale_wire::DealService for SalesV2Service {
     #[worker::send]
+    async fn export_sales_analytics(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, sale_wire::ExportSalesAnalyticsRequest>,
+    ) -> ServiceResult<sale_wire::ExportSalesAnalyticsResponse> {
+        RpcResponse::ok(self.export_analytics(req.to_owned_message()).await?)
+    }
+
+    #[worker::send]
     async fn create_sales_quota(
         &self,
         _ctx: RequestContext,
@@ -871,309 +1346,7 @@ impl sale_wire::DealService for SalesV2Service {
         _ctx: RequestContext,
         req: ServiceRequest<'_, sale_wire::GetSalesScorecardRequest>,
     ) -> ServiceResult<sale_wire::GetSalesScorecardResponse> {
-        use crm_sales::{QuotaCadence, QuotaDate, Scorecard, ScorecardAxis};
-        use sale_wire::SalesScorecardAxis as Axis;
-        use wasm_bindgen::JsValue;
-        let input = req.to_owned_message();
-        let (axis, dimension) = match input.axis {
-            v if v == Axis::SALES_SCORECARD_AXIS_ORGANIZATION => {
-                (ScorecardAxis::Organization, "NULL")
-            }
-            v if v == Axis::SALES_SCORECARD_AXIS_ACTOR => (
-                ScorecardAxis::Actor,
-                "json_extract(e.commercial_close_fact,'$.credited_actor')",
-            ),
-            v if v == Axis::SALES_SCORECARD_AXIS_TEAM => (
-                ScorecardAxis::Team,
-                "json_extract(e.commercial_close_fact,'$.credited_team.id')",
-            ),
-            v if v == Axis::SALES_SCORECARD_AXIS_TERRITORY => (
-                ScorecardAxis::Territory,
-                "json_extract(e.commercial_close_fact,'$.credited_territory.id')",
-            ),
-            _ => {
-                return Err(ConnectError::invalid_argument(
-                    "SALES_SCORECARD_AXIS_INVALID",
-                ));
-            }
-        };
-        let (cadence, cadence_key) = match input.cadence {
-            v if v == sale_wire::SalesQuotaCadence::SALES_QUOTA_CADENCE_MONTHLY => {
-                (QuotaCadence::Monthly, "monthly")
-            }
-            v if v == sale_wire::SalesQuotaCadence::SALES_QUOTA_CADENCE_QUARTERLY => {
-                (QuotaCadence::Quarterly, "quarterly")
-            }
-            _ => {
-                return Err(ConnectError::invalid_argument(
-                    "SALES_SCORECARD_CADENCE_INVALID",
-                ));
-            }
-        };
-        let date = input
-            .first_date
-            .as_option()
-            .ok_or_else(|| ConnectError::invalid_argument("SALES_SCORECARD_DATE_REQUIRED"))?;
-        let invalid_date = || ConnectError::invalid_argument("SALES_SCORECARD_DATE_INVALID");
-        let mut card = Scorecard::new(
-            axis,
-            input.currency_code.clone(),
-            input.pipeline_id.clone(),
-            QuotaDate {
-                year: date.year,
-                month: u8::try_from(date.month).map_err(|_| invalid_date())?,
-                day: u8::try_from(date.day).map_err(|_| invalid_date())?,
-            },
-            input.time_zone.clone(),
-            cadence,
-            input.period_count as usize,
-        )
-        .map_err(|e| ConnectError::invalid_argument(e.code))?;
-        if let Some(detail) = input.detail.as_option() {
-            return RpcResponse::ok(
-                self.scorecard_detail(&card, &input, detail, dimension)
-                    .await?,
-            );
-        }
-        let failure = || ConnectError::internal("SALES_SCORECARD_READ_FAILED");
-        let capacity = || ConnectError::resource_exhausted("SALES_SCORECARD_CAPACITY");
-        let domain_failure = |e: crm_module_sdk::SdkError| {
-            if e.code == "SALES_SCORECARD_CAPACITY" {
-                capacity()
-            } else {
-                ConnectError::internal(e.code)
-            }
-        };
-        let db = self.d1()?;
-        let as_of = crate::now_nanos();
-        let ranges = card
-            .buckets()
-            .iter()
-            .map(|b| {
-                [
-                    &b.period.start_unix_nanos,
-                    &b.period.end_exclusive_unix_nanos,
-                ]
-            })
-            .collect::<Vec<_>>();
-        let ranges = serde_json::to_string(&ranges).map_err(|_| failure())?;
-        let pipeline = input
-            .pipeline_id
-            .as_deref()
-            .map_or(JsValue::NULL, JsValue::from_str);
-        // D1 executes this read batch transactionally. Calendar instants come
-        // from the original Sales owner, never from SQL date calculations.
-        let candidates = format!(
-            "WITH periods AS (SELECT CAST(key AS INTEGER) bucket,CAST(json_extract(value,'$[0]') AS INTEGER) lo,CAST(json_extract(value,'$[1]') AS INTEGER) hi FROM json_each(?1)), candidates AS (SELECT p.bucket,e.action,e.commercial_close_fact,\
-             json_extract(e.commercial_close_fact,'$.outcome') outcome,\
-             json_extract(e.commercial_close_fact,'$.amount.currency_code') currency,\
-             json_extract(e.commercial_close_fact,'$.amount.minor_units') minor_units,{dimension} dimension_id \
-             FROM periods p JOIN crm_sales_deal_events e ON e.occurred_at_unix_nanos>=p.lo AND e.occurred_at_unix_nanos<p.hi \
-             JOIN crm_sales_commercial_event_order o ON o.tenant=e.tenant AND o.deal_id=e.deal_id AND o.deal_version=e.deal_version \
-             WHERE e.tenant=?2 AND e.action IN ('closed','reopened') AND e.occurred_at_unix_nanos<=CAST(?3 AS INTEGER) AND (?4 IS NULL OR e.pipeline_id=?4))"
-        );
-        let aggregate = format!(
-            "{} LIMIT 8193",
-            commercial_group_sql(
-                &candidates,
-                " WHERE (currency IS NULL OR currency=?5)",
-                true
-            )
-        );
-        let quota_sql = "SELECT state FROM crm_sales_quota_records WHERE tenant=?1 AND json_extract(state,'$.published')=1 AND json_extract(state,'$.currency_code')=?2 AND json_extract(state,'$.pipeline_id') IS ?3 AND json_extract(state,'$.period.time_zone')=?4 AND CAST(json_extract(state,'$.period.start_unix_nanos') AS INTEGER)>=CAST(?5 AS INTEGER) AND CAST(json_extract(state,'$.period.start_unix_nanos') AS INTEGER)<CAST(?6 AS INTEGER) AND json_extract(state,'$.period.cadence')=?7 LIMIT 2049";
-        let first = card.buckets().first().ok_or_else(failure)?;
-        let last = card.buckets().last().ok_or_else(failure)?;
-        let statements = vec![
-            crate::bind(
-                &db,
-                "SELECT CAST(COALESCE(MAX(sequence),0) AS TEXT) sequence FROM crm_sales_commercial_event_order WHERE tenant=?",
-                &[JsValue::from_str(&self.tenant)],
-            )
-            .map_err(|_| failure())?,
-            crate::bind(
-                &db,
-                &aggregate,
-                &[
-                    JsValue::from_str(&ranges),
-                    JsValue::from_str(&self.tenant),
-                    JsValue::from_str(&as_of.to_string()),
-                    pipeline.clone(),
-                    JsValue::from_str(&input.currency_code),
-                ],
-            )
-            .map_err(|_| failure())?,
-            crate::bind(
-                &db,
-                quota_sql,
-                &[
-                    JsValue::from_str(&self.tenant),
-                    JsValue::from_str(&input.currency_code),
-                    pipeline,
-                    JsValue::from_str(&input.time_zone),
-                    JsValue::from_str(&first.period.start_unix_nanos),
-                    JsValue::from_str(&last.period.end_exclusive_unix_nanos),
-                    JsValue::from_str(cadence_key),
-                ],
-            )
-            .map_err(|_| failure())?,
-        ];
-        let results = db.batch(statements).await.map_err(|_| failure())?;
-        if results.len() != 3 || !results.iter().all(worker::d1::D1Result::success) {
-            return Err(failure());
-        }
-        #[derive(serde::Deserialize)]
-        struct Watermark {
-            sequence: String,
-        }
-        #[derive(serde::Deserialize)]
-        struct QuotaRow {
-            state: String,
-        }
-        let event_sequence = results[0]
-            .results::<Watermark>()
-            .map_err(|_| failure())?
-            .first()
-            .ok_or_else(failure)?
-            .sequence
-            .parse::<i64>()
-            .map_err(|_| failure())?;
-        let groups = results[1].results::<GroupRow>().map_err(|_| failure())?;
-        let quotas = results[2].results::<QuotaRow>().map_err(|_| failure())?;
-        if groups.len() > 8192 || quotas.len() > crm_sales::MAX_SCORECARD_CELLS {
-            return Err(capacity());
-        }
-        for row in groups {
-            card.observe_group(row.bucket, row.fact(true)?)
-                .map_err(domain_failure)?;
-        }
-        for row in quotas {
-            let quota = crm_sales::SalesQuota::decode(&row.state).map_err(domain_failure)?;
-            card.attach_quota(quota).map_err(domain_failure)?;
-        }
-        // Current catalogs only add zero-activity rows. They never determine
-        // the credited owner of a historical event.
-        let limit = crm_sales::MAX_SCORECARD_CELLS / card.buckets().len();
-        let active_ids = match axis {
-            ScorecardAxis::Organization => Vec::new(),
-            ScorecardAxis::Actor => {
-                let (members, next) = access_members::list(&db, &self.tenant, "", limit, false)
-                    .await
-                    .map_err(|_| failure())?;
-                if next.is_some() {
-                    return Err(capacity());
-                }
-                members
-                    .into_iter()
-                    .filter(|m| !m.email.starts_with("service:"))
-                    .map(|m| m.email)
-                    .collect()
-            }
-            ScorecardAxis::Team => {
-                let (teams, next) = access_teams::list(&db, &self.tenant, "", limit, false)
-                    .await
-                    .map_err(|_| failure())?;
-                if next.is_some() {
-                    return Err(capacity());
-                }
-                teams.into_iter().map(|t| t.team_id).collect()
-            }
-            ScorecardAxis::Territory => {
-                let (territories, next) = sales_territories::list(
-                    &db,
-                    &self.tenant,
-                    sales_territories::Kind::Territory,
-                    sales_territories::Filter {
-                        after: "",
-                        limit,
-                        include_archived: false,
-                        territory_id: None,
-                        primary_owner: None,
-                    },
-                )
-                .await
-                .map_err(|_| failure())?;
-                if next.is_some() {
-                    return Err(capacity());
-                }
-                territories.into_iter().map(|t| t.id().to_owned()).collect()
-            }
-        };
-        card.complete_dimensions(active_ids)
-            .map_err(domain_failure)?;
-        let cell_wire = |cell: crm_sales::ScorecardCell|
-         -> std::result::Result<sale_wire::SalesScorecardCell, ConnectError> {
-            let progress = cell.target_progress().map_err(domain_failure)?;
-            let win_rate = cell.win_rate_basis_points();
-            let a = cell.actual;
-            let net = a.net().map_err(domain_failure)?;
-            Ok(sale_wire::SalesScorecardCell {
-                gross_minor_units: a.gross.to_string(),
-                reversal_minor_units: a.reversals.to_string(),
-                net_minor_units: net.to_string(),
-                won_count: a.won_count,
-                lost_count: a.lost_count,
-                reversal_count: a.reversal_count,
-                missing_amount_count: a.missing_amount_count,
-                unknown_history_count: a.unknown_history_count,
-                unallocated_count: a.unallocated_count,
-                win_rate_basis_points: win_rate,
-                source_event_count: cell.source_event_count,
-                quota: cell
-                    .quota
-                    .map(|q| Self::quota_wire(sales_territories::Record::Quota(q)))
-                    .transpose()?
-                    .into(),
-                remaining_minor_units: progress.map(|(remaining, _)| remaining.to_string()),
-                attainment_basis_points: progress.map(|(_, attainment)| attainment.to_string()),
-                ..Default::default()
-            })
-        };
-        let date_wire = |d: QuotaDate| core_v2::CalendarDate {
-            year: d.year,
-            month: u32::from(d.month),
-            day: u32::from(d.day),
-            ..Default::default()
-        };
-        let buckets = card
-            .into_buckets()
-            .into_iter()
-            .map(|b| {
-                let (start, end) = b.period.bounds().map_err(domain_failure)?;
-                Ok(sale_wire::SalesScorecardBucket {
-                    period: Some(sale_wire::SalesQuotaPeriod {
-                        start_date: Some(date_wire(b.period.start_date)).into(),
-                        end_date: Some(date_wire(b.period.end_date)).into(),
-                        time_zone: b.period.time_zone,
-                        cadence: input.cadence,
-                        ..Default::default()
-                    })
-                    .into(),
-                    start_unix_nanos: start,
-                    end_exclusive_unix_nanos: end,
-                    organization: Some(cell_wire(b.organization)?).into(),
-                    dimensions: b
-                        .dimensions
-                        .into_iter()
-                        .map(|(dimension_id, cell)| {
-                            Ok(sale_wire::SalesScorecardDimension {
-                                dimension_id,
-                                cell: Some(cell_wire(cell)?).into(),
-                                ..Default::default()
-                            })
-                        })
-                        .collect::<std::result::Result<Vec<_>, ConnectError>>()?,
-                    ..Default::default()
-                })
-            })
-            .collect::<std::result::Result<Vec<_>, ConnectError>>()?;
-        RpcResponse::ok(sale_wire::GetSalesScorecardResponse {
-            as_of_unix_nanos: as_of,
-            event_sequence,
-            currency_code: input.currency_code,
-            axis: input.axis,
-            buckets,
-            ..Default::default()
-        })
+        RpcResponse::ok(self.read_scorecard(req.to_owned_message()).await?)
     }
 
     #[worker::send]
@@ -1278,160 +1451,7 @@ impl sale_wire::DealService for SalesV2Service {
         _ctx: RequestContext,
         req: ServiceRequest<'_, sale_wire::GetSalesPerformanceReportRequest>,
     ) -> ServiceResult<sale_wire::GetSalesPerformanceReportResponse> {
-        let input = req.to_owned_message();
-        let id = Self::id(&input.report_id)?;
-        let size = Self::performance_page_size(input.page_size)?;
-        if !input.forecast_after.is_empty() {
-            Self::id(&input.forecast_after)?;
-        }
-        if let Some(after) = input.actual_after.as_option() {
-            Self::id(&after.deal_id)?;
-            if after.deal_version <= 0 {
-                return Err(ConnectError::invalid_argument("SALES_QUOTA_CURSOR_INVALID"));
-            }
-        }
-        let db = self.d1()?;
-        let report = sales_performance::get(&db, &self.tenant, &id)
-            .await
-            .map_err(|_| ConnectError::internal("SALES_PERFORMANCE_REPORT_READ_FAILED"))?
-            .ok_or_else(|| ConnectError::not_found("SALES_PERFORMANCE_REPORT_NOT_FOUND"))?;
-        let comparison = if let Some(baseline_id) = input.baseline_report_id.as_deref() {
-            let baseline_id = Self::id(baseline_id)?;
-            let baseline = sales_performance::get(&db, &self.tenant, &baseline_id)
-                .await
-                .map_err(|_| ConnectError::internal("SALES_PERFORMANCE_REPORT_READ_FAILED"))?
-                .ok_or_else(|| ConnectError::not_found("SALES_PERFORMANCE_REPORT_NOT_FOUND"))?;
-            let (status, delta) = report
-                .compare(&baseline)
-                .map_err(|e| ConnectError::internal(e.code))?;
-            use crm_sales::ComparisonStatus as Domain;
-            use sale_wire::SalesPerformanceComparisonStatus as Wire;
-            Some(sale_wire::SalesPerformanceComparison {
-                status: match status {
-                    Domain::Comparable => Wire::SALES_PERFORMANCE_COMPARISON_STATUS_COMPARABLE,
-                    Domain::DifferentSeries => {
-                        Wire::SALES_PERFORMANCE_COMPARISON_STATUS_DIFFERENT_SERIES
-                    }
-                    Domain::DifferentFormula => {
-                        Wire::SALES_PERFORMANCE_COMPARISON_STATUS_DIFFERENT_FORMULA
-                    }
-                }
-                .into(),
-                baseline: Some(Self::report_wire(baseline)?).into(),
-                delta: delta
-                    .map(|d| sale_wire::SalesPerformanceDelta {
-                        target_minor_units: d.target,
-                        gross_minor_units: d.gross,
-                        reversal_minor_units: d.reversals,
-                        net_minor_units: d.net,
-                        remaining_minor_units: d.remaining,
-                        attainment_basis_points: d.attainment,
-                        open_minor_units: d.open,
-                        weighted_minor_units_times_basis_points: d.weighted,
-                        open_coverage_basis_points: d.open_coverage,
-                        weighted_coverage_basis_points: d.weighted_coverage,
-                        won_count: d.won_count,
-                        lost_count: d.lost_count,
-                        reversal_count: d.reversal_count,
-                        missing_amount_count: d.missing_amount_count,
-                        unknown_history_count: d.unknown_history_count,
-                        unallocated_count: d.unallocated_count,
-                        ..Default::default()
-                    })
-                    .into(),
-                ..Default::default()
-            })
-        } else {
-            None
-        };
-        let confirmed_mutation = match receipt_key(input.receipt_idempotency_key.as_deref())? {
-            None => None,
-            Some(key) => {
-                let row = crud_receipt(&db, &self.tenant, key, CrudReceiptOwner::PerformanceReport)
-                    .await
-                    .map_err(|_| {
-                        ConnectError::unavailable("SALES_PERFORMANCE_RECEIPT_READ_FAILED")
-                    })?;
-                crud_commit_evidence(row, &id, &self.request_id, |state| {
-                    Ok((sales_performance::decode(state)?.report_id, 1))
-                })
-                .map_err(|_| ConnectError::unavailable("SALES_PERFORMANCE_RECEIPT_DECODE_FAILED"))?
-            }
-        };
-        let count = sales_performance::membership_count(
-            &db,
-            &self.tenant,
-            &report.quota,
-            &report.captured_at,
-            &report.event_sequence,
-        )
-        .await
-        .map_err(|_| ConnectError::internal("SALES_PERFORMANCE_MEMBERSHIP_READ_FAILED"))?;
-        let mut actual_history_available = false;
-        let mut actual_facts = Vec::new();
-        let mut actual_next = Default::default();
-        // The stored totals are never replaced by a fresh calculation.
-        // Missing history (e.g. governed retention) disables drilldown.
-        if count == report.actual_candidate_count {
-            let cutoff = report
-                .captured_at
-                .parse()
-                .map_err(|_| ConnectError::internal("SALES_PERFORMANCE_REPORT_INVALID"))?;
-            let sequence = report
-                .event_sequence
-                .parse()
-                .map_err(|_| ConnectError::internal("SALES_PERFORMANCE_REPORT_INVALID"))?;
-            if let Ok((live, totals)) = self
-                .quota_performance(sale_wire::GetSalesQuotaPerformanceRequest {
-                    quota_id: report.quota.quota_id.clone(),
-                    quota_version: Some(report.quota.version),
-                    as_of_unix_nanos: Some(cutoff),
-                    event_sequence: Some(sequence),
-                    after: input.actual_after,
-                    page_size: size as u32,
-                    ..Default::default()
-                })
-                .await
-            {
-                let after_count = sales_performance::membership_count(
-                    &db,
-                    &self.tenant,
-                    &report.quota,
-                    &report.captured_at,
-                    &report.event_sequence,
-                )
-                .await
-                .map_err(|_| ConnectError::internal("SALES_PERFORMANCE_MEMBERSHIP_READ_FAILED"))?;
-                if totals == report.actuals && after_count == count {
-                    actual_history_available = true;
-                    actual_facts = live.facts;
-                    actual_next = live.next;
-                }
-            }
-        }
-        let (sources, next) = sales_performance::forecast_page(
-            &db,
-            &self.tenant,
-            &report,
-            &input.forecast_after,
-            size,
-        )
-        .await
-        .map_err(|_| ConnectError::internal("SALES_PERFORMANCE_FORECAST_READ_FAILED"))?;
-        RpcResponse::ok(sale_wire::GetSalesPerformanceReportResponse {
-            report: Some(Self::report_wire(report)?).into(),
-            confirmed_mutation: confirmed_mutation.into(),
-            actual_history_available,
-            actual_facts,
-            actual_next,
-            forecast_sources: sources
-                .into_iter()
-                .map(Self::forecast_source_wire)
-                .collect::<std::result::Result<Vec<_>, _>>()?,
-            forecast_next: next,
-            comparison: comparison.into(),
-            ..Default::default()
-        })
+        RpcResponse::ok(self.read_performance_report(req.to_owned_message()).await?)
     }
 
     #[worker::send]

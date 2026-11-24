@@ -5832,6 +5832,21 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    await call("GetSalesScorecard",viewer,{...scoreInput,firstDate:{year,month,day:2}},400);
    const scoreDetail={...scoreInput,detail:{bucketIndex:0,organization:false,dimensionId:team,
      asOfUnixNanos:score.asOfUnixNanos,eventSequence:score.eventSequence,expectedEventCount:scoreTeam.sourceEventCount,pageSize:1}};
+   const scoreExportRequest={kind:5,scope:{case:"scorecard",value:scoreInput}};
+   const scoreExport=await call("ExportSalesAnalytics",admin,scoreExportRequest);
+   const scoreCsv=Buffer.from(scoreExport.csv).toString("utf8");
+   assert.equal(scoreExport.csvSha256Hex,createHash("sha256").update(scoreExport.csv).digest("hex"));
+   assert.equal(scoreExport.filename,"crm-sales-scorecard.csv");
+   assert.equal(scoreExport.specificationVersion,"sales-analytics-csv/v1");
+   assert.deepEqual(scoreExport.scorecard.buckets,score.buckets);
+   assert.ok(scoreCsv.startsWith("section,record_id,field,value\n"));
+   assert.ok(scoreCsv.includes("gross_minor_units,100\n"));
+   assert.ok(scoreCsv.includes("quota_id,"+monthlyId+"\n"));
+   await call("ExportSalesAnalytics",viewer,scoreExportRequest,403);
+   await call("ExportSalesAnalytics",admin,{kind:5},400);
+   const detailExport=await call("ExportSalesAnalytics",admin,{kind:6,scope:{case:"scorecard",value:scoreDetail}});
+   assert.ok(Buffer.from(detailExport.csv).toString("utf8").includes("signed_minor_units,-100\n"));
+   await call("ExportSalesAnalytics",admin,{kind:6,scope:{case:"scorecard",value:{...scoreDetail,detail:{...scoreDetail.detail,expectedEventCount:scoreTeam.sourceEventCount+1n}}}},409);
    const firstScorePage=(await call("GetSalesScorecard",viewer,scoreDetail)).detail;
    assert.equal(firstScorePage.facts.length,1);assert.ok(firstScorePage.next);
    assert.equal(firstScorePage.sourceEventCount,scoreTeam.sourceEventCount);
@@ -5853,7 +5868,19 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    let scaleReport,scaledScoreDetail;
    const scaleReportId="report-scale-"+suffix;
    try{
-     await sql(scaleInsert,"tenant-a",one.dealId);
+     await sql(scaleInsert.replace("n<"+scaleCount,"n<120"),"tenant-a",one.dealId);
+     const pagedScore=await call("GetSalesScorecard",viewer,scoreInput);
+     const pagedTeam=pagedScore.buckets[0].dimensions.find(d=>d.dimensionId===team).cell;
+     const fullDetail=await call("ExportSalesAnalytics",admin,{kind:6,scope:{case:"scorecard",value:{...scoreDetail,detail:{
+       ...scoreDetail.detail,asOfUnixNanos:pagedScore.asOfUnixNanos,eventSequence:pagedScore.eventSequence,expectedEventCount:pagedTeam.sourceEventCount
+     }}}});
+     const detailCsv=Buffer.from(fullDetail.csv).toString("utf8");
+     const versions=detailCsv.split("\n").filter(line=>line.startsWith("actual_event,")&&line.includes(",deal_version,"));
+     assert.equal(versions.length,Number(pagedTeam.sourceEventCount));
+     assert.equal(new Set(versions).size,versions.length);
+     assert.ok(versions.length>100);
+     assert.equal(fullDetail.csvSha256Hex,createHash("sha256").update(fullDetail.csv).digest("hex"));
+     await sql(scaleInsert.replace("SELECT 1 UNION ALL","SELECT 121 UNION ALL"),"tenant-a",one.dealId);
      const started=Date.now();
      const scaled=await call("GetSalesQuotaPerformance",viewer,{quotaId,pageSize:1});
      const elapsed=Date.now()-started;
@@ -5873,6 +5900,9 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      assert.deepEqual((await call("GetSalesScorecard",viewer,scoreDetail)).detail,firstScorePage);
      scaledScoreDetail={...scoreDetail,detail:{...scoreDetail.detail,asOfUnixNanos:scaledScore.asOfUnixNanos,
        eventSequence:scaledScore.eventSequence,expectedEventCount:scaledTeam.sourceEventCount}};
+     const exactExport=await call("ExportSalesAnalytics",admin,scoreExportRequest);
+     assert.ok(Buffer.from(exactExport.csv).toString("utf8").includes("net_minor_units,"+scaled.netMinorUnits+"\n"));
+     await call("ExportSalesAnalytics",admin,{kind:6,scope:{case:"scorecard",value:scaledScoreDetail}},429);
      assert.equal((await call("GetSalesScorecard",viewer,scaledScoreDetail)).detail.sourceEventCount,scaledTeam.sourceEventCount);
      console.log(JSON.stringify({event:"crm.native-d3-scorecard-scale",result:"PASS",added_events:scaleCount,periods:2,elapsed_ms:scoreElapsed,exact_i128:true,frozen_membership:true}));
      const frozenRequest={quotaId,quotaVersion:2n,asOfUnixNanos:perf.asOfUnixNanos,eventSequence:perf.eventSequence,pageSize:1};
@@ -5953,6 +5983,21 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    assert.ok(readReport.actualNext);assert.ok(readReport.forecastNext);
    const compareRequest={...getReport,baselineReportId:scaleReportId};
    const compared=await call("GetSalesPerformanceReport",viewer,compareRequest);
+   const reportExportRequest={kind:1,scope:{case:"report",value:{reportId}}};
+   const reportExport=await call("ExportSalesAnalytics",admin,reportExportRequest);
+   assert.equal(reportExport.csvSha256Hex,createHash("sha256").update(reportExport.csv).digest("hex"));
+   assert.deepEqual(await call("ExportSalesAnalytics",admin,reportExportRequest),reportExport);
+   await call("ExportSalesAnalytics",tenantB,reportExportRequest,404);
+   const comparisonExport=await call("ExportSalesAnalytics",admin,{kind:2,scope:{case:"report",value:{reportId,baselineReportId:scaleReportId}}});
+   assert.ok(Buffer.from(comparisonExport.csv).toString("utf8").includes("comparison,"+reportId+",status,comparable"));
+   const actualExport=await call("ExportSalesAnalytics",admin,{kind:3,scope:{case:"report",value:{reportId}}});
+   assert.ok(Buffer.from(actualExport.csv).toString("utf8").includes("signed_minor_units,-100\n"));
+   const forecastExport=await call("ExportSalesAnalytics",admin,{kind:4,scope:{case:"report",value:{reportId}}});
+   assert.ok(Buffer.from(forecastExport.csv).toString("utf8").includes("forecast_source,"));
+   await call("ExportSalesAnalytics",admin,{kind:3,scope:{case:"report",value:{reportId:scaleReportId}}},409);
+   const retainedExport=await call("ExportSalesAnalytics",admin,{kind:1,scope:{case:"report",value:{reportId:scaleReportId}}});
+   assert.ok(Buffer.from(retainedExport.csv).toString("utf8").includes("actual_history_available,false\n"));
+   console.log(JSON.stringify({event:"crm.native-sales-analytics-export",result:"PASS",sha256:reportExport.csvSha256Hex}));
    assert.deepEqual(compared,await call("GetSalesPerformanceReport",admin,compareRequest));
    assert.deepEqual(compared.comparison.baseline,scaleReport);
    assert.equal(compared.comparison.status,1);
@@ -6104,6 +6149,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=?","tenant-a",quotaId))[0].n,4);
    assert.deepEqual(await call("GetSalesPerformanceReport",viewer,getReport),readReport);
    assert.deepEqual((await call("SaveSalesPerformanceReport",admin,reportIntent)).report,savedReport.report);
+   assert.deepEqual(await call("ExportSalesAnalytics",admin,reportExportRequest),reportExport);
    console.log(JSON.stringify({event:"crm.native-d3-performance-report",result:"PASS",exact_forecast:true,immutable_report:true,source_paging:true,tenant_ab:true,receipt_replay:true,atomic_audit_rollback:true,no_read_audit:true,retention_visible:true}));
    await call("UpdateTerritory",admin,{territoryId,configuration:{name:"Routing territory "+suffix,defaultOwner:actor(emailB),archived:true},precondition:pre("archive-territory",1n)});
    assert.equal((await memberV2("UpdateTeam",admin,{teamId:team,active:false,precondition:pre("archive-team",1n)})).status,200);

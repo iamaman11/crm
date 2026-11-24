@@ -224,6 +224,11 @@ provides:
       binding:
         kind: protobuf_rpc
         rpc: crm.sales.v2.DealService.ListSalesQuotas
+    - id: sales.analytics.export
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.ExportSalesAnalytics
     - id: sales.scorecard.get
       version: 2.0.0
       binding:

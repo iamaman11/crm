@@ -9,7 +9,8 @@ import {ownerValue,ownerWire} from "./ownerCatalog";
 import type {allOwners} from "./ownerCatalog";
 import {decimalUnits,minorUnits} from "./money";
 import {inputDate,parseDate} from "./calendarInput";
-import {dealHref} from "./routes";
+import {dealHref,salesScorecardHref} from "./routes";
+import type {ScorecardFilters} from "./routes";
 import {SalesPerformanceReports} from "./SalesPerformanceReports";
 import {SalesScorecards} from "./SalesScorecards";
 
@@ -41,7 +42,7 @@ function ratio(value:string):string {
   const n=BigInt(value),abs=n<0n?-n:n;
   return (n<0n?"−":"")+(abs/100n).toString()+"."+(abs%100n).toString().padStart(2,"0")+"%";
 }
-export function SalesQuotaWorkspace({isAdmin,choices,ownersUnavailable,territories,reportId}:{isAdmin:boolean;choices:Choices;ownersUnavailable:boolean;territories:SalesTerritory[];reportId:string}) {
+export function SalesQuotaWorkspace({isAdmin,choices,ownersUnavailable,territories,reportId,scorecard}:{isAdmin:boolean;choices:Choices;ownersUnavailable:boolean;territories:SalesTerritory[];reportId:string;scorecard:ScorecardFilters|undefined}) {
   const quotas=useQuery(useCallback(allQuotas,[]));
   const catalog=useQuery(useCallback(allPipelines,[]));
   const [editing,setEditing]=useState<SalesQuota|"new">();
@@ -81,7 +82,7 @@ export function SalesQuotaWorkspace({isAdmin,choices,ownersUnavailable,territori
   return <section aria-label="Коммерческие цели и план-факт">
     <h3>Коммерческие цели и план-факт</h3>
     <p>Факт — сумма выигранных сделок за период минус сторно в периоде. Это не бухгалтерская выручка. Цели разных областей и периодов не складываются.</p>
-    {catalog.data&&<SalesScorecards catalog={catalog.data} labels={labels} onQuota={select}/>}
+    {catalog.data&&<SalesScorecards key={scorecard?salesScorecardHref(scorecard):""} request={scorecard} isAdmin={isAdmin} catalog={catalog.data} labels={labels} onQuota={select}/>}
     <QueryNotice query={quotas}/><QueryNotice query={catalog}/>
     <p><label><input type="checkbox" checked={includeArchived} onChange={e=>setIncludeArchived(e.target.checked)}/> Показать архивные цели</label></p>
     {isAdmin&&<Button disabled={!ready||pending} onClick={()=>start()}>Создать коммерческую цель</Button>}

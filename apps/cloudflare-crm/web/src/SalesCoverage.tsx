@@ -8,6 +8,7 @@ import {allOwners,ownerLabel,ownerValue,ownerWire} from "./ownerCatalog";
 import {AccountName} from "./Pickers";
 import {SalesRoutingWorkspace} from "./SalesRouting";
 import {SalesQuotaWorkspace} from "./SalesQuotas";
+import type {ScorecardFilters} from "./routes";
 
 type Choices=Awaited<ReturnType<typeof allOwners>>["choices"];
 export async function allTerritories(signal:AbortSignal):Promise<SalesTerritory[]> {
@@ -38,8 +39,8 @@ function TerritoryOptions({items,current="",exclude=""}:{items:SalesTerritory[];
       </option>)}</>;
 }
 
-export function TerritoryWorkspace({isAdmin,choices,ownersUnavailable,reportId}:{
-  isAdmin:boolean;choices:Choices;ownersUnavailable:boolean;reportId:string;
+export function TerritoryWorkspace({isAdmin,choices,ownersUnavailable,reportId,scorecard}:{
+  isAdmin:boolean;choices:Choices;ownersUnavailable:boolean;reportId:string;scorecard:ScorecardFilters|undefined;
 }) {
   const territories=useQuery(useCallback(allTerritories,[]));
   const [selected,setSelected]=useState("");
@@ -153,7 +154,7 @@ export function TerritoryWorkspace({isAdmin,choices,ownersUnavailable,reportId}:
     {cursor&&<Button variant="secondary" disabled={assignments.busy} onClick={()=>setCursor("")}>Первая страница портфелей</Button>}
     {assignments.data?.pageInfo?.nextPageToken&&<Button variant="secondary" disabled={assignments.busy}
       onClick={()=>setCursor(assignments.data?.pageInfo?.nextPageToken??"")}>Следующая страница портфелей</Button>}
-    <SalesQuotaWorkspace isAdmin={isAdmin} choices={choices} ownersUnavailable={ownersUnavailable||territories.busy||!!territories.error} territories={items} reportId={reportId}/>
+    <SalesQuotaWorkspace isAdmin={isAdmin} choices={choices} ownersUnavailable={ownersUnavailable||territories.busy||!!territories.error} territories={items} reportId={reportId} scorecard={scorecard}/>
     <SalesRoutingWorkspace isAdmin={isAdmin} choices={choices} ownersUnavailable={ownersUnavailable||territories.busy||!!territories.error} territories={items}/>
   </section>;
 }

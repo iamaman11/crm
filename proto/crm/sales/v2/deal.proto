@@ -1056,7 +1056,41 @@ message ListSalesPerformanceReportsResponse {
   crm.core.v2.PageInfo page_info = 2;
 }
 
+enum SalesAnalyticsExportKind {
+  SALES_ANALYTICS_EXPORT_KIND_UNSPECIFIED = 0;
+  SALES_ANALYTICS_EXPORT_KIND_REPORT = 1;
+  SALES_ANALYTICS_EXPORT_KIND_COMPARISON = 2;
+  SALES_ANALYTICS_EXPORT_KIND_REPORT_ACTUALS = 3;
+  SALES_ANALYTICS_EXPORT_KIND_REPORT_FORECAST = 4;
+  SALES_ANALYTICS_EXPORT_KIND_SCORECARD = 5;
+  SALES_ANALYTICS_EXPORT_KIND_SCORECARD_DETAIL = 6;
+}
+message SalesReportExportScope {
+  string report_id = 1;
+  optional string baseline_report_id = 2;
+}
+message ExportSalesAnalyticsRequest {
+  SalesAnalyticsExportKind kind = 1;
+  oneof scope {
+    SalesReportExportScope report = 2;
+    GetSalesScorecardRequest scorecard = 3;
+  }
+}
+message ExportSalesAnalyticsResponse {
+  bytes csv = 1;
+  string csv_sha256_hex = 2;
+  string specification_version = 3;
+  string filename = 4;
+  string media_type = 5;
+  uint32 row_count = 6;
+  // For a live summary, exactly the snapshot used to construct the file.
+  GetSalesScorecardResponse scorecard = 7;
+}
+
 service DealService {
+  rpc ExportSalesAnalytics(ExportSalesAnalyticsRequest) returns (ExportSalesAnalyticsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   rpc CreateSalesQuota(CreateSalesQuotaRequest) returns (CreateSalesQuotaResponse) {
     option idempotency_level = IDEMPOTENT;
   }

@@ -1,4 +1,10 @@
 import type {AccountStatus} from "@ultimate-crm/client/cloudflare";
+import {SalesQuotaCadence,SalesScorecardAxis} from "@ultimate-crm/client/cloudflare";
+import type {api} from "./api";
+import {inputDate,parseDate} from "./calendarInput";
+import {boundedInt,enumValue} from "./enumFields";
+
+export type ScorecardFilters=Omit<Extract<Parameters<typeof api.deals.getSalesScorecard>[0],{$typeName?:never}>,"detail">;
 
 export const sectionLabels={
   parties:"Участники",
@@ -24,7 +30,7 @@ export type Route =
   | {kind:"account-create";partyId:string}
   | {kind:"deal";dealId:string}
   | {kind:"search";query:string}
-  | {kind:"section";screen:Section;partyId:string;accountId:string;taskId?:string;dealId?:string;contactPointId?:string;relationshipId?:string;search?:string;overdue?:boolean;viewId?:string;pipelineId?:string;assigneeEmail?:string;mine?:boolean;teamId?:string;owner?:string;reportId?:string}
+  | {kind:"section";screen:Section;partyId:string;accountId:string;taskId?:string;dealId?:string;contactPointId?:string;relationshipId?:string;search?:string;overdue?:boolean;viewId?:string;pipelineId?:string;assigneeEmail?:string;mine?:boolean;teamId?:string;owner?:string;reportId?:string;scorecard?:ScorecardFilters}
   | {kind:"not-found";path:string};
 
 function isSection(path:string):path is Section {return Object.prototype.hasOwnProperty.call(sectionLabels,path);}
@@ -134,6 +140,23 @@ export function parseRoute(hash:string,allowedStatuses:readonly AccountFilterSta
     }catch {/* Malformed URLs do not reach API. */}
   }
   if(path==="team"&&question>=0){
+    if(params.has("scoreAxis")){
+      const keys=["scoreAxis","currency","pipeline","first","zone","cadence","count"];
+      let invalid=false;
+      params.forEach((_,key)=>{if(!keys.includes(key)||params.getAll(key).length!==1)invalid=true;});
+      try{
+        const firstDate=parseDate(params.get("first")??"");
+        const currencyCode=params.get("currency")??"";
+        const pipelineId=params.get("pipeline")??"";
+        const timeZone=params.get("zone")??"";
+        if(invalid||!firstDate||!(/^[A-Z]{3}$/).test(currencyCode)||!timeZone||timeZone.length>128||
+          (pipelineId&&!validTeamId(pipelineId)))throw Error("Некорректный фильтр");
+        const axis=enumValue(params.get("scoreAxis")??"",[SalesScorecardAxis.ORGANIZATION,SalesScorecardAxis.ACTOR,SalesScorecardAxis.TEAM,SalesScorecardAxis.TERRITORY],"Измерение");
+        const cadence=enumValue(params.get("cadence")??"",[SalesQuotaCadence.MONTHLY,SalesQuotaCadence.QUARTERLY],"Период");
+        const periodCount=boundedInt(params.get("count")??"",1,24,"Число периодов");
+        return {kind:"section",screen:"team",partyId:"",accountId:"",scorecard:{axis,currencyCode,...(pipelineId?{pipelineId}:{}),firstDate,timeZone,cadence,periodCount}};
+      }catch{return {kind:"not-found",path:source};}
+    }
     const ids=params.getAll("reportId"),id=ids[0]??"";
     let invalid=false;
     params.forEach((_,key)=>{if(key!=="reportId")invalid=true;});
@@ -289,6 +312,14 @@ export function salesViewHref(initialAccountId:string,viewId:string,search=""):s
 /** A manually selected Kanban uses the same URL owner, never storage. */
 export function salesPipelineHref(initialAccountId:string,pipelineId:string,search="",owner=""):string {
   return salesSearchHref(initialAccountId,search,"",pipelineId,owner);
+}
+
+export function salesScorecardHref(filters:ScorecardFilters):string {
+  const p=new URLSearchParams({scoreAxis:String(filters.axis??""),currency:filters.currencyCode??"",
+    first:filters.firstDate?inputDate({year:filters.firstDate.year??0,month:filters.firstDate.month??0,day:filters.firstDate.day??0}):"",zone:filters.timeZone??"",
+    cadence:String(filters.cadence??""),count:String(filters.periodCount??"")});
+  if(filters.pipelineId)p.set("pipeline",filters.pipelineId);
+  return "#team?"+p.toString();
 }
 
 export function salesPerformanceReportHref(reportId:string):string {

@@ -1,6 +1,6 @@
 import {useCallback,useState} from "react";
 import {Button,TextField,SelectField} from "@ultimate-crm/ui";
-import {SalesForecastDisposition,SalesPerformanceComparisonStatus} from "@ultimate-crm/client/cloudflare";
+import {SalesAnalyticsExportKind,SalesForecastDisposition,SalesPerformanceComparisonStatus} from "@ultimate-crm/client/cloudflare";
 import type {SalesPerformanceReport,SalesQuota,SalesQuotaFactCursor,SalesForecastSource,PreviewSalesPerformanceReportResponse} from "@ultimate-crm/client/cloudflare";
 import {api,newId} from "./api";
 import {useQuery,useReadAction,useMutation,prepareMutation,MutationNotice,QueryNotice} from "./hooks";
@@ -9,6 +9,8 @@ import type {CurrencyCatalog} from "./money";
 import {inputDate} from "./calendarInput";
 import {dealHref,salesPerformanceReportHref} from "./routes";
 import {navigateTo} from "./navigation";
+import {SalesExportButton} from "./SalesExportButton";
+import styles from "./App.module.css";
 import {forecastCategoryText,probabilitySourceText} from "./DealRecord";
 
 function ratio(value:string|undefined):string {
@@ -143,6 +145,11 @@ export function SalesPerformanceReports({isAdmin,quota,reportId,currencies}:{isA
     {report&&code&&saved.data&&<section aria-label="Сохранённый коммерческий отчёт">
       <h5>{report.name}</h5><p><a href={salesPerformanceReportHref(report.reportId)}>Постоянная ссылка на отчёт</a></p>
       <Summary report={report} currencies={currencies}/>
+      {isAdmin&&<div className={styles.actions}>
+        <SalesExportButton key={report.reportId+":report"} label="Скачать отчёт CSV" request={{kind:SalesAnalyticsExportKind.REPORT,scope:{case:"report",value:{reportId:report.reportId}}}}/>
+        <SalesExportButton key={report.reportId+":actual"} disabled={!saved.data.actualHistoryAvailable} label="Скачать факты CSV" request={{kind:SalesAnalyticsExportKind.REPORT_ACTUALS,scope:{case:"report",value:{reportId:report.reportId}}}}/>
+        <SalesExportButton key={report.reportId+":forecast"} label="Скачать прогноз CSV" request={{kind:SalesAnalyticsExportKind.REPORT_FORECAST,scope:{case:"report",value:{reportId:report.reportId}}}}/>
+      </div>}
       <h5>Исторические коммерческие факты</h5>
       {!saved.data.actualHistoryAvailable?<p role="alert">Исходная история больше не подтверждается. Сохранённые итоги не пересчитаны; детализация недоступна.</p>:
         <><ul>{saved.data.actualFacts.map(f=><li key={f.dealId+":"+f.dealVersion.toString()}><a href={dealHref(f.dealId)}>Сделка {f.dealId}</a> · v{f.dealVersion.toString()} · {f.reversal?"Сторно":"Закрытие"} · {f.signedMinorUnits===undefined?"Сумма неизвестна":money(f.signedMinorUnits,code,currencies)}</li>)}</ul>
@@ -160,6 +167,7 @@ export function SalesPerformanceReports({isAdmin,quota,reportId,currencies}:{isA
       {comparison?.baseline&&<section aria-label="Сравнение коммерческих отчётов">
         <h5>Базовый отчёт: {comparison.baseline.name}</h5>
         <Summary report={comparison.baseline} currencies={currencies}/>
+        {isAdmin&&<SalesExportButton key={report.reportId+":"+comparison.baseline.reportId} label="Скачать сравнение CSV" request={{kind:SalesAnalyticsExportKind.COMPARISON,scope:{case:"report",value:{reportId:report.reportId,baselineReportId:comparison.baseline.reportId}}}}/>}
         {comparison.status!==SalesPerformanceComparisonStatus.COMPARABLE?<p role="status">Отчёты несопоставимы: {comparison.status===SalesPerformanceComparisonStatus.DIFFERENT_SERIES?"разные серии целей или условия расчёта":"разные формулы расчёта"}. Разница не вычисляется.</p>:delta&&<>
           <h5>Изменение: выбранный отчёт минус базовый</h5>
           <p>Разница цели показана отдельно от фактических результатов. Даты снимков не определяют направление сравнения.</p>

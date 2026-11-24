@@ -3,6 +3,7 @@ import {Button,Card,FeedbackPanel,PageHeader,SelectField,TextField} from "@ultim
 import {api} from "./api";
 import {PartyKind} from "@ultimate-crm/client/cloudflare";
 import {enumValue} from "./enumFields";
+import {downloadCsv} from "./downloadCsv";
 import {useReadAction,useMutation,prepareMutation,MutationNotice} from "./hooks";
 
 // Presentation only. Validation and error codes originate from the one Rust owner.
@@ -57,11 +58,7 @@ export function DataScreen() {
         const result=await api.csv.previewPartyExport(kind?
           {kind:enumValue(kind,[PartyKind.PERSON,PartyKind.ORGANIZATION],"Тип экспорта")}:{},{signal});
         // The generated Protobuf bytes are the downloaded file. No business REST route.
-        const url=URL.createObjectURL(new Blob([Uint8Array.from(result.csv)],{type:"text/csv;charset=utf-8"}));
-        try {
-          const link=document.createElement("a");
-          link.href=url;link.download="crm-parties.csv";link.click();
-        } finally {window.setTimeout(()=>URL.revokeObjectURL(url),0);}
+        downloadCsv(result.csv,"crm-parties.csv");
         return result;
       })}>Скачать CSV</Button></p>
       {exported.error&&<FeedbackPanel tone="danger" title={exported.error}/>}

@@ -53,7 +53,7 @@ function App() {
       initialDealId={route.dealId??""} initialSearch={route.search??""}
       initialOverdue={route.overdue??false}
       initialAssigneeEmail={route.assigneeEmail??""} initialMine={route.mine??false} initialTeamId={route.teamId??""}/>:
-    route.screen==="team"?<MemberScreen key={route.reportId??""} reportId={route.reportId??""}/>:
+    route.screen==="team"?<MemberScreen key={route.reportId??""} reportId={route.reportId??""} scorecard={route.scorecard}/>:
     route.screen==="sales"?<SalesScreen key={route.accountId}
       initialAccountId={route.accountId} initialSearch={route.search??""}
       initialViewId={route.viewId??""} initialPipelineId={route.pipelineId??""} initialOwner={route.owner??""}/>:

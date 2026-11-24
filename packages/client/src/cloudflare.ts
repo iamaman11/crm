@@ -29,6 +29,8 @@ export type { Interaction } from "../gen/crm/activities/v2/interaction_pb";
 export type { Deal } from "../gen/crm/sales/v2/deal_pb";
 export type { SalesQuota, SalesQuotaConfiguration, SalesQuotaScope, SalesQuotaFactCursor, GetSalesQuotaPerformanceResponse } from "../gen/crm/sales/v2/deal_pb";
 export type { SalesPerformanceReport, GetSalesPerformanceReportResponse, PreviewSalesPerformanceReportResponse, SalesForecastSource } from "../gen/crm/sales/v2/deal_pb";
+export type { ExportSalesAnalyticsRequest, ExportSalesAnalyticsResponse } from "../gen/crm/sales/v2/deal_pb";
+export { SalesAnalyticsExportKind } from "../gen/crm/sales/v2/deal_pb";
 export type { GetSalesScorecardRequest, GetSalesScorecardResponse, SalesScorecardCell, SalesScorecardBucket, SalesScorecardDetailRequest, SalesScorecardDetail } from "../gen/crm/sales/v2/deal_pb";
 export { SalesForecastDisposition, SalesQuotaCadence, SalesPerformanceComparisonStatus, SalesScorecardAxis } from "../gen/crm/sales/v2/deal_pb";
 export type { CommercialCloseFact, DealEvent } from "../gen/crm/sales/v2/deal_pb";

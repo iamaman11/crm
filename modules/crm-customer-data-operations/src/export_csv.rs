@@ -14,12 +14,38 @@ pub const PARTY_EXPORT_CSV_MEDIA_TYPE: &str = "text/csv; charset=utf-8";
 ///
 /// The returned bytes always end in a single LF (`\n`) and never contain a BOM.
 pub fn encode_party_export_csv_record(cells: &[&str]) -> Vec<u8> {
+    encode_csv_cells(cells.iter().map(|cell| encode_party_export_csv_cell(cell)))
+}
+
+/// A text field is always protected from spreadsheet formulas. An integer
+/// must be a canonical signed decimal within the supported exact i128 range.
+pub enum CanonicalCsvCell<'a> {
+    Text(&'a str),
+    Integer(&'a str),
+}
+
+/// Shared CSV framing; Party v1 still passes only protected text cells.
+pub fn encode_typed_csv_record(cells: &[CanonicalCsvCell<'_>]) -> Option<Vec<u8>> {
+    let encoded = cells
+        .iter()
+        .map(|cell| match cell {
+            CanonicalCsvCell::Text(value) => Some(encode_party_export_csv_cell(value)),
+            CanonicalCsvCell::Integer(value) => {
+                let canonical = value.parse::<i128>().ok()?.to_string();
+                (canonical == *value).then_some(canonical)
+            }
+        })
+        .collect::<Option<Vec<_>>>()?;
+    Some(encode_csv_cells(encoded))
+}
+
+fn encode_csv_cells(cells: impl IntoIterator<Item = String>) -> Vec<u8> {
     let mut output = String::new();
-    for (index, cell) in cells.iter().enumerate() {
+    for (index, cell) in cells.into_iter().enumerate() {
         if index > 0 {
             output.push(',');
         }
-        output.push_str(&encode_party_export_csv_cell(cell));
+        output.push_str(&cell);
     }
     output.push('\n');
     output.into_bytes()
@@ -160,6 +186,23 @@ mod tests {
         assert_eq!(
             encode_party_export_csv_cell("party-01J00000000000000000000000"),
             "party-01J00000000000000000000000"
+        );
+    }
+
+    #[test]
+    fn typed_csv_preserves_exact_signed_numbers_without_formula_injection() {
+        use CanonicalCsvCell::{Integer, Text};
+        let cells = [Text("=SUM(1,2)"), Integer("-9007199254740993"), Text("a\nb")];
+        assert_eq!(
+            encode_typed_csv_record(&cells).unwrap(),
+            b"\"'=SUM(1,2)\",-9007199254740993,\"a\nb\"\n"
+        );
+        for invalid in ["-1+2", "+1", "-0", "01", "1e3", " 1"] {
+            assert!(encode_typed_csv_record(&[Integer(invalid)]).is_none());
+        }
+        assert_eq!(
+            encode_typed_csv_record(&[Text("-1"), Text("a,b")]).unwrap(),
+            encode_party_export_csv_record(&["-1", "a,b"])
         );
     }
 

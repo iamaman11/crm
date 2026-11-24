@@ -9,6 +9,7 @@ import {taskHref,taskAssigneeHref,taskTeamHref,workdayHref,salesPipelineHref,int
 import {allMembers,humanMember} from "./memberCatalog";
 import {TeamWorkspace} from "./TeamWorkspace";
 import {TerritoryWorkspace} from "./SalesCoverage";
+import type {ScorecardFilters} from "./routes";
 import {allTeams} from "./teamCatalog";
 import {ownerChoices,ownerValue} from "./ownerCatalog";
 
@@ -20,7 +21,7 @@ function ScrollTable({label,children}:{label:string;children:ReactNode}) {
 }
 
 /** The original Access enrollment is the single source for a human identity. */
-export function MemberScreen({reportId}:{reportId:string}){
+export function MemberScreen({reportId,scorecard}:{reportId:string;scorecard:ScorecardFilters|undefined}){
   const [memberEmail,setMemberEmail]=useState("");
   const [memberRole,setMemberRole]=useState(MemberRole.VIEWER);
   const [editing,setEditing]=useState<Member>();
@@ -140,7 +141,7 @@ export function MemberScreen({reportId}:{reportId:string}){
     </section>
     <TeamWorkspace query={teams} members={members} isAdmin={isAdmin} actor={actor} onChanged={workload.reload}/>
     <TerritoryWorkspace isAdmin={isAdmin} choices={ownerChoices(members,teams.data??[])}
-      ownersUnavailable={roster.busy||teams.busy||!!roster.error||!!teams.error} reportId={reportId}/>
+      ownersUnavailable={roster.busy||teams.busy||!!roster.error||!!teams.error} reportId={reportId} scorecard={scorecard}/>
     <section aria-label="Реальная нагрузка команды">
       <h2>Распределение и нагрузка</h2>
       <p>Авторитетные числа по всем задачам до LIMIT, включая завершённые.
