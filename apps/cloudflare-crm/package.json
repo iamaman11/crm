@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "test": "node --test test/native-runtime.test.mjs test/typed-presentation.test.mjs test/release.test.mjs scripts/release-readback.test.mjs",
+    "test": "node --test test/native-runtime.test.mjs test/release.test.mjs scripts/release-readback.test.mjs && pnpm -w exec vitest run apps/cloudflare-crm/test/typed-presentation.test.mjs",
     "architecture:check": "node scripts/architecture-gate.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

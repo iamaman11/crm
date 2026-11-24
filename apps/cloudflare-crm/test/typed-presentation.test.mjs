@@ -1,4 +1,5 @@
-import test from "node:test";
+import {test} from "vitest";
+import {SalesQuotaCadence,SalesScorecardAxis} from "@ultimate-crm/client/cloudflare";
 import assert from "node:assert/strict";
 import {currencyCatalog,minorUnits,decimalUnits,basisPoints,weightedMoneyText} from "../web/src/money.ts";
 import {inputDate,parseDate} from "../web/src/calendarInput.ts";
@@ -34,7 +35,7 @@ test("percent input preserves basis points and rejects overflow",()=>{
 });
 
 import {enumValue,boundedInt} from "../web/src/enumFields.ts";
-import {parseRoute,accountsHref,accountHref,accountCreateHref,partyHref,scopeHref,accountFilterStatus} from "../web/src/routes.ts";
+import {parseRoute,accountsHref,accountHref,accountCreateHref,partyHref,scopeHref,accountFilterStatus,salesScorecardHref} from "../web/src/routes.ts";
 
 test("HTML enum boundary accepts only declared generated-style values",()=>{
   assert.equal(enumValue("1",[1,2],"status"),1);
@@ -114,4 +115,18 @@ test("currency precision is an explicit server projection, never an Intl fallbac
   assert.throws(()=>currencyCatalog([]),/не получен/);
   assert.throws(()=>currencyCatalog([{currencyCode:"JPY"}]),/Некорректный/);
   assert.throws(()=>currencyCatalog([{currencyCode:"JPY",minorUnitExponent:0},{currencyCode:"JPY",minorUnitExponent:2}]),/Некорректный/);
+});
+
+test("scorecard URL round-trips real generated enum values and rejects ambiguous filters",()=>{
+  const filters={axis:SalesScorecardAxis.TEAM,currencyCode:"EUR",pipelineId:"pipeline.enterprise",
+    firstDate:{year:2026,month:11,day:1},timeZone:"Europe/Warsaw",cadence:SalesQuotaCadence.MONTHLY,periodCount:2};
+  const hash=salesScorecardHref(filters);
+  const route=value=>parseRoute(value,[1,2]);
+  assert.deepEqual(route(hash),{kind:"section",screen:"team",partyId:"",accountId:"",scorecard:filters});
+  for(const suffix of ["&scoreAxis=2","&reportId=other","&unknown=1"])
+    assert.equal(route(hash+suffix).kind,"not-found");
+  for(const [key,value] of [["scoreAxis","0"],["scoreAxis","99"],["cadence","0"],["count","25"],["currency","eur"],["first","2026-11-1"]]){
+    const params=new URLSearchParams(hash.split("?")[1]);params.set(key,value);
+    assert.equal(route("#team?"+params.toString()).kind,"not-found",key);
+  }
 });
