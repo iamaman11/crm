@@ -153,7 +153,9 @@ impl SalesV2Service {
         )
         .map_err(|e| ConnectError::invalid_argument(e.code))?;
         if let Some(detail) = input.detail.as_option() {
-            return self.scorecard_detail(&card, &input, detail, dimension).await;
+            return self
+                .scorecard_detail(&card, &input, detail, dimension)
+                .await;
         }
         let failure = || ConnectError::internal("SALES_SCORECARD_READ_FAILED");
         let capacity = || ConnectError::resource_exhausted("SALES_SCORECARD_CAPACITY");
