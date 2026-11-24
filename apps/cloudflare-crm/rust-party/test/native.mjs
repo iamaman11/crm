@@ -6426,6 +6426,61 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    assert.equal(events.find(e=>e.kind===3).actor,email);
    console.log(JSON.stringify({event:"crm.native-opportunity-delegation",result:"PASS",signed_viewer:true,stage_link_once:true,member_version_pin:true,reactivation_no_restore:true,revocation_cas:true,race:[revoke.status,write.status]}));
  }
+ // Cross-owner fixed template with separate fixtures after earlier analytics.
+ {
+   const suffix=randomUUID(),leadEmail="coord-"+suffix+"@example.test",targetEmail="target-"+suffix+"@example.test",otherEmail="outside-"+suffix+"@example.test";
+   const lead=jwt(leadEmail),target=jwt(targetEmail),outside=jwt(otherEmail);
+   const tid="coord-team-"+suffix,otherTeam="other-team-"+suffix;
+   const pre=(key,version)=>({idempotencyKey:"coord-"+key+"-"+suffix,...(version===undefined?{}:{expectedVersion:version})});
+   for(const [key,email] of [["lead",leadEmail],["target",targetEmail],["outside",otherEmail]])assert.equal((await memberV2("ProvisionMember",admin,{email,role:1,precondition:pre(key)})).status,200);
+   const team=await memberV2("CreateTeam",admin,{teamId:tid,name:"Coordinator "+suffix,roster:{memberEmails:[leadEmail,targetEmail]},precondition:pre("team")});
+   assert.equal(team.status,200,describeProtobuf(team.body));
+   assert.equal((await memberV2("CreateTeam",admin,{teamId:otherTeam,name:"Outside "+suffix,roster:{memberEmails:[otherEmail]},precondition:pre("otherteam")})).status,200);
+   const grant={teamId:tid,queueCoordinator:{email:leadEmail,enabled:true},precondition:pre("grant",1n)};
+   assert.equal((await memberV2("UpdateTeam",lead,grant)).status,403);
+   assert.equal((await memberV2("UpdateTeam",admin,{...grant,queueCoordinator:{email:otherEmail,enabled:true},precondition:pre("foreign",1n)})).status,400);
+   const granted=await memberV2("UpdateTeam",admin,grant);
+   assert.equal(granted.status,200,describeProtobuf(granted.body));
+   assert.equal(granted.body.team.queueCoordinators[0].memberVersion,1n);
+   const taskId="coord-task-"+suffix,dealId="coord-deal-"+suffix,taskRace="coord-race-"+suffix;
+   const owner={owner:{case:"teamId",value:tid}},foreignOwner={owner:{case:"teamId",value:otherTeam}};
+   for(const [id,own] of [[taskId,owner],[taskRace,owner],["foreign-task-"+suffix,foreignOwner]])assert.equal((await taskV2("CreateTask",admin,{taskId:id,accountId,subject:"Coordinator "+id,priority:2,owner:own,precondition:pre("task-"+id)})).status,200);
+   assert.equal((await salesV2("CreateDeal",admin,{dealId,name:"Coordinator "+suffix,accountId,stage:{pipelineId:"pipeline.enterprise",stageId:"lead"},owner,precondition:pre("deal")})).status,200);
+   const taskRead=(await taskV2("GetTask",lead,{taskId})).body;
+   const dealRead=(await salesV2("GetDeal",lead,{dealId})).body;
+   assert.deepEqual(taskRead.teamDistribution,dealRead.teamDistribution);
+   assert.deepEqual(taskRead.teamDistribution.eligibleMemberEmails,[leadEmail,targetEmail].sort());
+   assert.equal((await taskV2("GetTask",target,{taskId})).body.teamDistribution,undefined);
+   assert.equal((await taskV2("GetTask",outside,{taskId})).body.teamDistribution,undefined);
+   const scope=taskRead.teamDistribution.scope;
+   const targetOwner={owner:{case:"assigneeIdentity",value:targetEmail}};
+   const taskMove=(id,key,owner=targetOwner,version=1n)=>({taskId:id,owner,teamDistribution:scope,precondition:pre(key,version)});
+   const dealMove={dealId,owner:targetOwner,teamDistribution:scope,precondition:pre("deal-move",1n)};
+   assert.equal((await taskV2("UpdateTask",target,taskMove(taskId,"nonlead"))).status,403);
+   assert.equal((await taskV2("UpdateTask",lead,{...taskMove(taskId,"field"),subject:{operation:{case:"set",value:"Forbidden"}}})).status,403);
+   assert.equal((await taskV2("UpdateTask",lead,taskMove(taskId,"outside",{owner:{owner:{case:"assigneeIdentity",value:otherEmail}}}))).status,403);
+   assert.equal((await taskV2("UpdateTask",lead,taskMove("foreign-task-"+suffix,"cross-team"))).status,403);
+   assert.equal((await salesV2("UpdateDeal",lead,{...dealMove,probabilityBasisPoints:5000,precondition:pre("money",1n)})).status,403);
+   assert.equal((await salesV2("UpdateDeal",lead,{...dealMove,owner:{owner:{case:"assigneeIdentity",value:otherEmail}},precondition:pre("outside-deal",1n)})).status,403);
+   const command=taskMove(taskId,"move");
+   const moved=await taskV2("UpdateTask",lead,command);
+   assert.equal(moved.status,200,describeProtobuf(moved.body));
+   assert.equal(moved.body.task.owner.owner.value,targetEmail);
+   assert.equal((await taskV2("UpdateTask",lead,command)).body.receipt.replayed,true);
+   const movedDeal=await salesV2("UpdateDeal",lead,dealMove);
+   assert.equal(movedDeal.status,200,describeProtobuf(movedDeal.body));
+   assert.equal(movedDeal.body.deal.owner.owner.value,targetEmail);
+   assert.equal((await salesV2("UpdateDeal",lead,dealMove)).body.receipt.replayed,true);
+   assert.equal((await salesV2("GetDeal",lead,{dealId})).body.teamDistribution,undefined);
+   const revoke={teamId:tid,queueCoordinator:{email:leadEmail,enabled:false},precondition:pre("revoke",2n)};
+   const [removed,race]=await Promise.all([memberV2("UpdateTeam",admin,revoke),taskV2("UpdateTask",lead,taskMove(taskRace,"race"))]);
+   assert.equal(removed.status,200,describeProtobuf(removed.body));
+   assert.ok([200,403,409].includes(race.status),describeProtobuf(race.body));
+   assert.equal((await taskV2("UpdateTask",lead,command)).status,403);
+   assert.equal((await salesV2("UpdateDeal",lead,dealMove)).status,403);
+   assert.equal((await memberV2("GetTeam",viewer,{teamId:tid})).body.team.queueCoordinators.length,0);
+   console.log(JSON.stringify({event:"crm.native-team-distribution",result:"PASS",shared_access_template:true,task_deal:true,scoped_targets:true,owner_only:true,replay:true,revocation:true,race:race.status}));
+ }
  assert.deepEqual([...writesWithReceipt].sort(),[...mutationPaths].sort(),
    "every write method must exercise a committed response with a typed receipt");
  assert.deepEqual([...successfulCalls].sort(),[...rpc.registered_methods].sort(),

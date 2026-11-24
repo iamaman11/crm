@@ -336,6 +336,31 @@ pub(super) async fn update(
     )
     .await
 }
+#[derive(Deserialize)]
+struct MemberVersion {
+    version: String,
+}
+
+pub(super) async fn member_version(db: &D1Database, tenant: &str, email: &str) -> Result<Option<i64>> {
+    if self::email(email).ok().as_deref() != Some(email) {
+        return Ok(None);
+    }
+    let value = bind(
+        db,
+        "SELECT CAST(version AS TEXT) version FROM crm_users WHERE tenant_id=? AND email=? AND active=1",
+        &[JsValue::from_str(tenant), JsValue::from_str(email)],
+    )?
+    .first::<MemberVersion>(None)
+    .await?;
+    value
+        .map(|row| {
+            row.version
+                .parse()
+                .map_err(|_| worker::Error::RustError("invalid enrollment version".into()))
+        })
+        .transpose()
+}
+
 pub(super) async fn valid_assignee(db: &D1Database, tenant: &str, target: &str) -> Result<bool> {
     Ok(bind(
         db,

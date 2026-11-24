@@ -681,7 +681,7 @@ const RPC_POLICIES: &[(&str, RpcPolicy)] = &[
     (
         "/crm.activities.v2.TaskService/UpdateTask",
         RpcPolicy {
-            permission: RpcPermission::Write,
+            permission: RpcPermission::SelfWrite,
         },
     ),
     (

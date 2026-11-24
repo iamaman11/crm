@@ -14,14 +14,136 @@ pub(super) struct Team {
     pub description: String,
     pub active: bool,
     pub member_emails: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub queue_coordinators: Vec<QueueCoordinator>,
     pub version: i64,
 }
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(super) struct QueueCoordinator {
+    pub email: String,
+    pub member_version: i64,
+}
+
+#[derive(Serialize)]
+pub(super) struct QueueCoordinatorChange {
+    pub email: String,
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(super) struct DistributionScope {
+    pub team_id: String,
+    pub team_version: i64,
+}
+
+pub(super) struct DistributionOptions {
+    pub scope: DistributionScope,
+    pub eligible_member_emails: Vec<String>,
+}
+
+// Shared Access predicate for both original owners; no second ACL store.
+const COORDINATOR_JOIN: &str = " FROM crm_access_teams tm JOIN json_each(tm.state,'$.queue_coordinators') g JOIN crm_users u ON u.tenant_id=tm.tenant AND u.email=json_extract(g.value,'$.email') AND u.active=1 AND u.version=CAST(json_extract(g.value,'$.member_version') AS INTEGER) JOIN json_each(tm.state,'$.member_emails') r JOIN crm_users target ON target.tenant_id=tm.tenant AND target.email=r.value AND target.active=1 WHERE tm.tenant=? AND tm.id=? AND json_extract(tm.state,'$.active')=1 AND u.email=? AND u.email NOT LIKE 'service:%' AND EXISTS (SELECT 1 FROM json_each(tm.state,'$.member_emails') leader WHERE leader.value=u.email) AND target.email NOT LIKE 'service:%'";
+
+#[derive(Deserialize)]
+struct DistributionRow {
+    version: String,
+    email: String,
+}
+
+pub(super) async fn distribution_options(
+    db: &D1Database,
+    tenant: &str,
+    team: &str,
+    actor: &str,
+) -> Result<Option<DistributionOptions>> {
+    let sql = format!("SELECT CAST(tm.version AS TEXT) version,target.email{COORDINATOR_JOIN} ORDER BY target.email");
+    let rows = bind(
+        db,
+        &sql,
+        &[
+            JsValue::from_str(tenant),
+            JsValue::from_str(team),
+            JsValue::from_str(actor),
+        ],
+    )?
+    .all()
+    .await?
+    .results::<DistributionRow>()?;
+    let Some(first) = rows.first() else {
+        return Ok(None);
+    };
+    let team_version = first.version.parse::<i64>()
+        .map_err(|_| worker::Error::RustError("invalid Team version".into()))?;
+    Ok(Some(DistributionOptions {
+        scope: DistributionScope {
+            team_id: team.to_owned(),
+            team_version,
+        },
+        eligible_member_emails: rows.into_iter().map(|row| row.email).collect(),
+    }))
+}
+
+pub(super) async fn may_distribute(
+    db: &D1Database,
+    tenant: &str,
+    actor: &str,
+    scope: &DistributionScope,
+    target: &str,
+) -> Result<bool> {
+    let sql = format!("SELECT 1{COORDINATOR_JOIN} AND tm.version=CAST(? AS INTEGER) AND target.email=?");
+    Ok(bind(
+        db,
+        &sql,
+        &[
+            JsValue::from_str(tenant),
+            JsValue::from_str(&scope.team_id),
+            JsValue::from_str(actor),
+            JsValue::from_str(&scope.team_version.to_string()),
+            JsValue::from_str(target),
+        ],
+    )?
+    .first::<serde_json::Value>(None)
+    .await?
+    .is_some())
+}
+
+pub(super) enum DistributionOwner {
+    Task,
+    Deal,
+}
+
+pub(super) fn append_distribution_guard(
+    sql: &mut String,
+    values: &mut Vec<JsValue>,
+    owner: DistributionOwner,
+    tenant: &str,
+    actor: &str,
+    scope: &DistributionScope,
+    target: &str,
+) {
+    let table = match owner {
+        DistributionOwner::Task => "crm_activity_task_records",
+        DistributionOwner::Deal => "crm_sales_deal_records",
+    };
+    sql.push_str(&format!(" AND json_extract({table}.state,'$.owner.team_id')=? AND json_extract({table}.state,'$.status')='open' AND EXISTS (SELECT 1{COORDINATOR_JOIN} AND tm.version=CAST(? AS INTEGER) AND target.email=?)"));
+    values.extend([
+        JsValue::from_str(&scope.team_id),
+        JsValue::from_str(tenant),
+        JsValue::from_str(&scope.team_id),
+        JsValue::from_str(actor),
+        JsValue::from_str(&scope.team_version.to_string()),
+        JsValue::from_str(target),
+    ]);
+}
+
 #[derive(Serialize)]
 pub(super) struct Intent {
     pub name: Option<String>,
     pub description: Option<String>,
     pub active: Option<bool>,
     pub roster: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub queue_coordinator: Option<QueueCoordinatorChange>,
     pub expected: Option<i64>,
 }
 pub(super) struct Saved {
@@ -169,6 +291,7 @@ pub(super) async fn mutate(
             description: String::new(),
             active: true,
             member_emails: Vec::new(),
+            queue_coordinators: Vec::new(),
             version: 0,
         }
     } else {
@@ -213,10 +336,41 @@ pub(super) async fn mutate(
         }
         team.member_emails = normalized;
     }
+    // Removing a roster member or archiving the Team revokes the template.
+    team.queue_coordinators.retain(|grant| {
+        team.active && team.member_emails.contains(&grant.email)
+    });
+    let mut grant_evidence = None;
+    if let Some(change) = intent.queue_coordinator {
+        let email = match access_members::email(&change.email) {
+            Ok(email) if email == change.email => email,
+            _ => return Ok(Err(reject("ACCESS_TEAM_COORDINATOR_INVALID", ErrorCode::InvalidArgument))),
+        };
+        let existing = team.queue_coordinators.iter().position(|grant| grant.email == email);
+        if change.enabled {
+            if !team.active || !team.member_emails.contains(&email) {
+                return Ok(Err(reject("ACCESS_TEAM_COORDINATOR_NOT_IN_ROSTER", ErrorCode::InvalidArgument)));
+            }
+            let Some(member_version) = access_members::member_version(db, tenant, &email).await? else {
+                return Ok(Err(reject("ACCESS_TEAM_COORDINATOR_INACTIVE", ErrorCode::InvalidArgument)));
+            };
+            let grant = QueueCoordinator { email, member_version };
+            if let Some(index) = existing {
+                team.queue_coordinators[index] = grant.clone();
+            } else {
+                team.queue_coordinators.push(grant.clone());
+            }
+            grant_evidence = Some(grant);
+        } else if let Some(index) = existing {
+            team.queue_coordinators.remove(index);
+        }
+    }
+    team.queue_coordinators.sort_by(|a, b| a.email.cmp(&b.email));
     if team.name.is_empty()
         || team.name.chars().count() > 160
         || team.description.chars().count() > 4000
         || team.member_emails.len() > 1000
+        || team.queue_coordinators.len() > 32
     {
         return Ok(Err(reject(
             "ACCESS_TEAM_INVALID",
@@ -242,7 +396,7 @@ pub(super) async fn mutate(
     // Existing inactive members can remain in an unchanged historical roster.
     let work = open_work("?1", "?2");
     let guard = format!(
-        " EXISTS (SELECT 1 FROM crm_users WHERE tenant_id=?1 AND email=?7 AND active=1 AND role='admin') AND NOT EXISTS (SELECT 1 FROM crm_access_teams AS t WHERE t.tenant=?1 AND t.id<>?2 AND lower(json_extract(t.state,'$.name'))=lower(json_extract(?3,'$.name'))) AND (?9=0 OR NOT EXISTS (SELECT 1 FROM json_each(?3,'$.member_emails') AS m WHERE NOT EXISTS (SELECT 1 FROM crm_users AS u WHERE u.tenant_id=?1 AND u.email=m.value AND u.active=1 AND u.email NOT LIKE 'service:%') AND NOT EXISTS (SELECT 1 FROM crm_access_teams AS old JOIN json_each(old.state,'$.member_emails') AS previous_member WHERE old.tenant=?1 AND old.id=?2 AND previous_member.value=m.value))) AND ((json_extract(?3,'$.active')=1 AND EXISTS (SELECT 1 FROM json_each(?3,'$.member_emails') AS m JOIN crm_users AS u ON u.tenant_id=?1 AND u.email=m.value AND u.active=1 WHERE u.email NOT LIKE 'service:%')) OR NOT {work})"
+        " EXISTS (SELECT 1 FROM crm_users WHERE tenant_id=?1 AND email=?7 AND active=1 AND role='admin') AND NOT EXISTS (SELECT 1 FROM crm_access_teams AS t WHERE t.tenant=?1 AND t.id<>?2 AND lower(json_extract(t.state,'$.name'))=lower(json_extract(?3,'$.name'))) AND (?9=0 OR NOT EXISTS (SELECT 1 FROM json_each(?3,'$.member_emails') AS m WHERE NOT EXISTS (SELECT 1 FROM crm_users AS u WHERE u.tenant_id=?1 AND u.email=m.value AND u.active=1 AND u.email NOT LIKE 'service:%') AND NOT EXISTS (SELECT 1 FROM crm_access_teams AS old JOIN json_each(old.state,'$.member_emails') AS previous_member WHERE old.tenant=?1 AND old.id=?2 AND previous_member.value=m.value))) AND ((json_extract(?3,'$.active')=1 AND EXISTS (SELECT 1 FROM json_each(?3,'$.member_emails') AS m JOIN crm_users AS u ON u.tenant_id=?1 AND u.email=m.value AND u.active=1 WHERE u.email NOT LIKE 'service:%')) OR NOT {work}) AND (?11 IS NULL OR EXISTS (SELECT 1 FROM crm_users u WHERE u.tenant_id=?1 AND u.email=?11 AND u.active=1 AND u.version=CAST(?12 AS INTEGER)))"
     );
     let sql = if create {
         format!(
@@ -267,6 +421,8 @@ pub(super) async fn mutate(
             JsValue::from_str(trace),
             JsValue::from_f64(if changed_roster { 1.0 } else { 0.0 }),
             JsValue::from_f64(previous as f64),
+            grant_evidence.as_ref().map(|grant| JsValue::from_str(&grant.email)).unwrap_or(JsValue::NULL),
+            grant_evidence.as_ref().map(|grant| JsValue::from_str(&grant.member_version.to_string())).unwrap_or(JsValue::NULL),
         ],
     )?
     .run()

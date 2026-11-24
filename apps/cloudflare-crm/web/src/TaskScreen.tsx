@@ -1,3 +1,4 @@
+import {TeamDistribution} from "./TeamDistribution";
 import {useCallback,useState} from "react";
 import {Button,Card,RecordPanel,FormGrid,PageHeader,SelectField,TextField} from "@ultimate-crm/ui";
 import type {Task} from "@ultimate-crm/client/cloudflare";
@@ -55,11 +56,12 @@ export function TaskScreen({initialAccountId="",focusedTaskId="",initialDealId="
       initialOverdue,initialAssigneeEmail,initialMine,initialTeamId]));
   const focused=useQuery(useCallback(async(signal:AbortSignal)=>{
     if(!focusedTaskId)return undefined;
-    const task=(await api.tasks.getTask({taskId:focusedTaskId},{signal})).task;
+    const response=await api.tasks.getTask({taskId:focusedTaskId},{signal});
+    const task=response.task;
     if(!task)throw Error("Задача не найдена");
     if(initialAccountId&&task.accountId!==initialAccountId)
       throw Error("Задача не принадлежит выбранному клиенту");
-    return task;
+    return {task,teamDistribution:response.teamDistribution};
   },[focusedTaskId,initialAccountId]));
   // A Deal-scoped view verifies the real tenant-bound Deal and its Account
   // before giving the user a named relationship context.
@@ -78,12 +80,12 @@ export function TaskScreen({initialAccountId="",focusedTaskId="",initialDealId="
     },{signal})).confirmedMutation,
     refresh:async()=>{await query.reload();await focused.reload();}
   });
-  const visibleTasks=focusedTaskId?(focused.data?[focused.data]:[]):query.data?.tasks??[];
+  const visibleTasks=focusedTaskId?(focused.data?[focused.data.task]:[]):query.data?.tasks??[];
   return <>
     <PageHeader title={focusedTaskId?"Карточка задачи":initialDealId?"Задачи сделки":"Задачи"}
       description={initialDealId?"Все задачи, связанные с конкретной сделкой.":"Работа по клиентам, назначение участников и задачи из сделок."}
       actions={focusedTaskId
-        ?<a href={scopeHref("tasks",initialAccountId||focused.data?.accountId||"")}>К задачам клиента</a>
+        ?<a href={scopeHref("tasks",initialAccountId||focused.data?.task.accountId||"")}>К задачам клиента</a>
         :initialDealId?<><a href={dealHref(initialDealId)}>К сделке</a>{" "}
           {isAdmin&&<Button disabled={mutation.busy||mutation.pending||!dealContext.data} onClick={()=>{
             const deal=dealContext.data;
@@ -145,6 +147,11 @@ export function TaskScreen({initialAccountId="",focusedTaskId="",initialDealId="
         t.owner?.owner.case==="teamId"?"Команда: "+(teams.find(team=>team.teamId===t.owner?.owner.value)?.name??t.owner.owner.value):"неизвестен"}</p>
       {t.relatedDealId&&<p>Связанная сделка: <a href={dealHref(t.relatedDealId)}>Открыть сделку</a></p>}
       {!focusedTaskId&&<p><a href={taskHref(t.taskId,t.accountId)}>Открыть карточку задачи</a></p>}
+      {focused.data?.teamDistribution&&<TeamDistribution key={t.taskId+":"+t.version} options={focused.data.teamDistribution}
+        pending={mutation.busy||mutation.pending} onChanged={mutation.changed} onAssign={(scope,email)=>void mutation.runIntent(()=>prepareMutation(api.tasks.updateTask,{
+          taskId:t.taskId,owner:{owner:{case:"assigneeIdentity",value:email}},teamDistribution:scope,
+          precondition:{expectedVersion:t.version,idempotencyKey:mutation.key}
+        },t.taskId),async()=>{await query.reload();await focused.reload();})}/>}
       {canClaim(t)&&t.status===TaskStatus.OPEN&&<Button disabled={mutation.busy||mutation.pending}
         onClick={()=>void mutation.runIntent(()=>prepareMutation(api.tasks.claimTask,{
           taskId:t.taskId,precondition:{idempotencyKey:mutation.key,expectedVersion:t.version}

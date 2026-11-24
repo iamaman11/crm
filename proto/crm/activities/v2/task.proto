@@ -82,6 +82,7 @@ message UpdateTaskRequest {
   optional string owner_team_id = 8;
   // Canonical Keep (absent) / Set (oneof). Never combine with old aliases.
   crm.core.v2.ActorOrTeamOwner owner = 9;
+  crm.core.v2.TeamDistributionScope team_distribution = 10;
 }
 
 message UpdateTaskResponse {
@@ -134,6 +135,7 @@ message GetTaskResponse {
   Task task = 1;
   // Present only for a proven original commit; legacy unknown is absent.
   crm.core.v2.MutationCommitEvidence confirmed_mutation = 2;
+  crm.core.v2.TeamDistributionOptions team_distribution = 3;
 }
 
 message ListTasksRequest {

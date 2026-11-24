@@ -110,6 +110,9 @@ impl task_wire::TaskService for TaskV2Service {
     ) -> ServiceResult<task_wire::UpdateTaskResponse> {
         use activity_tasks::Change;
         let input = req.to_owned_message();
+        if self.actor.role != "admin" && input.team_distribution.as_option().is_none() {
+            return Err(ConnectError::permission_denied("FORBIDDEN"));
+        }
         let id = Self::valid_id(&input.task_id)?;
         let (key, version) = wire_precondition(input.precondition.as_option(), false)?;
         let string_patch = |patch: Option<&core_v2::StringPatch>| -> std::result::Result<Change<String>, ConnectError> {
@@ -168,12 +171,16 @@ impl task_wire::TaskService for TaskV2Service {
                 owner_team_id,
                 priority,
                 due_at_unix_nanos,
+                team_distribution: input.team_distribution.as_option().map(|scope| access_teams::DistributionScope {
+                    team_id: scope.team_id.clone(),
+                    team_version: scope.team_version,
+                }),
             },
             &key,
             &self.d1()?,
             &self.actor.tenant,
             &id,
-            &self.actor.identity,
+            &self.actor,
             &self.request_id,
         )
         .await
@@ -302,8 +309,14 @@ impl task_wire::TaskService for TaskV2Service {
                 .map_err(|_| ConnectError::unavailable("TASK_RECEIPT_DECODE_FAILED"))?
             }
         };
+        let distribution = match item.owner() {
+            crm_activities::TaskOwner::Team(team) if item.status() == DomainTaskStatus::Open => access_teams::distribution_options(&db, &self.actor.tenant, team.as_str(), &self.actor.identity)
+                .await.map_err(|_| ConnectError::internal("ACCESS_TEAM_DISTRIBUTION_READ_FAILED"))?,
+            _ => None,
+        };
         RpcResponse::ok(task_wire::GetTaskResponse {
             task: Some(Self::convert(&item, &self.persisted_account(&id).await?)?).into(),
+            team_distribution: distribution.map(member_handlers::distribution_wire).into(),
             confirmed_mutation: confirmed_mutation.into(),
             ..Default::default()
         })

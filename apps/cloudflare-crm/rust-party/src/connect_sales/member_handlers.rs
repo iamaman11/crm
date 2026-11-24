@@ -91,6 +91,7 @@ impl member_wire::MemberService for MemberV2Service {
                 description: Some(input.description),
                 active: Some(true),
                 roster: input.roster.as_option().map(|v| v.member_emails.clone()),
+                queue_coordinator: None,
                 expected: None,
             },
             &key,
@@ -120,6 +121,7 @@ impl member_wire::MemberService for MemberV2Service {
             && input.description.is_none()
             && input.active.is_none()
             && input.roster.as_option().is_none()
+            && input.queue_coordinator.as_option().is_none()
         {
             return Err(ConnectError::invalid_argument("ACCESS_TEAM_NO_CHANGES"));
         }
@@ -132,6 +134,10 @@ impl member_wire::MemberService for MemberV2Service {
                 description: input.description,
                 active: input.active,
                 roster: input.roster.as_option().map(|v| v.member_emails.clone()),
+                queue_coordinator: input.queue_coordinator.as_option().map(|change| access_teams::QueueCoordinatorChange {
+                    email: change.email.clone(),
+                    enabled: change.enabled,
+                }),
                 expected,
             },
             &key,
@@ -296,6 +302,18 @@ impl member_wire::MemberService for MemberV2Service {
     }
 }
 
+pub(super) fn distribution_wire(options: access_teams::DistributionOptions) -> core_v2::TeamDistributionOptions {
+    core_v2::TeamDistributionOptions {
+        scope: Some(core_v2::TeamDistributionScope {
+            team_id: options.scope.team_id,
+            team_version: options.scope.team_version,
+            ..Default::default()
+        }).into(),
+        eligible_member_emails: options.eligible_member_emails,
+        ..Default::default()
+    }
+}
+
 fn team_wire(team: access_teams::Team) -> member_wire::Team {
     member_wire::Team {
         team_id: team.team_id,
@@ -303,6 +321,11 @@ fn team_wire(team: access_teams::Team) -> member_wire::Team {
         description: team.description,
         active: team.active,
         member_emails: team.member_emails,
+        queue_coordinators: team.queue_coordinators.into_iter().map(|grant| member_wire::TeamQueueCoordinator {
+            email: grant.email,
+            member_version: grant.member_version,
+            ..Default::default()
+        }).collect(),
         version: team.version,
         ..Default::default()
     }

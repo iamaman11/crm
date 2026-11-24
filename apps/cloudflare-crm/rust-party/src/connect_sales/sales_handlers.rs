@@ -3085,6 +3085,10 @@ impl sale_wire::DealService for SalesV2Service {
                 primary_contact,
                 expected_close_date,
                 owner: Self::owner_scope(input.owner.as_option())?,
+                team_distribution: input.team_distribution.as_option().map(|scope| access_teams::DistributionScope {
+                    team_id: scope.team_id.clone(),
+                    team_version: scope.team_version,
+                }),
             },
             &key,
             &self.d1()?,
@@ -3541,8 +3545,14 @@ impl sale_wire::DealService for SalesV2Service {
                     .as_ref()
                     .is_some_and(|grant| grant.role.permits(permission))
         };
+        let distribution = match deal.owner() {
+            crm_sales::DealOwner::Team(team) if open => access_teams::distribution_options(&db, &self.tenant, team.as_str(), &self.actor)
+                .await.map_err(|_| ConnectError::internal("ACCESS_TEAM_DISTRIBUTION_READ_FAILED"))?,
+            _ => None,
+        };
         RpcResponse::ok(sale_wire::GetDealResponse {
             deal: Some(Self::convert(&deal)?).into(),
+            team_distribution: distribution.map(member_handlers::distribution_wire).into(),
             confirmed_mutation: confirmed_mutation.into(),
             capabilities: Some(sale_wire::DealCapabilities {
                 edit: open && permits(crm_sales::OpportunityPermission::Edit),

@@ -1,5 +1,5 @@
 import {useState} from "react";
-import {Button,TextField,ScrollTable} from "@ultimate-crm/ui";
+import {Button,TextField,SelectField,ScrollTable} from "@ultimate-crm/ui";
 import type {Member,Team} from "@ultimate-crm/client/cloudflare";
 import {api,newId} from "./api";
 import {useMutation,prepareMutation,MutationNotice,QueryNotice} from "./hooks";
@@ -19,6 +19,9 @@ export function TeamWorkspace({query,members,isAdmin,actor,onChanged}:{
   const [active,setActive]=useState(true);
   const [roster,setRoster]=useState<string[]>([]);
   const [search,setSearch]=useState("");
+  const [coordinatorTeam,setCoordinatorTeam]=useState<Team>();
+  const [coordinatorEmail,setCoordinatorEmail]=useState("");
+  const [coordinatorEnabled,setCoordinatorEnabled]=useState(true);
   const mutation=useMutation({
     storageKey:"crm.team.pending.v1",
     lookup:async({resourceId,key},signal)=>(await api.members.getTeam({
@@ -26,9 +29,9 @@ export function TeamWorkspace({query,members,isAdmin,actor,onChanged}:{
     refresh:async()=>{await query.reload();await onChanged();}
   });
   const pending=mutation.busy||mutation.pending;
-  const close=()=>{setEditing(undefined);setCreating(false);};
+  const close=()=>{setEditing(undefined);setCreating(false);setCoordinatorTeam(undefined);};
   const start=(team?:Team)=>{
-    setEditing(team);setCreating(!team);setDraftId(newId());
+    setCoordinatorTeam(undefined);setEditing(team);setCreating(!team);setDraftId(newId());
     setName(team?.name??"");setDescription(team?.description??"");
     setActive(team?.active??true);setRoster(team?.memberEmails??[]);mutation.changed();
   };
@@ -51,15 +54,40 @@ export function TeamWorkspace({query,members,isAdmin,actor,onChanged}:{
           {team.description&&<p>{team.description}</p>}</th>
         <td>{team.active?"Активна":"Архив"}</td>
         <td><ul>{team.memberEmails.map(email=><li key={email}>{email}
-          {human.find(m=>m.email===email)?.active?"":" · неактивен"}</li>)}</ul></td>
+          {human.find(m=>m.email===email)?.active?"":" · неактивен"}
+          {team.queueCoordinators.some(grant=>grant.email===email)&&
+            <> · Координатор очереди (версия участника {team.queueCoordinators.find(grant=>grant.email===email)?.memberVersion.toString()})</>}
+          </li>)}</ul></td>
         <td><a href={taskTeamHref(team.teamId)}>Задачи команды</a>{" · "}
           <a href={workdayHref("",false,team.teamId)}>Рабочий день команды</a>{" · "}
           <a href={salesPipelineHref("","","","team:"+team.teamId)}>Сделки команды</a>{" · "}
           <a href={intelligenceHref({owner:"team:"+team.teamId})}>Портфель команды</a></td>
-        <td>{isAdmin&&<Button variant="secondary" disabled={pending}
-          onClick={()=>start(team)}>Изменить команду</Button>}</td>
+        <td>{isAdmin&&<><Button variant="secondary" disabled={pending}
+          onClick={()=>start(team)}>Изменить команду</Button>
+          {team.active&&<Button variant="secondary" disabled={pending} onClick={()=>{
+            close();setCoordinatorTeam(team);setCoordinatorEmail("");setCoordinatorEnabled(true);mutation.changed();
+          }}>Полномочия координатора</Button>}</>}</td>
       </tr>)}</tbody></table>
     </ScrollTable>
+    {isAdmin&&coordinatorTeam&&<form aria-label="Координатор очереди" onSubmit={event=>{
+      event.preventDefault();const team=coordinatorTeam;
+      void mutation.runIntent(()=>prepareMutation(api.members.updateTeam,{
+        teamId:team.teamId,queueCoordinator:{email:coordinatorEmail,enabled:coordinatorEnabled},
+        precondition:{idempotencyKey:mutation.key,expectedVersion:team.version}
+      },team.teamId),async()=>{close();await query.reload();await onChanged();});
+    }}>
+      <h3>Координатор очереди: {coordinatorTeam.name}</h3>
+      <p>Распределение открытых задач и сделок из пула команды только её активным сотрудникам. Не даёт административных прав или права менять бизнес-поля.</p>
+      <SelectField label="Сотрудник-координатор" value={coordinatorEmail} onChange={event=>{setCoordinatorEmail(event.target.value);mutation.changed();}} required>
+        <option value="">Выберите сотрудника</option>
+        {coordinatorTeam.memberEmails.filter(email=>human.some(m=>m.email===email&&m.active)||coordinatorTeam.queueCoordinators.some(g=>g.email===email)).map(email=><option key={email} value={email}>{email}</option>)}
+      </SelectField>
+      <SelectField label="Действие с полномочиями" value={coordinatorEnabled?"grant":"revoke"} onChange={event=>{setCoordinatorEnabled(event.target.value==="grant");mutation.changed();}}>
+        <option value="grant">Назначить или обновить</option><option value="revoke">Отозвать</option>
+      </SelectField>
+      <Button type="submit" disabled={!coordinatorEmail||pending}>Сохранить полномочия координатора</Button>{" "}
+      <Button variant="secondary" type="button" disabled={pending} onClick={close}>Отмена</Button>
+    </form>}
     {isAdmin&&(creating||editing)&&<form aria-label="Настройка команды" onSubmit={event=>{
       event.preventDefault();
       const target=editing;

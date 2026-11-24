@@ -85,6 +85,8 @@ pub(super) struct UpdateInput {
     pub(super) owner_team_id: Option<String>,
     pub(super) priority: Change<Priority>,
     pub(super) due_at_unix_nanos: Change<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) team_distribution: Option<super::access_teams::DistributionScope>,
 }
 pub(super) struct MutationOutcome {
     pub(super) task: Task,
@@ -418,9 +420,33 @@ pub(super) async fn update_typed(
     db: &D1Database,
     tenant: &str,
     id: &str,
-    actor: &str,
+    principal: &super::access::Actor,
     trace: &str,
 ) -> Result<std::result::Result<MutationOutcome, MutationFailure>> {
+    let actor = principal.identity.as_str();
+    let distribution = input.team_distribution.clone();
+    let distribution_target = if let Some(scope) = distribution.as_ref() {
+        let Change::Set(target) = &input.owner else {
+            return Ok(Err(MutationFailure::domain("ACTIVITIES_DISTRIBUTION_OWNER_REQUIRED", ErrorCode::InvalidArgument)));
+        };
+        if !matches!(&input.subject, Change::Keep)
+            || !matches!(&input.description, Change::Keep)
+            || !matches!(&input.priority, Change::Keep)
+            || !matches!(&input.due_at_unix_nanos, Change::Keep)
+            || input.owner_team_id.is_some()
+        {
+            return Ok(Err(MutationFailure::domain("ACTIVITIES_DISTRIBUTION_OWNER_ONLY", ErrorCode::PermissionDenied)));
+        }
+        if !super::access_teams::may_distribute(db, tenant, actor, scope, target).await? {
+            return Ok(Err(MutationFailure::domain("ACTIVITIES_DISTRIBUTION_DENIED", ErrorCode::PermissionDenied)));
+        }
+        Some(target.clone())
+    } else {
+        if principal.role != "admin" {
+            return Ok(Err(MutationFailure::domain("FORBIDDEN", ErrorCode::PermissionDenied)));
+        }
+        None
+    };
     if !(8..=120).contains(&key.len()) {
         return Ok(Err(MutationFailure::domain(
             "IDEMPOTENCY_KEY_REQUIRED",
@@ -439,7 +465,11 @@ pub(super) async fn update_typed(
             ErrorCode::InvalidArgument,
         )));
     }
-    let digest = hash("update", id, &input)?;
+    let digest = if distribution.is_some() {
+        hash("team_distribution", id, &(actor, &input))?
+    } else {
+        hash("update", id, &input)?
+    };
     let current = stored(db, tenant, id).await;
     if let Some(previous) = prior(db, tenant, key).await? {
         if previous.digest != digest {
@@ -468,6 +498,11 @@ pub(super) async fn update_typed(
             ErrorCode::NotFound,
         )));
     };
+    if let Some(scope) = distribution.as_ref() {
+        if task.status() != TaskStatus::Open || !matches!(task.owner(), TaskOwner::Team(team) if team.as_str() == scope.team_id) {
+            return Ok(Err(MutationFailure::domain("ACTIVITIES_DISTRIBUTION_SOURCE_CHANGED", ErrorCode::PermissionDenied)));
+        }
+    }
     let expected_version = input.expected_version;
     let mut assignee = None;
     let team_id = input.owner_team_id.as_deref();
@@ -559,14 +594,11 @@ pub(super) async fn update_typed(
     let saved = state(&task)?;
     // One CAS write; an explicit new assignee must still be active at commit.
     // The existing D1 trigger atomically stores receipt and audit.
-    let update = format!(
+    let mut update = format!(
         "UPDATE crm_activity_task_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=? WHERE tenant=? AND id=? AND version=? AND (? IS NULL OR EXISTS (SELECT 1 FROM crm_users WHERE tenant_id=? AND email=? AND active=1)) AND (? IS NULL OR {})",
         super::access_teams::ELIGIBLE
     );
-    let changed = bind(
-        db,
-        &update,
-        &[
+    let mut values = vec![
             JsValue::from_str(&saved),
             JsValue::from_f64(task.version() as f64),
             JsValue::from_str(key),
@@ -588,10 +620,19 @@ pub(super) async fn update_typed(
             team_id.map(JsValue::from_str).unwrap_or(JsValue::NULL),
             JsValue::from_str(tenant),
             team_id.map(JsValue::from_str).unwrap_or(JsValue::NULL),
-        ],
-    )?
-    .run()
-    .await;
+    ];
+    if let (Some(scope), Some(target)) = (distribution.as_ref(), distribution_target.as_deref()) {
+        super::access_teams::append_distribution_guard(
+            &mut update,
+            &mut values,
+            super::access_teams::DistributionOwner::Task,
+            tenant,
+            actor,
+            scope,
+            target,
+        );
+    }
+    let changed = bind(db, &update, &values)?.run().await;
     finish_write(
         prior(db, tenant, key),
         trace,

@@ -76,6 +76,16 @@ message Team {
   bool active = 4;
   repeated string member_emails = 5;
   int64 version = 6;
+  repeated TeamQueueCoordinator queue_coordinators = 7;
+}
+// Fixed least-privilege template, not a tenant-wide role.
+message TeamQueueCoordinator {
+  string email = 1;
+  int64 member_version = 2;
+}
+message TeamQueueCoordinatorChange {
+  string email = 1;
+  bool enabled = 2;
 }
 message TeamRoster {
   repeated string member_emails = 1;
@@ -115,6 +125,7 @@ message UpdateTeamRequest {
   // Present means replace the complete roster at the expected version.
   TeamRoster roster = 5;
   crm.core.v2.MutationPrecondition precondition = 6;
+  TeamQueueCoordinatorChange queue_coordinator = 7;
 }
 message UpdateTeamResponse {
   Team team = 1;

@@ -16,6 +16,7 @@ import {InteractionTimeline} from "./InteractionTimeline";
 import {allOwners,ownerLabel} from "./ownerCatalog";
 import {RoutingExplanation} from "./SalesRouting";
 import {enumValue} from "./enumFields";
+import {TeamDistribution} from "./TeamDistribution";
 
 const opportunityRoles=[OpportunityTeamRole.OBSERVER,OpportunityTeamRole.CONTRIBUTOR,OpportunityTeamRole.LEAD] as const;
 function opportunityRoleText(role:OpportunityTeamRole):string {
@@ -205,10 +206,15 @@ export function DealDetails({dealId,currencies,pipelines,onEdit,onAdvance,onClos
     const contact=deal.primaryContactId?
       (await api.contactPoints.getContactPoint({contactPointId:deal.primaryContactId},{signal})).contactPoint:
       undefined;
-    return {deal,contact,capabilities:response.capabilities};
+    return {deal,contact,capabilities:response.capabilities,teamDistribution:response.teamDistribution};
   },[dealId]));
   const deal:Deal|undefined=details.data?.deal;
   const capabilities=details.data?.capabilities;
+  const distribution=useMutation({
+    storageKey:"crm.deal.distribution.pending.v1:"+dealId,
+    lookup:async({resourceId,key},signal)=>(await api.deals.getDeal({dealId:resourceId,receiptIdempotencyKey:key},{signal})).confirmedMutation,
+    refresh:async()=>{await details.reload();}
+  });
   const owners=useQuery(useCallback(allOwners,[]));
   const choices=owners.data?.choices??[];
   // The parent SalesScreen already owns the paginated ListPipelines read.
@@ -243,6 +249,12 @@ export function DealDetails({dealId,currencies,pipelines,onEdit,onAdvance,onClos
       </div>:onReopen&&capabilities?.reopen?<Button variant="secondary" onClick={onReopen}>
         Открыть повторно
       </Button>:null}
+      {details.data?.teamDistribution&&<TeamDistribution key={deal.dealId+":"+deal.version} options={details.data.teamDistribution}
+        pending={distribution.busy||distribution.pending} onChanged={distribution.changed} onAssign={(scope,email)=>void distribution.runIntent(()=>prepareMutation(api.deals.updateDeal,{
+          dealId:deal.dealId,owner:{owner:{case:"assigneeIdentity",value:email}},teamDistribution:scope,
+          precondition:{expectedVersion:deal.version,idempotencyKey:distribution.key}
+        },deal.dealId),async()=>{await details.reload();})}/>}
+      <MutationNotice state={distribution}/>
       <OpportunityTeam deal={deal} canManage={capabilities?.manageOpportunityTeam??false} choices={choices} refresh={details.reload}/>
       <DealHistory key={deal.dealId+":"+deal.version} dealId={deal.dealId} accountId={deal.accountId} pipeline={pipeline} currencies={currencies} choices={choices}/>
       <InteractionTimeline accountId={deal.accountId} dealId={deal.dealId}/>

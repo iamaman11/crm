@@ -45,6 +45,16 @@ message ActorOrTeamOwner {
   }
 }
 
+// Narrow distribution from an existing team-owned open queue.
+message TeamDistributionScope {
+  string team_id = 1;
+  int64 team_version = 2;
+}
+message TeamDistributionOptions {
+  TeamDistributionScope scope = 1;
+  repeated string eligible_member_emails = 2;
+}
+
 message StringPatch {
   oneof operation {
     string set = 1;

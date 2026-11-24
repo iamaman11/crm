@@ -117,6 +117,8 @@ pub(super) struct UpdateInput {
     pub(super) expected_close_date: FieldChange<DateInput>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(super) owner: Option<SalesOwnerScope>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) team_distribution: Option<super::access_teams::DistributionScope>,
 }
 #[derive(Deserialize)]
 struct Row {
@@ -693,31 +695,6 @@ pub(super) struct ParticipantInput {
     pub role: Option<crm_sales::OpportunityTeamRole>,
 }
 
-#[derive(Deserialize)]
-struct MemberVersion {
-    version: String,
-}
-
-async fn member_version(db: &D1Database, tenant: &str, email: &str) -> Result<Option<i64>> {
-    if super::access_members::email(email).ok().as_deref() != Some(email) {
-        return Ok(None);
-    }
-    let value = bind(
-        db,
-        "SELECT CAST(version AS TEXT) version FROM crm_users WHERE tenant_id=? AND email=? AND active=1",
-        &[JsValue::from_str(tenant), JsValue::from_str(email)],
-    )?
-    .first::<MemberVersion>(None)
-    .await?;
-    value
-        .map(|row| {
-            row.version
-                .parse()
-                .map_err(|_| worker::Error::RustError("invalid enrollment version".into()))
-        })
-        .transpose()
-}
-
 pub(super) async fn active_participant(
     db: &D1Database,
     tenant: &str,
@@ -728,7 +705,7 @@ pub(super) async fn active_participant(
         return Ok(None);
     };
     Ok(
-        (member_version(db, tenant, actor).await? == Some(grant.member_version))
+        (super::access_members::member_version(db, tenant, actor).await? == Some(grant.member_version))
             .then(|| grant.clone()),
     )
 }
@@ -803,7 +780,7 @@ pub(super) async fn set_participant(
         ));
     }
     let participant = if let Some(role) = input.role {
-        let Some(member_version) = member_version(db, tenant, &input.email).await? else {
+        let Some(member_version) = super::access_members::member_version(db, tenant, &input.email).await? else {
             return Ok(rejected(
                 "SALES_OPPORTUNITY_MEMBER_INELIGIBLE",
                 ErrorCategory::InvalidArgument,
@@ -882,7 +859,27 @@ pub(super) async fn update_typed(
             ErrorCategory::InvalidArgument,
         ));
     }
-    if !admin && input.owner.is_some() {
+    let distribution = input.team_distribution.clone();
+    let distribution_target = if let Some(scope) = distribution.as_ref() {
+        let Some(SalesOwnerScope::Actor(target)) = input.owner.as_ref() else {
+            return Ok(rejected("SALES_DISTRIBUTION_OWNER_REQUIRED", ErrorCategory::InvalidArgument));
+        };
+        if input.name.is_some() || input.clear_name == Some(true)
+            || input.amount_minor_units.is_some() || input.currency.is_some() || input.clear_amount == Some(true)
+            || input.probability_bps.is_some() || input.use_stage_probability || input.forecast_category.is_some()
+            || !matches!(&input.primary_contact, FieldChange::Keep)
+            || !matches!(&input.expected_close_date, FieldChange::Keep)
+        {
+            return Ok(rejected("SALES_DISTRIBUTION_OWNER_ONLY", ErrorCategory::Authorization));
+        }
+        if !super::access_teams::may_distribute(db, tenant, actor, scope, target).await? {
+            return Ok(rejected("SALES_DISTRIBUTION_DENIED", ErrorCategory::Authorization));
+        }
+        Some(target.clone())
+    } else {
+        None
+    };
+    if !admin && input.owner.is_some() && distribution.is_none() {
         return Ok(rejected(
             "SALES_DELEGATION_OWNER_DENIED",
             ErrorCategory::Authorization,
@@ -899,11 +896,17 @@ pub(super) async fn update_typed(
     } else {
         crm_sales::OpportunityPermission::Edit
     };
-    let grant = match delegation(db, tenant, id, actor, admin, permission).await? {
-        Ok(grant) => grant,
-        Err(error) => return Ok(Err(error)),
+    let grant = if distribution.is_some() {
+        None
+    } else {
+        match delegation(db, tenant, id, actor, admin, permission).await? {
+            Ok(grant) => grant,
+            Err(error) => return Ok(Err(error)),
+        }
     };
-    let digest = if grant.is_some() {
+    let digest = if distribution.is_some() {
+        hash("team_distribution", id, &(actor, &input))?
+    } else if grant.is_some() {
         hash("update_delegated", id, &(actor, &input))?
     } else {
         hash("update", id, &input)?
@@ -916,6 +919,11 @@ pub(super) async fn update_typed(
     let Some(mut deal) = load(db, tenant, id).await? else {
         return Ok(rejected("NOT_FOUND", ErrorCategory::NotFound));
     };
+    if let Some(scope) = distribution.as_ref() {
+        if deal.status() != DealStatus::Open || !matches!(deal.owner(), DealOwner::Team(team) if team.as_str() == scope.team_id) {
+            return Ok(rejected("SALES_DISTRIBUTION_SOURCE_CHANGED", ErrorCategory::Authorization));
+        }
+    }
     if input.clear_name == Some(true) && input.name.is_some() {
         return Ok(rejected(
             "SALES_NAME_UPDATE_CONFLICT",
@@ -1070,6 +1078,17 @@ pub(super) async fn update_typed(
         JsValue::from_f64(input.expected_version as f64),
     ];
     owner_parameters(&mut values, tenant, input.owner.as_ref());
+    if let (Some(scope), Some(target)) = (distribution.as_ref(), distribution_target.as_deref()) {
+        super::access_teams::append_distribution_guard(
+            &mut sql,
+            &mut values,
+            super::access_teams::DistributionOwner::Deal,
+            tenant,
+            actor,
+            scope,
+            target,
+        );
+    }
     append_delegation_guard(&mut sql, &mut values, tenant, grant.as_ref());
     let result = bind(db, &sql, &values)?.run().await;
     let count = result.as_ref().ok().and_then(changes);

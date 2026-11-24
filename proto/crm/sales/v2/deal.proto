@@ -141,6 +141,7 @@ message UpdateDealRequest {
   bool use_stage_probability = 8;
   optional ForecastCategory forecast_category = 9;
   crm.core.v2.ActorOrTeamOwner owner = 10;
+  crm.core.v2.TeamDistributionScope team_distribution = 11;
 }
 
 message UpdateDealResponse {
@@ -271,6 +272,7 @@ message GetDealResponse {
   // proof that a previously uncertain command was rejected or rolled back.
   crm.core.v2.MutationCommitEvidence confirmed_mutation = 2;
   DealCapabilities capabilities = 3;
+  crm.core.v2.TeamDistributionOptions team_distribution = 4;
 }
 
 message ListDealsRequest {
