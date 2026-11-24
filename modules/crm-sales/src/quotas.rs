@@ -334,10 +334,7 @@ impl QuotaActuals {
         {
             return Err(invalid("SALES_QUOTA_TOTAL_INVALID"));
         }
-        if group
-            .currency
-            .is_some_and(|value| value != currency)
-        {
+        if group.currency.is_some_and(|value| value != currency) {
             return Ok(false);
         }
         if let Some(dimension) = dimension {

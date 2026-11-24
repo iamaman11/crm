@@ -1,8 +1,8 @@
 //! Sales scorecards: one historical credit axis, exact calendar buckets and
 //! optional matching goals. Storage supplies grouped facts, never business totals.
 use crate::{
-    QuotaActuals, QuotaCadence, QuotaDate, QuotaFactGroup, QuotaPeriod, SalesOwnerScope, SalesQuota,
-    SalesQuotaScope,
+    QuotaActuals, QuotaCadence, QuotaDate, QuotaFactGroup, QuotaPeriod, SalesOwnerScope,
+    SalesQuota, SalesQuotaScope,
 };
 use crm_core_contracts::CurrencyCode;
 use crm_module_sdk::{ErrorCategory, SdkError};
@@ -37,7 +37,10 @@ impl ScorecardAxis {
         matches!(
             (self, scope),
             (Self::Organization, SalesQuotaScope::Tenant)
-                | (Self::Actor, SalesQuotaScope::Owner(SalesOwnerScope::Actor(_)))
+                | (
+                    Self::Actor,
+                    SalesQuotaScope::Owner(SalesOwnerScope::Actor(_))
+                )
                 | (Self::Team, SalesQuotaScope::Owner(SalesOwnerScope::Team(_)))
                 | (Self::Territory, SalesQuotaScope::Territory(_))
         )
@@ -128,7 +131,9 @@ impl Scorecard {
         let date_error = |_| invalid("SALES_SCORECARD_PERIOD_INVALID");
         let mut buckets = Vec::with_capacity(period_count);
         for _ in 0..period_count {
-            let after = start.checked_add_months_clamped(months).map_err(date_error)?;
+            let after = start
+                .checked_add_months_clamped(months)
+                .map_err(date_error)?;
             let end = after.checked_add_days(-1).map_err(date_error)?;
             let period =
                 QuotaPeriod::new(to_date(start), to_date(end), time_zone.clone(), cadence)?;
@@ -179,7 +184,11 @@ impl Scorecard {
 
     /// Storage provides a homogeneous group with the selected axis's frozen
     /// credit. The same quota owner calculation handles signs and currencies.
-    pub fn observe_group(&mut self, bucket: usize, group: QuotaFactGroup<'_>) -> Result<(), SdkError> {
+    pub fn observe_group(
+        &mut self,
+        bucket: usize,
+        group: QuotaFactGroup<'_>,
+    ) -> Result<(), SdkError> {
         let row = self
             .buckets
             .get_mut(bucket)
