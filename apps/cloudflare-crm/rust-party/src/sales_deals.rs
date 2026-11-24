@@ -930,7 +930,9 @@ pub(super) async fn close_typed(
 /// Shared SQL projection of current eligible team evidence. Arguments are
 /// static SQL expressions, never user-supplied values.
 pub(super) fn credit_teams_sql(tenant: &str, kind: &str, id: &str) -> String {
-    format!("SELECT COALESCE(json_group_array(json_object('id',id,'name',name,'version',version)),'[]') AS snapshot FROM (SELECT t.id,json_extract(t.state,'$.name') name,t.version FROM crm_access_teams t WHERE t.tenant={tenant} AND (({kind}='team' AND t.id={id}) OR ({kind}='actor' AND json_extract(t.state,'$.active')=1 AND EXISTS (SELECT 1 FROM crm_users u WHERE u.tenant_id=t.tenant AND u.email={id} AND u.active=1 AND u.email NOT LIKE 'service:%') AND EXISTS (SELECT 1 FROM json_each(t.state,'$.member_emails') m WHERE m.value={id}))) ORDER BY t.id)")
+    format!(
+        "SELECT COALESCE(json_group_array(json_object('id',id,'name',name,'version',version)),'[]') AS snapshot FROM (SELECT t.id,json_extract(t.state,'$.name') name,t.version FROM crm_access_teams t WHERE t.tenant={tenant} AND (({kind}='team' AND t.id={id}) OR ({kind}='actor' AND json_extract(t.state,'$.active')=1 AND EXISTS (SELECT 1 FROM crm_users u WHERE u.tenant_id=t.tenant AND u.email={id} AND u.active=1 AND u.email NOT LIKE 'service:%') AND EXISTS (SELECT 1 FROM json_each(t.state,'$.member_emails') m WHERE m.value={id}))) ORDER BY t.id)"
+    )
 }
 
 #[derive(Deserialize)]

@@ -49,7 +49,10 @@ fn membership_parameters(tenant: &str, quota: &SalesQuota) -> Result<Vec<JsValue
         JsValue::from_str(tenant),
         JsValue::from_str(&start.to_string()),
         JsValue::from_str(&end.to_string()),
-        quota.pipeline_id.as_deref().map_or(JsValue::NULL, JsValue::from_str),
+        quota
+            .pipeline_id
+            .as_deref()
+            .map_or(JsValue::NULL, JsValue::from_str),
     ])
 }
 
@@ -67,7 +70,9 @@ pub(super) async fn membership_count(
 ) -> Result<u64> {
     let mut args = membership_parameters(tenant, quota)?;
     args.extend([JsValue::from_str(captured_at), JsValue::from_str(sequence)]);
-    let sql = format!("SELECT CAST(({MEMBERSHIP} AND e.occurred_at_unix_nanos<=CAST(?5 AS INTEGER) AND o.sequence<=CAST(?6 AS INTEGER)) AS TEXT) count");
+    let sql = format!(
+        "SELECT CAST(({MEMBERSHIP} AND e.occurred_at_unix_nanos<=CAST(?5 AS INTEGER) AND o.sequence<=CAST(?6 AS INTEGER)) AS TEXT) count"
+    );
     bind(db, &sql, &args)?
         .first::<CountRow>(None)
         .await?
@@ -98,7 +103,10 @@ pub(super) async fn snapshot(
     let mut snapshot = Snapshot {
         captured_at: first.captured_at.parse().map_err(|_| invalid())?,
         event_sequence: first.event_sequence.parse().map_err(|_| invalid())?,
-        actual_candidate_count: first.actual_candidate_count.parse().map_err(|_| invalid())?,
+        actual_candidate_count: first
+            .actual_candidate_count
+            .parse()
+            .map_err(|_| invalid())?,
         sources: Vec::new(),
     };
     for row in rows {
@@ -106,16 +114,31 @@ pub(super) async fn snapshot(
             continue;
         };
         let deal = sales_deals::decode(&state)?;
-        let assignment = row.assignment.as_deref().map(SalesAccountAssignment::decode).transpose().map_err(|_| invalid())?;
+        let assignment = row
+            .assignment
+            .as_deref()
+            .map(SalesAccountAssignment::decode)
+            .transpose()
+            .map_err(|_| invalid())?;
         let assigned = assignment.as_ref().filter(|value| !value.archived);
-        let territory = row.territory.as_deref().map(SalesTerritory::decode).transpose().map_err(|_| invalid())?;
-        let territory = match (assigned.and_then(|value| value.territory_id.as_deref()), territory) {
+        let territory = row
+            .territory
+            .as_deref()
+            .map(SalesTerritory::decode)
+            .transpose()
+            .map_err(|_| invalid())?;
+        let territory = match (
+            assigned.and_then(|value| value.territory_id.as_deref()),
+            territory,
+        ) {
             (None, None) => None,
-            (Some(id), Some(value)) if !value.archived && value.territory_id == id => Some(CommercialDimension {
-                id: value.territory_id,
-                name: value.name,
-                version: value.version,
-            }),
+            (Some(id), Some(value)) if !value.archived && value.territory_id == id => {
+                Some(CommercialDimension {
+                    id: value.territory_id,
+                    name: value.name,
+                    version: value.version,
+                })
+            }
             _ => return Err(invalid()),
         };
         let context = CloseCreditContext {
@@ -124,7 +147,9 @@ pub(super) async fn snapshot(
             assignment_version: assigned.map(|value| value.version),
             catalog_version: None,
         };
-        if let Some(source) = ForecastSource::capture(quota, &deal, context).map_err(|_| invalid())? {
+        if let Some(source) =
+            ForecastSource::capture(quota, &deal, context).map_err(|_| invalid())?
+        {
             snapshot.sources.push(source);
         }
     }
@@ -136,11 +161,20 @@ struct StateRow {
     state: String,
 }
 
-pub(super) async fn get(db: &D1Database, tenant: &str, id: &str) -> Result<Option<PerformanceReport>> {
-    bind(db, "SELECT state FROM crm_sales_performance_reports WHERE tenant=? AND id=?",
-        &[JsValue::from_str(tenant), JsValue::from_str(id)])?
-        .first::<StateRow>(None).await?
-        .map(|row| decode(&row.state)).transpose()
+pub(super) async fn get(
+    db: &D1Database,
+    tenant: &str,
+    id: &str,
+) -> Result<Option<PerformanceReport>> {
+    bind(
+        db,
+        "SELECT state FROM crm_sales_performance_reports WHERE tenant=? AND id=?",
+        &[JsValue::from_str(tenant), JsValue::from_str(id)],
+    )?
+    .first::<StateRow>(None)
+    .await?
+    .map(|row| decode(&row.state))
+    .transpose()
 }
 
 pub(super) struct SaveContext<'a> {
@@ -159,16 +193,29 @@ pub(super) struct Saved {
 }
 
 pub(super) fn digest(report_id: &str, name: &str, quota_id: &str, quota_version: i64) -> String {
-    format!("{:x}", Sha256::digest(serde_json::to_vec(&(report_id, name, quota_id, quota_version)).expect("typed report intent")))
+    format!(
+        "{:x}",
+        Sha256::digest(
+            serde_json::to_vec(&(report_id, name, quota_id, quota_version))
+                .expect("typed report intent")
+        )
+    )
 }
 
-pub(super) async fn replay(ctx: &SaveContext<'_>) -> Result<Option<std::result::Result<Saved, Failure>>> {
+pub(super) async fn replay(
+    ctx: &SaveContext<'_>,
+) -> Result<Option<std::result::Result<Saved, Failure>>> {
     let prior = bind(ctx.db, "SELECT idem_digest AS digest,state,request_id AS original_request_id FROM crm_sales_performance_reports WHERE tenant=? AND idem_key=?",
         &[JsValue::from_str(ctx.tenant), JsValue::from_str(ctx.key)])?
         .first::<d1_write::Receipt>(None).await?;
-    let Some(prior) = prior else { return Ok(None); };
+    let Some(prior) = prior else {
+        return Ok(None);
+    };
     if prior.digest != ctx.digest {
-        return Ok(Some(Err(Failure::domain("IDEMPOTENCY_CONFLICT", ErrorCode::Aborted))));
+        return Ok(Some(Err(Failure::domain(
+            "IDEMPOTENCY_CONFLICT",
+            ErrorCode::Aborted,
+        ))));
     }
     Ok(Some(Ok(Saved {
         report: decode(&prior.state)?,
@@ -183,7 +230,9 @@ pub(super) async fn save(
     sources: &[ForecastSource],
 ) -> Result<std::result::Result<Saved, Failure>> {
     report.validate().map_err(|_| invalid())?;
-    if report.forecast.source_count() != Some(sources.len() as u64) || report.captured_by != ctx.actor {
+    if report.forecast.source_count() != Some(sources.len() as u64)
+        || report.captured_by != ctx.actor
+    {
         return Err(invalid());
     }
     let state = serde_json::to_string(&report).map_err(|_| invalid())?;
@@ -217,7 +266,9 @@ pub(super) async fn save(
     }
     let count = writes.len();
     let result = ctx.db.batch(writes).await;
-    let confirmed = result.as_ref().ok()
+    let confirmed = result
+        .as_ref()
+        .ok()
         .filter(|rows| rows.len() == count && rows.iter().all(worker::d1::D1Result::success))
         .and_then(|rows| rows.first())
         .and_then(|row| row.meta().ok().flatten()?.changes);
@@ -228,13 +279,18 @@ pub(super) async fn save(
             replayed: false,
         }));
     }
-    let failure = |reason| Failure::Write(super::diagnostics::MutationFailure::CommitUnconfirmed {
-        code: "SALES_PERFORMANCE_REPORT_WRITE_UNCONFIRMED",
-        reason,
-    });
+    let failure = |reason| {
+        Failure::Write(super::diagnostics::MutationFailure::CommitUnconfirmed {
+            code: "SALES_PERFORMANCE_REPORT_WRITE_UNCONFIRMED",
+            reason,
+        })
+    };
     match replay(ctx).await {
         Ok(Some(saved)) => Ok(saved),
-        Ok(None) if confirmed == Some(0) => Ok(Err(Failure::domain("SALES_PERFORMANCE_REPORT_CONFLICT", ErrorCode::Aborted))),
+        Ok(None) if confirmed == Some(0) => Ok(Err(Failure::domain(
+            "SALES_PERFORMANCE_REPORT_CONFLICT",
+            ErrorCode::Aborted,
+        ))),
         Ok(None) => Ok(Err(failure(ReceiptUncertainty::NotFound))),
         Err(_) => Ok(Err(failure(ReceiptUncertainty::ReadFailed))),
     }
@@ -252,8 +308,16 @@ pub(super) async fn list(
         &[JsValue::from_str(tenant), JsValue::from_str(after), quota_id.map_or(JsValue::NULL, JsValue::from_str), JsValue::from_f64((size+1) as f64)])?
         .all().await?.results::<StateRow>()?;
     let more = rows.len() > size;
-    let reports = rows.into_iter().take(size).map(|row| decode(&row.state)).collect::<Result<Vec<_>>>()?;
-    let next = if more { reports.last().ok_or_else(invalid)?.report_id.clone() } else { String::new() };
+    let reports = rows
+        .into_iter()
+        .take(size)
+        .map(|row| decode(&row.state))
+        .collect::<Result<Vec<_>>>()?;
+    let next = if more {
+        reports.last().ok_or_else(invalid)?.report_id.clone()
+    } else {
+        String::new()
+    };
     Ok((reports, next))
 }
 
@@ -264,7 +328,10 @@ pub(super) async fn forecast_page(
     after: &str,
     size: usize,
 ) -> Result<(Vec<ForecastSource>, String)> {
-    let args = [JsValue::from_str(tenant), JsValue::from_str(&report.report_id)];
+    let args = [
+        JsValue::from_str(tenant),
+        JsValue::from_str(&report.report_id),
+    ];
     let count = bind(db, "SELECT CAST(COUNT(*) AS TEXT) count FROM crm_sales_performance_forecast_sources WHERE tenant=? AND report_id=?", &args)?
         .first::<CountRow>(None).await?.ok_or_else(invalid)?.count.parse::<u64>().map_err(|_| invalid())?;
     if Some(count) != report.forecast.source_count() {
@@ -275,11 +342,20 @@ pub(super) async fn forecast_page(
         &[args[0].clone(), args[1].clone(), JsValue::from_str(after), JsValue::from_f64((size+1) as f64)])?
         .all().await?.results::<StateRow>()?;
     let more = rows.len() > size;
-    let sources = rows.into_iter().take(size).map(|row| {
-        let source = serde_json::from_str::<ForecastSource>(&row.state).map_err(|_| invalid())?;
-        source.validate().map_err(|_| invalid())?;
-        Ok(source)
-    }).collect::<Result<Vec<_>>>()?;
-    let next = if more { sources.last().ok_or_else(invalid)?.deal_id.clone() } else { String::new() };
+    let sources = rows
+        .into_iter()
+        .take(size)
+        .map(|row| {
+            let source =
+                serde_json::from_str::<ForecastSource>(&row.state).map_err(|_| invalid())?;
+            source.validate().map_err(|_| invalid())?;
+            Ok(source)
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let next = if more {
+        sources.last().ok_or_else(invalid)?.deal_id.clone()
+    } else {
+        String::new()
+    };
     Ok((sources, next))
 }
