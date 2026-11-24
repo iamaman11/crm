@@ -1135,25 +1135,32 @@ impl SalesV2Service {
             Some(Scope::TerritoryId(id)) => SalesQuotaScope::Territory(Self::id(id)?),
             _ => return Err(ConnectError::invalid_argument("SALES_QUOTA_SCOPE_REQUIRED")),
         };
-        let period = cfg.period.as_option().ok_or_else(|| {
-            ConnectError::invalid_argument("SALES_QUOTA_PERIOD_REQUIRED")
-        })?;
+        let period = cfg
+            .period
+            .as_option()
+            .ok_or_else(|| ConnectError::invalid_argument("SALES_QUOTA_PERIOD_REQUIRED"))?;
         let date = |value: Option<&core_v2::CalendarDate>| {
-            let value = value.ok_or_else(|| ConnectError::invalid_argument("SALES_QUOTA_DATE_REQUIRED"))?;
+            let value =
+                value.ok_or_else(|| ConnectError::invalid_argument("SALES_QUOTA_DATE_REQUIRED"))?;
             Ok::<_, ConnectError>(QuotaDate {
                 year: value.year,
-                month: u8::try_from(value.month).map_err(|_| ConnectError::invalid_argument("SALES_QUOTA_DATE_INVALID"))?,
-                day: u8::try_from(value.day).map_err(|_| ConnectError::invalid_argument("SALES_QUOTA_DATE_INVALID"))?,
+                month: u8::try_from(value.month)
+                    .map_err(|_| ConnectError::invalid_argument("SALES_QUOTA_DATE_INVALID"))?,
+                day: u8::try_from(value.day)
+                    .map_err(|_| ConnectError::invalid_argument("SALES_QUOTA_DATE_INVALID"))?,
             })
         };
-        let cadence = if period.cadence == sale_wire::SalesQuotaCadence::SALES_QUOTA_CADENCE_MONTHLY {
+        let cadence = if period.cadence == sale_wire::SalesQuotaCadence::SALES_QUOTA_CADENCE_MONTHLY
+        {
             QuotaCadence::Monthly
         } else if period.cadence == sale_wire::SalesQuotaCadence::SALES_QUOTA_CADENCE_QUARTERLY {
             QuotaCadence::Quarterly
         } else if period.cadence == sale_wire::SalesQuotaCadence::SALES_QUOTA_CADENCE_CUSTOM {
             QuotaCadence::Custom
         } else {
-            return Err(ConnectError::invalid_argument("SALES_QUOTA_CADENCE_INVALID"));
+            return Err(ConnectError::invalid_argument(
+                "SALES_QUOTA_CADENCE_INVALID",
+            ));
         };
         let period = QuotaPeriod::new(
             date(period.start_date.as_option())?,
@@ -1162,9 +1169,10 @@ impl SalesV2Service {
             cadence,
         )
         .map_err(|error| ConnectError::invalid_argument(error.code))?;
-        let target = cfg.target.as_option().ok_or_else(|| {
-            ConnectError::invalid_argument("SALES_QUOTA_TARGET_REQUIRED")
-        })?;
+        let target = cfg
+            .target
+            .as_option()
+            .ok_or_else(|| ConnectError::invalid_argument("SALES_QUOTA_TARGET_REQUIRED"))?;
         Ok(sales_territories::Record::Quota(crm_sales::SalesQuota {
             quota_id: id,
             name: cfg.name.clone(),
@@ -1200,41 +1208,61 @@ impl SalesV2Service {
             day: u32::from(value.day),
             ..Default::default()
         };
-        let (start, end) = quota.period.bounds().map_err(|_| ConnectError::internal("SALES_QUOTA_PERIOD_INVALID"))?;
+        let (start, end) = quota
+            .period
+            .bounds()
+            .map_err(|_| ConnectError::internal("SALES_QUOTA_PERIOD_INVALID"))?;
         Ok(sale_wire::SalesQuota {
             quota_id: quota.quota_id,
             version: quota.version,
             start_unix_nanos: start,
             end_exclusive_unix_nanos: end,
-            revision_at_unix_nanos: quota.revision_at_unix_nanos.parse().map_err(|_| ConnectError::internal("SALES_QUOTA_REVISION_INVALID"))?,
+            revision_at_unix_nanos: quota
+                .revision_at_unix_nanos
+                .parse()
+                .map_err(|_| ConnectError::internal("SALES_QUOTA_REVISION_INVALID"))?,
             configuration: Some(sale_wire::SalesQuotaConfiguration {
                 name: quota.name,
                 scope: Some(sale_wire::SalesQuotaScope {
                     scope: Some(scope),
                     ..Default::default()
-                }).into(),
+                })
+                .into(),
                 pipeline_id: quota.pipeline_id,
                 period: Some(sale_wire::SalesQuotaPeriod {
                     start_date: Some(date(quota.period.start_date)).into(),
                     end_date: Some(date(quota.period.end_date)).into(),
                     time_zone: quota.period.time_zone,
                     cadence: match quota.period.cadence {
-                        QuotaCadence::Monthly => sale_wire::SalesQuotaCadence::SALES_QUOTA_CADENCE_MONTHLY,
-                        QuotaCadence::Quarterly => sale_wire::SalesQuotaCadence::SALES_QUOTA_CADENCE_QUARTERLY,
-                        QuotaCadence::Custom => sale_wire::SalesQuotaCadence::SALES_QUOTA_CADENCE_CUSTOM,
-                    }.into(),
+                        QuotaCadence::Monthly => {
+                            sale_wire::SalesQuotaCadence::SALES_QUOTA_CADENCE_MONTHLY
+                        }
+                        QuotaCadence::Quarterly => {
+                            sale_wire::SalesQuotaCadence::SALES_QUOTA_CADENCE_QUARTERLY
+                        }
+                        QuotaCadence::Custom => {
+                            sale_wire::SalesQuotaCadence::SALES_QUOTA_CADENCE_CUSTOM
+                        }
+                    }
+                    .into(),
                     ..Default::default()
-                }).into(),
+                })
+                .into(),
                 target: Some(core_v2::ExactMoney {
-                    minor_units: quota.target_minor_units.parse().map_err(|_| ConnectError::internal("SALES_QUOTA_TARGET_INVALID"))?,
+                    minor_units: quota
+                        .target_minor_units
+                        .parse()
+                        .map_err(|_| ConnectError::internal("SALES_QUOTA_TARGET_INVALID"))?,
                     currency_code: quota.currency_code,
                     ..Default::default()
-                }).into(),
+                })
+                .into(),
                 published: quota.published,
                 archived: quota.archived,
                 revision_reason: quota.revision_reason,
                 ..Default::default()
-            }).into(),
+            })
+            .into(),
             ..Default::default()
         })
     }

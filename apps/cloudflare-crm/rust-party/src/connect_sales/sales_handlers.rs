@@ -13,9 +13,10 @@ impl sale_wire::DealService for SalesV2Service {
         let input = req.to_owned_message();
         let id = Self::id(&input.quota_id)?;
         let (key, expected) = wire_precondition(input.precondition.as_option(), true)?;
-        let cfg = input.configuration.as_option().ok_or_else(|| {
-            ConnectError::invalid_argument("SALES_QUOTA_CONFIGURATION_REQUIRED")
-        })?;
+        let cfg = input
+            .configuration
+            .as_option()
+            .ok_or_else(|| ConnectError::invalid_argument("SALES_QUOTA_CONFIGURATION_REQUIRED"))?;
         let record = Self::quota_draft(id, cfg)?;
         let db = self.d1()?;
         let saved = sales_territories::mutate(
@@ -49,9 +50,10 @@ impl sale_wire::DealService for SalesV2Service {
         let input = req.to_owned_message();
         let id = Self::id(&input.quota_id)?;
         let (key, expected) = wire_precondition(input.precondition.as_option(), false)?;
-        let cfg = input.configuration.as_option().ok_or_else(|| {
-            ConnectError::invalid_argument("SALES_QUOTA_CONFIGURATION_REQUIRED")
-        })?;
+        let cfg = input
+            .configuration
+            .as_option()
+            .ok_or_else(|| ConnectError::invalid_argument("SALES_QUOTA_CONFIGURATION_REQUIRED"))?;
         let record = Self::quota_draft(id, cfg)?;
         let db = self.d1()?;
         let saved = sales_territories::mutate(
@@ -88,14 +90,16 @@ impl sale_wire::DealService for SalesV2Service {
         let kind = sales_territories::Kind::Quota;
         let record = if let Some(version) = input.version {
             if version <= 0 {
-                return Err(ConnectError::invalid_argument("SALES_QUOTA_VERSION_INVALID"));
+                return Err(ConnectError::invalid_argument(
+                    "SALES_QUOTA_VERSION_INVALID",
+                ));
             }
             sales_territories::quota_revision(&db, &self.tenant, &id, version).await
         } else {
             sales_territories::get(&db, &self.tenant, kind, &id).await
         }
-            .map_err(|_| ConnectError::internal("SALES_QUOTA_READ_FAILED"))?
-            .ok_or_else(|| ConnectError::not_found("SALES_QUOTA_NOT_FOUND"))?;
+        .map_err(|_| ConnectError::internal("SALES_QUOTA_READ_FAILED"))?
+        .ok_or_else(|| ConnectError::not_found("SALES_QUOTA_NOT_FOUND"))?;
         let confirmed_mutation = match receipt_key(input.receipt_idempotency_key.as_deref())? {
             None => None,
             Some(key) => {
@@ -174,13 +178,20 @@ impl sale_wire::DealService for SalesV2Service {
         if as_of < 0 || as_of > now || input.quota_version.is_some_and(|version| version <= 0) {
             return Err(ConnectError::invalid_argument("SALES_QUOTA_AS_OF_INVALID"));
         }
-        let size = if input.page_size == 0 { 25 } else { input.page_size };
+        let size = if input.page_size == 0 {
+            25
+        } else {
+            input.page_size
+        };
         if size > 100 {
             return Err(ConnectError::invalid_argument("page_size exceeds 100"));
         }
         if let Some(after) = input.after.as_option() {
             Self::id(&after.deal_id)?;
-            if after.deal_version <= 0 || input.as_of_unix_nanos.is_none() || input.quota_version.is_none() {
+            if after.deal_version <= 0
+                || input.as_of_unix_nanos.is_none()
+                || input.quota_version.is_none()
+            {
                 return Err(ConnectError::invalid_argument("SALES_QUOTA_CURSOR_INVALID"));
             }
         }
@@ -189,12 +200,16 @@ impl sale_wire::DealService for SalesV2Service {
             sales_territories::quota_revision(&db, &self.tenant, &id, version).await
         } else {
             sales_territories::get(&db, &self.tenant, sales_territories::Kind::Quota, &id).await
-        }.map_err(|_| ConnectError::internal("SALES_QUOTA_READ_FAILED"))?
-         .ok_or_else(|| ConnectError::not_found("SALES_QUOTA_NOT_FOUND"))?;
+        }
+        .map_err(|_| ConnectError::internal("SALES_QUOTA_READ_FAILED"))?
+        .ok_or_else(|| ConnectError::not_found("SALES_QUOTA_NOT_FOUND"))?;
         let sales_territories::Record::Quota(quota) = &record else {
             return Err(ConnectError::internal("SALES_QUOTA_STATE_INVALID"));
         };
-        let (start, end) = quota.period.bounds().map_err(|_| ConnectError::internal("SALES_QUOTA_PERIOD_INVALID"))?;
+        let (start, end) = quota
+            .period
+            .bounds()
+            .map_err(|_| ConnectError::internal("SALES_QUOTA_PERIOD_INVALID"))?;
         // Bounded single D1 snapshot. Never silently return partial totals.
         // Rust owns signed attribution and exact aggregation before pagination.
         #[derive(serde::Deserialize)]
@@ -206,7 +221,9 @@ impl sale_wire::DealService for SalesV2Service {
             commercial_close_fact: Option<String>,
         }
         use wasm_bindgen::JsValue;
-        let mut sql = String::from("SELECT deal_id,deal_version,action,CAST(occurred_at_unix_nanos AS TEXT) event_at,commercial_close_fact FROM crm_sales_deal_events WHERE tenant=? AND action IN ('closed','reopened') AND occurred_at_unix_nanos>=CAST(? AS INTEGER) AND occurred_at_unix_nanos<CAST(? AS INTEGER) AND occurred_at_unix_nanos<=CAST(? AS INTEGER)");
+        let mut sql = String::from(
+            "SELECT deal_id,deal_version,action,CAST(occurred_at_unix_nanos AS TEXT) event_at,commercial_close_fact FROM crm_sales_deal_events WHERE tenant=? AND action IN ('closed','reopened') AND occurred_at_unix_nanos>=CAST(? AS INTEGER) AND occurred_at_unix_nanos<CAST(? AS INTEGER) AND occurred_at_unix_nanos<=CAST(? AS INTEGER)",
+        );
         let mut values = vec![
             JsValue::from_str(&self.tenant),
             JsValue::from_str(&start.to_string()),
@@ -220,31 +237,42 @@ impl sale_wire::DealService for SalesV2Service {
         sql.push_str(" ORDER BY deal_id,deal_version LIMIT 2001");
         let rows = crate::bind(&db, &sql, &values)
             .map_err(|_| ConnectError::internal("SALES_QUOTA_FACTS_READ_FAILED"))?
-            .all().await
+            .all()
+            .await
             .map_err(|_| ConnectError::internal("SALES_QUOTA_FACTS_READ_FAILED"))?
             .results::<FactRow>()
             .map_err(|_| ConnectError::internal("SALES_QUOTA_FACTS_READ_FAILED"))?;
         if rows.len() > 2000 {
-            return Err(ConnectError::new(connectrpc::ErrorCode::ResourceExhausted, "SALES_QUOTA_PERIOD_TOO_LARGE"));
+            return Err(ConnectError::new(
+                connectrpc::ErrorCode::ResourceExhausted,
+                "SALES_QUOTA_PERIOD_TOO_LARGE",
+            ));
         }
         let mut actual = crm_sales::QuotaActuals::default();
         let mut facts = Vec::new();
         for row in rows {
-            let fact = row.commercial_close_fact.as_deref()
+            let fact = row
+                .commercial_close_fact
+                .as_deref()
                 .map(serde_json::from_str::<crm_sales::CommercialCloseFact>)
-                .transpose().map_err(|_| ConnectError::internal("SALES_COMMERCIAL_EVENT_INVALID"))?;
+                .transpose()
+                .map_err(|_| ConnectError::internal("SALES_COMMERCIAL_EVENT_INVALID"))?;
             let reversal = row.action == "reopened";
-            let included = actual.observe(quota, fact.as_ref(), reversal)
+            let included = actual
+                .observe(quota, fact.as_ref(), reversal)
                 .map_err(|_| ConnectError::internal("SALES_QUOTA_TOTAL_INVALID"))?;
             if let (Some(amount), Some(fact)) = (included, fact) {
                 let after = input.after.as_option().is_none_or(|cursor| {
-                    (row.deal_id.as_str(), row.deal_version) > (cursor.deal_id.as_str(), cursor.deal_version)
+                    (row.deal_id.as_str(), row.deal_version)
+                        > (cursor.deal_id.as_str(), cursor.deal_version)
                 });
                 if after && facts.len() <= size as usize {
                     facts.push(sale_wire::SalesQuotaFact {
                         deal_id: row.deal_id,
                         deal_version: row.deal_version,
-                        event_at_unix_nanos: row.event_at.parse().map_err(|_| ConnectError::internal("SALES_QUOTA_EVENT_TIME_INVALID"))?,
+                        event_at_unix_nanos: row.event_at.parse().map_err(|_| {
+                            ConnectError::internal("SALES_QUOTA_EVENT_TIME_INVALID")
+                        })?,
                         reversal,
                         close_fact: Some(Self::commercial_fact_wire(&fact)?).into(),
                         signed_minor_units: amount.map(|value| value.to_string()),

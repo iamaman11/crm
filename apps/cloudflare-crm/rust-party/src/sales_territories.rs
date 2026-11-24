@@ -129,8 +129,12 @@ impl Record {
             (Self::Assignment(value), Some(Self::Assignment(old))) => {
                 value.revise(Some(old), expected).map(Self::Assignment)
             }
-            (Self::Quota(value), None) => value.revise(None, expected, super::now_nanos()).map(Self::Quota),
-            (Self::Quota(value), Some(Self::Quota(old))) => value.revise(Some(old), expected, super::now_nanos()).map(Self::Quota),
+            (Self::Quota(value), None) => value
+                .revise(None, expected, super::now_nanos())
+                .map(Self::Quota),
+            (Self::Quota(value), Some(Self::Quota(old))) => value
+                .revise(Some(old), expected, super::now_nanos())
+                .map(Self::Quota),
             (Self::RoutingRule(value), None) => value.revise(None, expected).map(Self::RoutingRule),
             (Self::RoutingRule(value), Some(Self::RoutingRule(old))) => {
                 value.revise(Some(old), expected).map(Self::RoutingRule)
