@@ -72,7 +72,9 @@ impl AutomationRule {
         if self.version < 1
             || self.task_subject.trim().is_empty()
             || self.task_subject.len() > 240
-            || self.due_after_seconds.is_some_and(|v| !(0..=31_536_000).contains(&v))
+            || self
+                .due_after_seconds
+                .is_some_and(|v| !(0..=31_536_000).contains(&v))
         {
             return Err(invalid("ACTIVITIES_AUTOMATION_RULE_INVALID"));
         }
@@ -252,8 +254,8 @@ mod tests {
     fn overdue_requires_open_due_original_task_and_never_self_retriggers() {
         let rule = rule(AutomationTrigger::TaskOverdue);
         let mut source = task();
-        assert!(rule
-            .plan(
+        assert!(
+            rule.plan(
                 AutomationSource::TaskOverdue {
                     task: &source,
                     generated_by_automation: false,
@@ -261,7 +263,8 @@ mod tests {
                 9,
             )
             .unwrap()
-            .is_none());
+            .is_none()
+        );
         let first = rule
             .plan(
                 AutomationSource::TaskOverdue {
@@ -272,8 +275,8 @@ mod tests {
             )
             .unwrap()
             .unwrap();
-        assert!(rule
-            .plan(
+        assert!(
+            rule.plan(
                 AutomationSource::TaskOverdue {
                     task: &source,
                     generated_by_automation: true,
@@ -281,7 +284,8 @@ mod tests {
                 11,
             )
             .unwrap()
-            .is_none());
+            .is_none()
+        );
         assert_eq!(
             source
                 .complete(CompleteTask {
@@ -291,8 +295,8 @@ mod tests {
                 .unwrap(),
             TaskMutation::Changed
         );
-        assert!(rule
-            .plan(
+        assert!(
+            rule.plan(
                 AutomationSource::TaskOverdue {
                     task: &source,
                     generated_by_automation: false,
@@ -300,14 +304,25 @@ mod tests {
                 20,
             )
             .unwrap()
-            .is_none());
+            .is_none()
+        );
         assert_eq!(first.source_id, "task-one");
         let mut revised = rule.clone();
         revised.version = 3;
-        assert_eq!(first.idempotency_key, revised.plan(AutomationSource::TaskOverdue {
-            task: &task(),
-            generated_by_automation: false,
-        }, 15).unwrap().unwrap().idempotency_key);
+        assert_eq!(
+            first.idempotency_key,
+            revised
+                .plan(
+                    AutomationSource::TaskOverdue {
+                        task: &task(),
+                        generated_by_automation: false,
+                    },
+                    15
+                )
+                .unwrap()
+                .unwrap()
+                .idempotency_key
+        );
     }
 
     #[test]
@@ -315,29 +330,46 @@ mod tests {
         let mut rule = rule(AutomationTrigger::InteractionCreated);
         let source = interaction();
         rule.enabled = false;
-        assert!(rule.plan(AutomationSource::InteractionCreated(&source), 20).unwrap().is_none());
+        assert!(
+            rule.plan(AutomationSource::InteractionCreated(&source), 20)
+                .unwrap()
+                .is_none()
+        );
         rule.enabled = true;
         rule.version = 0;
         assert_eq!(
             rule.plan(AutomationSource::InteractionCreated(&source), 20)
-                .unwrap_err().code,
+                .unwrap_err()
+                .code,
             "ACTIVITIES_AUTOMATION_RULE_INVALID"
         );
         rule.version = 1;
         rule.due_after_seconds = Some(-1);
         assert!(rule.validate().is_err());
         rule.due_after_seconds = Some(0);
-        assert!(rule.plan(AutomationSource::TaskOverdue {
-            task: &task(), generated_by_automation: false,
-        }, 20).unwrap().is_none());
+        assert!(
+            rule.plan(
+                AutomationSource::TaskOverdue {
+                    task: &task(),
+                    generated_by_automation: false,
+                },
+                20
+            )
+            .unwrap()
+            .is_none()
+        );
     }
 
     #[test]
     fn deadline_overflow_is_rejected_without_partial_intent() {
         let rule = rule(AutomationTrigger::InteractionCreated);
         assert_eq!(
-            rule.plan(AutomationSource::InteractionCreated(&interaction()), i64::MAX)
-                .unwrap_err().code,
+            rule.plan(
+                AutomationSource::InteractionCreated(&interaction()),
+                i64::MAX
+            )
+            .unwrap_err()
+            .code,
             "ACTIVITIES_AUTOMATION_TIME_OVERFLOW"
         );
     }
