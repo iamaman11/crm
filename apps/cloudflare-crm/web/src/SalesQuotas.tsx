@@ -10,6 +10,7 @@ import type {allOwners} from "./ownerCatalog";
 import {decimalUnits,minorUnits} from "./money";
 import {inputDate,parseDate} from "./calendarInput";
 import {dealHref} from "./routes";
+import {SalesPerformanceReports} from "./SalesPerformanceReports";
 
 type Choices=Awaited<ReturnType<typeof allOwners>>["choices"];
 function scopeValue(scope:SalesQuotaScope|undefined):string {
@@ -39,7 +40,7 @@ function ratio(value:string):string {
   const n=BigInt(value),abs=n<0n?-n:n;
   return (n<0n?"−":"")+(abs/100n).toString()+"."+(abs%100n).toString().padStart(2,"0")+"%";
 }
-export function SalesQuotaWorkspace({isAdmin,choices,ownersUnavailable,territories}:{isAdmin:boolean;choices:Choices;ownersUnavailable:boolean;territories:SalesTerritory[]}) {
+export function SalesQuotaWorkspace({isAdmin,choices,ownersUnavailable,territories,reportId}:{isAdmin:boolean;choices:Choices;ownersUnavailable:boolean;territories:SalesTerritory[];reportId:string}) {
   const quotas=useQuery(useCallback(allQuotas,[]));
   const catalog=useQuery(useCallback(allPipelines,[]));
   const [editing,setEditing]=useState<SalesQuota|"new">();
@@ -140,5 +141,6 @@ export function SalesQuotaWorkspace({isAdmin,choices,ownersUnavailable,territori
         {report.next&&<Button variant="secondary" onClick={()=>{setAsOf(report.asOfUnixNanos);setEventSequence(report.eventSequence);setAfter(report.next);}}>Следующая страница фактов</Button>}
       </>}
     </section>}
+    <SalesPerformanceReports isAdmin={isAdmin} quota={report?.quota} reportId={reportId} currencies={catalog.data?.currencies}/>
   </section>;
 }

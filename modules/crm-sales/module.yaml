@@ -229,6 +229,26 @@ provides:
       binding:
         kind: protobuf_rpc
         rpc: crm.sales.v2.DealService.GetSalesQuotaPerformance
+    - id: sales.performance_report.preview
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.PreviewSalesPerformanceReport
+    - id: sales.performance_report.save
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.SaveSalesPerformanceReport
+    - id: sales.performance_report.get
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.GetSalesPerformanceReport
+    - id: sales.performance_report.list
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.ListSalesPerformanceReports
   events:
     - id: sales.deal.created
       version: 1.0.0

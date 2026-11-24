@@ -838,6 +838,120 @@ message GetSalesQuotaPerformanceResponse {
   int64 event_sequence = 16;
 }
 
+// Captured report values are exact decimal integers, never JS doubles.
+message SalesPerformanceActuals {
+  string gross_minor_units = 1;
+  string reversal_minor_units = 2;
+  string net_minor_units = 3;
+  string remaining_minor_units = 4;
+  string attainment_basis_points = 5;
+  uint64 won_count = 6;
+  uint64 lost_count = 7;
+  uint64 reversal_count = 8;
+  uint64 missing_amount_count = 9;
+  uint64 unknown_history_count = 10;
+  uint64 unallocated_count = 11;
+}
+enum SalesForecastDisposition {
+  SALES_FORECAST_DISPOSITION_UNSPECIFIED = 0;
+  SALES_FORECAST_DISPOSITION_INCLUDED = 1;
+  SALES_FORECAST_DISPOSITION_UNALLOCATED = 2;
+  SALES_FORECAST_DISPOSITION_UNDATED = 3;
+  SALES_FORECAST_DISPOSITION_OMITTED = 4;
+  SALES_FORECAST_DISPOSITION_MISSING_AMOUNT = 5;
+  SALES_FORECAST_DISPOSITION_OTHER_CURRENCY = 6;
+}
+message SalesForecastSource {
+  string deal_id = 1;
+  int64 deal_version = 2;
+  string pipeline_id = 3;
+  crm.core.v2.CalendarDate expected_close_date = 4;
+  crm.core.v2.ExactMoney amount = 5;
+  uint32 probability_basis_points = 6;
+  ProbabilitySource probability_source = 7;
+  ForecastCategory category = 8;
+  optional string credited_actor = 9;
+  CommercialDimension credited_team = 10;
+  CommercialDimension credited_territory = 11;
+  SalesForecastDisposition disposition = 12;
+}
+message SalesForecastBucket {
+  ForecastCategory category = 1;
+  uint64 deal_count = 2;
+  string open_minor_units = 3;
+  string weighted_minor_units_times_basis_points = 4;
+}
+message SalesForecastCoverage {
+  string open_minor_units = 1;
+  string weighted_minor_units_times_basis_points = 2;
+  optional string open_coverage_basis_points = 3;
+  optional string weighted_coverage_basis_points = 4;
+  uint64 included_count = 5;
+  uint64 unallocated_count = 6;
+  uint64 undated_count = 7;
+  uint64 omitted_count = 8;
+  uint64 missing_amount_count = 9;
+  uint64 other_currency_count = 10;
+  repeated SalesForecastBucket buckets = 11;
+}
+message SalesPerformanceReport {
+  string report_id = 1;
+  string name = 2;
+  SalesQuota quota = 3;
+  int64 captured_at_unix_nanos = 4;
+  int64 event_sequence = 5;
+  string captured_by = 6;
+  uint32 formula_version = 7;
+  SalesPerformanceActuals actuals = 8;
+  SalesForecastCoverage forecast = 9;
+  uint64 actual_candidate_count = 10;
+}
+message PreviewSalesPerformanceReportRequest {
+  string quota_id = 1;
+  int64 quota_version = 2;
+  uint32 page_size = 3;
+}
+message PreviewSalesPerformanceReportResponse {
+  SalesPerformanceReport report = 1;
+  repeated SalesForecastSource forecast_sources = 2;
+  bool more_forecast_sources = 3;
+}
+message SaveSalesPerformanceReportRequest {
+  string report_id = 1;
+  string name = 2;
+  string quota_id = 3;
+  int64 quota_version = 4;
+  crm.core.v2.MutationPrecondition precondition = 5;
+}
+message SaveSalesPerformanceReportResponse {
+  SalesPerformanceReport report = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+message GetSalesPerformanceReportRequest {
+  string report_id = 1;
+  optional string receipt_idempotency_key = 2;
+  SalesQuotaFactCursor actual_after = 3;
+  string forecast_after = 4;
+  uint32 page_size = 5;
+}
+message GetSalesPerformanceReportResponse {
+  SalesPerformanceReport report = 1;
+  crm.core.v2.MutationCommitEvidence confirmed_mutation = 2;
+  bool actual_history_available = 3;
+  repeated SalesQuotaFact actual_facts = 4;
+  SalesQuotaFactCursor actual_next = 5;
+  repeated SalesForecastSource forecast_sources = 6;
+  string forecast_next = 7;
+}
+message ListSalesPerformanceReportsRequest {
+  crm.core.v2.PageRequest page = 1;
+  optional string quota_id = 2;
+}
+message ListSalesPerformanceReportsResponse {
+  repeated SalesPerformanceReport reports = 1;
+  crm.core.v2.PageInfo page_info = 2;
+}
+
 service DealService {
   rpc CreateSalesQuota(CreateSalesQuotaRequest) returns (CreateSalesQuotaResponse) {
     option idempotency_level = IDEMPOTENT;
@@ -852,6 +966,18 @@ service DealService {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
   rpc GetSalesQuotaPerformance(GetSalesQuotaPerformanceRequest) returns (GetSalesQuotaPerformanceResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc PreviewSalesPerformanceReport(PreviewSalesPerformanceReportRequest) returns (PreviewSalesPerformanceReportResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc SaveSalesPerformanceReport(SaveSalesPerformanceReportRequest) returns (SaveSalesPerformanceReportResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc GetSalesPerformanceReport(GetSalesPerformanceReportRequest) returns (GetSalesPerformanceReportResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListSalesPerformanceReports(ListSalesPerformanceReportsRequest) returns (ListSalesPerformanceReportsResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
   rpc CreateSalesRoutingRule(CreateSalesRoutingRuleRequest) returns (CreateSalesRoutingRuleResponse) {

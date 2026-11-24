@@ -38,8 +38,8 @@ function TerritoryOptions({items,current="",exclude=""}:{items:SalesTerritory[];
       </option>)}</>;
 }
 
-export function TerritoryWorkspace({isAdmin,choices,ownersUnavailable}:{
-  isAdmin:boolean;choices:Choices;ownersUnavailable:boolean;
+export function TerritoryWorkspace({isAdmin,choices,ownersUnavailable,reportId}:{
+  isAdmin:boolean;choices:Choices;ownersUnavailable:boolean;reportId:string;
 }) {
   const territories=useQuery(useCallback(allTerritories,[]));
   const [selected,setSelected]=useState("");
@@ -153,7 +153,7 @@ export function TerritoryWorkspace({isAdmin,choices,ownersUnavailable}:{
     {cursor&&<Button variant="secondary" disabled={assignments.busy} onClick={()=>setCursor("")}>Первая страница портфелей</Button>}
     {assignments.data?.pageInfo?.nextPageToken&&<Button variant="secondary" disabled={assignments.busy}
       onClick={()=>setCursor(assignments.data?.pageInfo?.nextPageToken??"")}>Следующая страница портфелей</Button>}
-    <SalesQuotaWorkspace isAdmin={isAdmin} choices={choices} ownersUnavailable={ownersUnavailable||territories.busy||!!territories.error} territories={items}/>
+    <SalesQuotaWorkspace isAdmin={isAdmin} choices={choices} ownersUnavailable={ownersUnavailable||territories.busy||!!territories.error} territories={items} reportId={reportId}/>
     <SalesRoutingWorkspace isAdmin={isAdmin} choices={choices} ownersUnavailable={ownersUnavailable||territories.busy||!!territories.error} territories={items}/>
   </section>;
 }

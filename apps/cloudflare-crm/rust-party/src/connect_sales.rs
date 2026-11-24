@@ -3,8 +3,8 @@
 //! Domain rules and storage belong exclusively to existing crm-sales and D1.
 use super::{
     access, access_members, access_teams, accounts, activity_tasks, consents, contact_points,
-    data_quality, identity_resolution, parties, party_relationships, sales_deals, sales_pipelines,
-    sales_routing, sales_territories, sales_views,
+    data_quality, identity_resolution, parties, party_relationships, sales_deals, sales_performance,
+    sales_pipelines, sales_routing, sales_territories, sales_views,
 };
 use axum::Router;
 use buffa_types::google::protobuf::Timestamp;
@@ -156,6 +156,7 @@ enum CrudReceiptOwner {
     AccountAssignment,
     RoutingRule,
     Quota,
+    PerformanceReport,
     Team,
 }
 impl CrudReceiptOwner {
@@ -212,6 +213,10 @@ impl CrudReceiptOwner {
             Self::Quota => concat!(
                 "SELECT state,original_request_id FROM crm_sales_quota_receipts",
                 " WHERE tenant=? AND key=?"
+            ),
+            Self::PerformanceReport => concat!(
+                "SELECT state,request_id AS original_request_id FROM crm_sales_performance_reports",
+                " WHERE tenant=? AND idem_key=?"
             ),
             Self::RoutingRule => concat!(
                 "SELECT state,original_request_id FROM crm_sales_routing_rule_receipts",

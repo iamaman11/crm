@@ -53,6 +53,8 @@ mod sales_contract;
 #[cfg(feature = "native")]
 mod sales_deals;
 #[cfg(feature = "native")]
+mod sales_performance;
+#[cfg(feature = "native")]
 mod sales_pipelines;
 mod sales_routing;
 #[cfg(feature = "native")]
@@ -822,6 +824,30 @@ const RPC_POLICIES: &[(&str, RpcPolicy)] = &[
     ),
     (
         "/crm.sales.v2.DealService/GetSalesQuotaPerformance",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/PreviewSalesPerformanceReport",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/SaveSalesPerformanceReport",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/GetSalesPerformanceReport",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/ListSalesPerformanceReports",
         RpcPolicy {
             permission: RpcPermission::Read,
         },

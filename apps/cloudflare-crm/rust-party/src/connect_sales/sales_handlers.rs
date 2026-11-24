@@ -3,175 +3,175 @@
 use super::*;
 use crate::diagnostics;
 
-impl sale_wire::DealService for SalesV2Service {
-    #[worker::send]
-    async fn create_sales_quota(
+impl SalesV2Service {
+    async fn capture_performance(
         &self,
-        _ctx: RequestContext,
-        req: ServiceRequest<'_, sale_wire::CreateSalesQuotaRequest>,
-    ) -> ServiceResult<sale_wire::CreateSalesQuotaResponse> {
-        let input = req.to_owned_message();
-        let id = Self::id(&input.quota_id)?;
-        let (key, expected) = wire_precondition(input.precondition.as_option(), true)?;
-        let cfg = input
-            .configuration
-            .as_option()
-            .ok_or_else(|| ConnectError::invalid_argument("SALES_QUOTA_CONFIGURATION_REQUIRED"))?;
-        let record = Self::quota_draft(id, cfg)?;
-        let db = self.d1()?;
-        let saved = sales_territories::mutate(
-            &sales_territories::Context {
-                db: &db,
-                tenant: &self.tenant,
-                actor: &self.actor,
-                request_id: &self.request_id,
-            },
-            record,
-            &key,
-            expected,
-        )
-        .await
-        .map_err(|_| ConnectError::unavailable("SALES_QUOTA_WRITE_FAILED"))?
-        .map_err(|failure| failure.connect("CreateSalesQuota", &self.request_id))?;
-        let receipt = self.coverage_receipt(&saved);
-        RpcResponse::ok(sale_wire::CreateSalesQuotaResponse {
-            quota: Some(Self::quota_wire(saved.record)?).into(),
-            receipt: Some(receipt).into(),
-            ..Default::default()
-        })
-    }
-
-    #[worker::send]
-    async fn update_sales_quota(
-        &self,
-        _ctx: RequestContext,
-        req: ServiceRequest<'_, sale_wire::UpdateSalesQuotaRequest>,
-    ) -> ServiceResult<sale_wire::UpdateSalesQuotaResponse> {
-        let input = req.to_owned_message();
-        let id = Self::id(&input.quota_id)?;
-        let (key, expected) = wire_precondition(input.precondition.as_option(), false)?;
-        let cfg = input
-            .configuration
-            .as_option()
-            .ok_or_else(|| ConnectError::invalid_argument("SALES_QUOTA_CONFIGURATION_REQUIRED"))?;
-        let record = Self::quota_draft(id, cfg)?;
-        let db = self.d1()?;
-        let saved = sales_territories::mutate(
-            &sales_territories::Context {
-                db: &db,
-                tenant: &self.tenant,
-                actor: &self.actor,
-                request_id: &self.request_id,
-            },
-            record,
-            &key,
-            expected,
-        )
-        .await
-        .map_err(|_| ConnectError::unavailable("SALES_QUOTA_WRITE_FAILED"))?
-        .map_err(|failure| failure.connect("UpdateSalesQuota", &self.request_id))?;
-        let receipt = self.coverage_receipt(&saved);
-        RpcResponse::ok(sale_wire::UpdateSalesQuotaResponse {
-            quota: Some(Self::quota_wire(saved.record)?).into(),
-            receipt: Some(receipt).into(),
-            ..Default::default()
-        })
-    }
-
-    #[worker::send]
-    async fn get_sales_quota(
-        &self,
-        _ctx: RequestContext,
-        req: ServiceRequest<'_, sale_wire::GetSalesQuotaRequest>,
-    ) -> ServiceResult<sale_wire::GetSalesQuotaResponse> {
-        let input = req.to_owned_message();
-        let id = Self::id(&input.quota_id)?;
-        let db = self.d1()?;
-        let kind = sales_territories::Kind::Quota;
-        let record = if let Some(version) = input.version {
-            if version <= 0 {
-                return Err(ConnectError::invalid_argument(
-                    "SALES_QUOTA_VERSION_INVALID",
-                ));
-            }
-            sales_territories::quota_revision(&db, &self.tenant, &id, version).await
-        } else {
-            sales_territories::get(&db, &self.tenant, kind, &id).await
+        quota_id: &str,
+        quota_version: i64,
+        report_id: String,
+        name: String,
+    ) -> std::result::Result<(crm_sales::PerformanceReport, Vec<crm_sales::ForecastSource>), ConnectError> {
+        if quota_version <= 0 {
+            return Err(ConnectError::invalid_argument("SALES_QUOTA_VERSION_INVALID"));
         }
-        .map_err(|_| ConnectError::internal("SALES_QUOTA_READ_FAILED"))?
-        .ok_or_else(|| ConnectError::not_found("SALES_QUOTA_NOT_FOUND"))?;
-        let confirmed_mutation = match receipt_key(input.receipt_idempotency_key.as_deref())? {
-            None => None,
-            Some(key) => {
-                let row = crud_receipt(&db, &self.tenant, key, CrudReceiptOwner::Quota)
-                    .await
-                    .map_err(|_| ConnectError::unavailable("SALES_QUOTA_RECEIPT_READ_FAILED"))?;
-                crud_commit_evidence(row, &id, &self.request_id, |state| {
-                    let record = kind.decode(state)?;
-                    Ok((record.id().to_owned(), record.version()))
-                })
-                .map_err(|_| ConnectError::unavailable("SALES_QUOTA_RECEIPT_DECODE_FAILED"))?
-            }
+        crm_sales::PerformanceReport::validate_name(&name)
+            .map_err(|e| ConnectError::invalid_argument(e.code))?;
+        let db = self.d1()?;
+        let record = sales_territories::quota_revision(&db, &self.tenant, quota_id, quota_version)
+            .await
+            .map_err(|_| ConnectError::internal("SALES_QUOTA_READ_FAILED"))?
+            .ok_or_else(|| ConnectError::not_found("SALES_QUOTA_NOT_FOUND"))?;
+        let sales_territories::Record::Quota(quota) = record else {
+            return Err(ConnectError::internal("SALES_QUOTA_STATE_INVALID"));
         };
-        RpcResponse::ok(sale_wire::GetSalesQuotaResponse {
-            quota: Some(Self::quota_wire(record)?).into(),
-            confirmed_mutation: confirmed_mutation.into(),
+        if !quota.published {
+            return Err(ConnectError::invalid_argument("SALES_PERFORMANCE_PUBLISHED_QUOTA_REQUIRED"));
+        }
+        let snapshot = sales_performance::snapshot(&db, &self.tenant, &quota)
+            .await
+            .map_err(|_| ConnectError::internal("SALES_FORECAST_SNAPSHOT_FAILED"))?;
+        let (_, actuals) = self.quota_performance(sale_wire::GetSalesQuotaPerformanceRequest {
+            quota_id: quota_id.to_owned(),
+            quota_version: Some(quota_version),
+            as_of_unix_nanos: Some(snapshot.captured_at),
+            event_sequence: Some(snapshot.event_sequence),
+            page_size: 1,
+            ..Default::default()
+        }).await?;
+        let captured_at = snapshot.captured_at.to_string();
+        let event_sequence = snapshot.event_sequence.to_string();
+        let count = sales_performance::membership_count(&db, &self.tenant, &quota, &captured_at, &event_sequence)
+            .await.map_err(|_| ConnectError::internal("SALES_PERFORMANCE_MEMBERSHIP_READ_FAILED"))?;
+        if count != snapshot.actual_candidate_count {
+            return Err(ConnectError::aborted("SALES_PERFORMANCE_HISTORY_CHANGED"));
+        }
+        let forecast = crm_sales::ForecastCoverage::new(&actuals, &snapshot.sources)
+            .map_err(|_| ConnectError::internal("SALES_PERFORMANCE_TOTAL_OVERFLOW"))?;
+        Ok((crm_sales::PerformanceReport {
+            report_id,
+            name,
+            quota,
+            captured_at,
+            captured_by: self.actor.clone(),
+            event_sequence,
+            formula_version: 1,
+            actuals,
+            forecast,
+            actual_candidate_count: count,
+        }, snapshot.sources))
+    }
+
+    fn report_wire(value: crm_sales::PerformanceReport) -> std::result::Result<sale_wire::SalesPerformanceReport, ConnectError> {
+        let invalid = || ConnectError::internal("SALES_PERFORMANCE_REPORT_INVALID");
+        let a = value.actuals;
+        let f = value.forecast;
+        Ok(sale_wire::SalesPerformanceReport {
+            report_id: value.report_id,
+            name: value.name,
+            quota: Some(Self::quota_wire(sales_territories::Record::Quota(value.quota))?).into(),
+            captured_at_unix_nanos: value.captured_at.parse().map_err(|_| invalid())?,
+            event_sequence: value.event_sequence.parse().map_err(|_| invalid())?,
+            captured_by: value.captured_by,
+            formula_version: value.formula_version,
+            actual_candidate_count: value.actual_candidate_count,
+            actuals: Some(sale_wire::SalesPerformanceActuals {
+                gross_minor_units: a.gross,
+                reversal_minor_units: a.reversals,
+                net_minor_units: a.net,
+                remaining_minor_units: a.remaining,
+                attainment_basis_points: a.attainment,
+                won_count: a.won_count,
+                lost_count: a.lost_count,
+                reversal_count: a.reversal_count,
+                missing_amount_count: a.missing_amount_count,
+                unknown_history_count: a.unknown_history_count,
+                unallocated_count: a.unallocated_count,
+                ..Default::default()
+            }).into(),
+            forecast: Some(sale_wire::SalesForecastCoverage {
+                open_minor_units: f.open,
+                weighted_minor_units_times_basis_points: f.weighted,
+                open_coverage_basis_points: f.open_coverage,
+                weighted_coverage_basis_points: f.weighted_coverage,
+                included_count: f.included_count,
+                unallocated_count: f.unallocated_count,
+                undated_count: f.undated_count,
+                omitted_count: f.omitted_count,
+                missing_amount_count: f.missing_amount_count,
+                other_currency_count: f.other_currency_count,
+                buckets: f.buckets.into_iter().map(|b| sale_wire::SalesForecastBucket {
+                    category: Self::forecast_wire(b.category).into(),
+                    deal_count: b.count,
+                    open_minor_units: b.open,
+                    weighted_minor_units_times_basis_points: b.weighted,
+                    ..Default::default()
+                }).collect(),
+                ..Default::default()
+            }).into(),
             ..Default::default()
         })
     }
 
-    #[worker::send]
-    async fn list_sales_quotas(
-        &self,
-        _ctx: RequestContext,
-        req: ServiceRequest<'_, sale_wire::ListSalesQuotasRequest>,
-    ) -> ServiceResult<sale_wire::ListSalesQuotasResponse> {
-        let size = if req.page.page_size == 0 {
-            25
-        } else {
-            req.page.page_size
+    fn forecast_source_wire(value: crm_sales::ForecastSource) -> std::result::Result<sale_wire::SalesForecastSource, ConnectError> {
+        use crm_sales::ForecastDisposition as Domain;
+        use sale_wire::SalesForecastDisposition as Wire;
+        let dimension = |v: crm_sales::CommercialDimension| sale_wire::CommercialDimension {
+            id: v.id,
+            name: v.name,
+            version: v.version,
+            ..Default::default()
         };
-        if size > 100 {
-            return Err(ConnectError::invalid_argument("page_size exceeds 100"));
-        }
-        if !req.page.page_token.is_empty() {
-            Self::id(req.page.page_token)?;
-        }
-        let (items, next) = sales_territories::list(
-            &self.d1()?,
-            &self.tenant,
-            sales_territories::Kind::Quota,
-            sales_territories::Filter {
-                after: req.page.page_token,
-                limit: size as usize,
-                include_archived: req.include_archived,
-                territory_id: None,
-                primary_owner: None,
-            },
-        )
-        .await
-        .map_err(|_| ConnectError::internal("SALES_QUOTA_LIST_FAILED"))?;
-        RpcResponse::ok(sale_wire::ListSalesQuotasResponse {
-            quotas: items
-                .into_iter()
-                .map(Self::quota_wire)
-                .collect::<std::result::Result<Vec<_>, _>>()?,
-            page_info: Some(core_v2::PageInfo {
-                next_page_token: next.unwrap_or_default(),
+        let amount = value.amount.map(|a| {
+            Ok::<_, ConnectError>(core_v2::ExactMoney {
+                minor_units: a.minor_units.parse().map_err(|_| ConnectError::internal("SALES_FORECAST_AMOUNT_INVALID"))?,
+                currency_code: a.currency_code,
                 ..Default::default()
             })
-            .into(),
+        }).transpose()?;
+        Ok(sale_wire::SalesForecastSource {
+            deal_id: value.deal_id,
+            deal_version: value.deal_version,
+            pipeline_id: value.pipeline_id,
+            expected_close_date: value.expected_close_date.map(|d| core_v2::CalendarDate {
+                year: d.year,
+                month: u32::from(d.month),
+                day: u32::from(d.day),
+                ..Default::default()
+            }).into(),
+            amount: amount.into(),
+            probability_basis_points: u32::from(value.probability_basis_points),
+            probability_source: match value.probability_source {
+                crm_sales::ProbabilitySource::Manual => sale_wire::ProbabilitySource::PROBABILITY_SOURCE_MANUAL,
+                crm_sales::ProbabilitySource::StageDefault => sale_wire::ProbabilitySource::PROBABILITY_SOURCE_STAGE_DEFAULT,
+            }.into(),
+            category: Self::forecast_wire(value.category).into(),
+            credited_actor: value.credited_actor,
+            credited_team: value.credited_team.map(dimension).into(),
+            credited_territory: value.credited_territory.map(dimension).into(),
+            disposition: match value.disposition {
+                Domain::Included => Wire::SALES_FORECAST_DISPOSITION_INCLUDED,
+                Domain::Unallocated => Wire::SALES_FORECAST_DISPOSITION_UNALLOCATED,
+                Domain::Undated => Wire::SALES_FORECAST_DISPOSITION_UNDATED,
+                Domain::Omitted => Wire::SALES_FORECAST_DISPOSITION_OMITTED,
+                Domain::MissingAmount => Wire::SALES_FORECAST_DISPOSITION_MISSING_AMOUNT,
+                Domain::OtherCurrency => Wire::SALES_FORECAST_DISPOSITION_OTHER_CURRENCY,
+            }.into(),
             ..Default::default()
         })
     }
 
-    #[worker::send]
-    async fn get_sales_quota_performance(
+    fn performance_page_size(raw: u32) -> std::result::Result<usize, ConnectError> {
+        match raw {
+            0 => Ok(25),
+            1..=100 => Ok(raw as usize),
+            _ => Err(ConnectError::invalid_argument("page_size exceeds 100")),
+        }
+    }
+
+    async fn quota_performance(
         &self,
-        _ctx: RequestContext,
-        req: ServiceRequest<'_, sale_wire::GetSalesQuotaPerformanceRequest>,
-    ) -> ServiceResult<sale_wire::GetSalesQuotaPerformanceResponse> {
-        let input = req.to_owned_message();
+        input: sale_wire::GetSalesQuotaPerformanceRequest,
+    ) -> std::result::Result<(sale_wire::GetSalesQuotaPerformanceResponse, crm_sales::PerformanceActuals), ConnectError> {
         let id = Self::id(&input.quota_id)?;
         let now = crate::now_nanos();
         let as_of = input.as_of_unix_nanos.unwrap_or(now);
@@ -346,7 +346,9 @@ impl sale_wire::DealService for SalesV2Service {
                 (1, Some("lost")) => Some(crm_sales::DealStatus::Lost),
                 _ => return Err(invalid()),
             };
-            let booked = if row.amount_present == 1 && outcome == Some(crm_sales::DealStatus::Won) {
+            let in_scope = quota.scope.dimension_id().is_none()
+                || quota.scope.dimension_id() == row.dimension_id.as_deref();
+            let booked = if in_scope && row.amount_present == 1 && outcome == Some(crm_sales::DealStatus::Won) {
                 Some(
                     crm_sales::quota_sum_limbs([
                         &row.limb4, &row.limb3, &row.limb2, &row.limb1, &row.limb0,
@@ -433,27 +435,354 @@ impl sale_wire::DealService for SalesV2Service {
             None
         };
         let overflow = || ConnectError::internal("SALES_QUOTA_TOTAL_OVERFLOW");
-        let net = actual.net().map_err(|_| overflow())?;
-        let target = quota.target().map_err(|_| overflow())?;
-        let remaining = target.checked_sub(net).ok_or_else(overflow)?;
-        let attainment = net.checked_mul(10_000).ok_or_else(overflow)? / target;
-        RpcResponse::ok(sale_wire::GetSalesQuotaPerformanceResponse {
+        let totals = crm_sales::PerformanceActuals::new(quota, &actual).map_err(|_| overflow())?;
+        Ok((
+            sale_wire::GetSalesQuotaPerformanceResponse {
+                quota: Some(Self::quota_wire(record)?).into(),
+                as_of_unix_nanos: as_of,
+                event_sequence,
+                gross_minor_units: totals.gross.clone(),
+                reversal_minor_units: totals.reversals.clone(),
+                net_minor_units: totals.net.clone(),
+                remaining_minor_units: totals.remaining.clone(),
+                attainment_basis_points: totals.attainment.clone(),
+                won_count: actual.won_count,
+                lost_count: actual.lost_count,
+                reversal_count: actual.reversal_count,
+                missing_amount_count: actual.missing_amount_count,
+                unknown_history_count: actual.unknown_history_count,
+                unallocated_count: actual.unallocated_count,
+                facts,
+                next: next.into(),
+                ..Default::default()
+            },
+            totals,
+        ))
+    }
+}
+
+impl sale_wire::DealService for SalesV2Service {
+    #[worker::send]
+    async fn create_sales_quota(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, sale_wire::CreateSalesQuotaRequest>,
+    ) -> ServiceResult<sale_wire::CreateSalesQuotaResponse> {
+        let input = req.to_owned_message();
+        let id = Self::id(&input.quota_id)?;
+        let (key, expected) = wire_precondition(input.precondition.as_option(), true)?;
+        let cfg = input
+            .configuration
+            .as_option()
+            .ok_or_else(|| ConnectError::invalid_argument("SALES_QUOTA_CONFIGURATION_REQUIRED"))?;
+        let record = Self::quota_draft(id, cfg)?;
+        let db = self.d1()?;
+        let saved = sales_territories::mutate(
+            &sales_territories::Context {
+                db: &db,
+                tenant: &self.tenant,
+                actor: &self.actor,
+                request_id: &self.request_id,
+            },
+            record,
+            &key,
+            expected,
+        )
+        .await
+        .map_err(|_| ConnectError::unavailable("SALES_QUOTA_WRITE_FAILED"))?
+        .map_err(|failure| failure.connect("CreateSalesQuota", &self.request_id))?;
+        let receipt = self.coverage_receipt(&saved);
+        RpcResponse::ok(sale_wire::CreateSalesQuotaResponse {
+            quota: Some(Self::quota_wire(saved.record)?).into(),
+            receipt: Some(receipt).into(),
+            ..Default::default()
+        })
+    }
+
+    #[worker::send]
+    async fn update_sales_quota(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, sale_wire::UpdateSalesQuotaRequest>,
+    ) -> ServiceResult<sale_wire::UpdateSalesQuotaResponse> {
+        let input = req.to_owned_message();
+        let id = Self::id(&input.quota_id)?;
+        let (key, expected) = wire_precondition(input.precondition.as_option(), false)?;
+        let cfg = input
+            .configuration
+            .as_option()
+            .ok_or_else(|| ConnectError::invalid_argument("SALES_QUOTA_CONFIGURATION_REQUIRED"))?;
+        let record = Self::quota_draft(id, cfg)?;
+        let db = self.d1()?;
+        let saved = sales_territories::mutate(
+            &sales_territories::Context {
+                db: &db,
+                tenant: &self.tenant,
+                actor: &self.actor,
+                request_id: &self.request_id,
+            },
+            record,
+            &key,
+            expected,
+        )
+        .await
+        .map_err(|_| ConnectError::unavailable("SALES_QUOTA_WRITE_FAILED"))?
+        .map_err(|failure| failure.connect("UpdateSalesQuota", &self.request_id))?;
+        let receipt = self.coverage_receipt(&saved);
+        RpcResponse::ok(sale_wire::UpdateSalesQuotaResponse {
+            quota: Some(Self::quota_wire(saved.record)?).into(),
+            receipt: Some(receipt).into(),
+            ..Default::default()
+        })
+    }
+
+    #[worker::send]
+    async fn get_sales_quota(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, sale_wire::GetSalesQuotaRequest>,
+    ) -> ServiceResult<sale_wire::GetSalesQuotaResponse> {
+        let input = req.to_owned_message();
+        let id = Self::id(&input.quota_id)?;
+        let db = self.d1()?;
+        let kind = sales_territories::Kind::Quota;
+        let record = if let Some(version) = input.version {
+            if version <= 0 {
+                return Err(ConnectError::invalid_argument(
+                    "SALES_QUOTA_VERSION_INVALID",
+                ));
+            }
+            sales_territories::quota_revision(&db, &self.tenant, &id, version).await
+        } else {
+            sales_territories::get(&db, &self.tenant, kind, &id).await
+        }
+        .map_err(|_| ConnectError::internal("SALES_QUOTA_READ_FAILED"))?
+        .ok_or_else(|| ConnectError::not_found("SALES_QUOTA_NOT_FOUND"))?;
+        let confirmed_mutation = match receipt_key(input.receipt_idempotency_key.as_deref())? {
+            None => None,
+            Some(key) => {
+                let row = crud_receipt(&db, &self.tenant, key, CrudReceiptOwner::Quota)
+                    .await
+                    .map_err(|_| ConnectError::unavailable("SALES_QUOTA_RECEIPT_READ_FAILED"))?;
+                crud_commit_evidence(row, &id, &self.request_id, |state| {
+                    let record = kind.decode(state)?;
+                    Ok((record.id().to_owned(), record.version()))
+                })
+                .map_err(|_| ConnectError::unavailable("SALES_QUOTA_RECEIPT_DECODE_FAILED"))?
+            }
+        };
+        RpcResponse::ok(sale_wire::GetSalesQuotaResponse {
             quota: Some(Self::quota_wire(record)?).into(),
-            as_of_unix_nanos: as_of,
-            event_sequence,
-            gross_minor_units: actual.gross.to_string(),
-            reversal_minor_units: actual.reversals.to_string(),
-            net_minor_units: net.to_string(),
-            remaining_minor_units: remaining.to_string(),
-            attainment_basis_points: attainment.to_string(),
-            won_count: actual.won_count,
-            lost_count: actual.lost_count,
-            reversal_count: actual.reversal_count,
-            missing_amount_count: actual.missing_amount_count,
-            unknown_history_count: actual.unknown_history_count,
-            unallocated_count: actual.unallocated_count,
-            facts,
-            next: next.into(),
+            confirmed_mutation: confirmed_mutation.into(),
+            ..Default::default()
+        })
+    }
+
+    #[worker::send]
+    async fn list_sales_quotas(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, sale_wire::ListSalesQuotasRequest>,
+    ) -> ServiceResult<sale_wire::ListSalesQuotasResponse> {
+        let size = if req.page.page_size == 0 {
+            25
+        } else {
+            req.page.page_size
+        };
+        if size > 100 {
+            return Err(ConnectError::invalid_argument("page_size exceeds 100"));
+        }
+        if !req.page.page_token.is_empty() {
+            Self::id(req.page.page_token)?;
+        }
+        let (items, next) = sales_territories::list(
+            &self.d1()?,
+            &self.tenant,
+            sales_territories::Kind::Quota,
+            sales_territories::Filter {
+                after: req.page.page_token,
+                limit: size as usize,
+                include_archived: req.include_archived,
+                territory_id: None,
+                primary_owner: None,
+            },
+        )
+        .await
+        .map_err(|_| ConnectError::internal("SALES_QUOTA_LIST_FAILED"))?;
+        RpcResponse::ok(sale_wire::ListSalesQuotasResponse {
+            quotas: items
+                .into_iter()
+                .map(Self::quota_wire)
+                .collect::<std::result::Result<Vec<_>, _>>()?,
+            page_info: Some(core_v2::PageInfo {
+                next_page_token: next.unwrap_or_default(),
+                ..Default::default()
+            })
+            .into(),
+            ..Default::default()
+        })
+    }
+
+    #[worker::send]
+    async fn get_sales_quota_performance(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, sale_wire::GetSalesQuotaPerformanceRequest>,
+    ) -> ServiceResult<sale_wire::GetSalesQuotaPerformanceResponse> {
+        let (result, _) = self.quota_performance(req.to_owned_message()).await?;
+        RpcResponse::ok(result)
+    }
+
+    #[worker::send]
+    async fn preview_sales_performance_report(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, sale_wire::PreviewSalesPerformanceReportRequest>,
+    ) -> ServiceResult<sale_wire::PreviewSalesPerformanceReportResponse> {
+        let input = req.to_owned_message();
+        let id = Self::id(&input.quota_id)?;
+        let size = Self::performance_page_size(input.page_size)?;
+        let (report, sources) = self.capture_performance(&id, input.quota_version, String::new(), "Live forecast".into()).await?;
+        let more = sources.len() > size;
+        RpcResponse::ok(sale_wire::PreviewSalesPerformanceReportResponse {
+            report: Some(Self::report_wire(report)?).into(),
+            more_forecast_sources: more,
+            forecast_sources: sources.into_iter().take(size).map(Self::forecast_source_wire).collect::<std::result::Result<Vec<_>, _>>()?,
+            ..Default::default()
+        })
+    }
+
+    #[worker::send]
+    async fn save_sales_performance_report(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, sale_wire::SaveSalesPerformanceReportRequest>,
+    ) -> ServiceResult<sale_wire::SaveSalesPerformanceReportResponse> {
+        let input = req.to_owned_message();
+        let id = Self::id(&input.report_id)?;
+        let quota_id = Self::id(&input.quota_id)?;
+        let (key, _) = wire_precondition(input.precondition.as_option(), true)?;
+        let digest = sales_performance::digest(&id, &input.name, &quota_id, input.quota_version);
+        let db = self.d1()?;
+        let ctx = sales_performance::SaveContext {
+            db: &db,
+            tenant: &self.tenant,
+            actor: &self.actor,
+            request_id: &self.request_id,
+            key: &key,
+            digest: &digest,
+        };
+        let preparation = || diagnostics::mutation_preparation_failure("SaveSalesPerformanceReport", &self.request_id);
+        let prior = sales_performance::replay(&ctx).await.map_err(|_| preparation())?;
+        let saved = if let Some(saved) = prior {
+            saved
+        } else {
+            let (report, sources) = self.capture_performance(&quota_id, input.quota_version, id, input.name).await?;
+            sales_performance::save(&ctx, report, &sources).await.map_err(|_| preparation())?
+        }.map_err(|failure| failure.connect("SaveSalesPerformanceReport", &self.request_id))?;
+        let receipt = diagnostics::receipt(
+            "SaveSalesPerformanceReport", &self.request_id, Some(&saved.original_request_id), 1, saved.replayed, None,
+        );
+        RpcResponse::ok(sale_wire::SaveSalesPerformanceReportResponse {
+            report: Some(Self::report_wire(saved.report)?).into(),
+            receipt: Some(receipt).into(),
+            ..Default::default()
+        })
+    }
+
+    #[worker::send]
+    async fn get_sales_performance_report(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, sale_wire::GetSalesPerformanceReportRequest>,
+    ) -> ServiceResult<sale_wire::GetSalesPerformanceReportResponse> {
+        let input = req.to_owned_message();
+        let id = Self::id(&input.report_id)?;
+        let size = Self::performance_page_size(input.page_size)?;
+        if !input.forecast_after.is_empty() {
+            Self::id(&input.forecast_after)?;
+        }
+        if let Some(after) = input.actual_after.as_option() {
+            Self::id(&after.deal_id)?;
+            if after.deal_version <= 0 {
+                return Err(ConnectError::invalid_argument("SALES_QUOTA_CURSOR_INVALID"));
+            }
+        }
+        let db = self.d1()?;
+        let report = sales_performance::get(&db, &self.tenant, &id).await
+            .map_err(|_| ConnectError::internal("SALES_PERFORMANCE_REPORT_READ_FAILED"))?
+            .ok_or_else(|| ConnectError::not_found("SALES_PERFORMANCE_REPORT_NOT_FOUND"))?;
+        let confirmed_mutation = match receipt_key(input.receipt_idempotency_key.as_deref())? {
+            None => None,
+            Some(key) => {
+                let row = crud_receipt(&db, &self.tenant, key, CrudReceiptOwner::PerformanceReport).await
+                    .map_err(|_| ConnectError::unavailable("SALES_PERFORMANCE_RECEIPT_READ_FAILED"))?;
+                crud_commit_evidence(row, &id, &self.request_id, |state| {
+                    Ok((sales_performance::decode(state)?.report_id, 1))
+                }).map_err(|_| ConnectError::unavailable("SALES_PERFORMANCE_RECEIPT_DECODE_FAILED"))?
+            }
+        };
+        let count = sales_performance::membership_count(&db, &self.tenant, &report.quota, &report.captured_at, &report.event_sequence)
+            .await.map_err(|_| ConnectError::internal("SALES_PERFORMANCE_MEMBERSHIP_READ_FAILED"))?;
+        let mut actual_history_available = false;
+        let mut actual_facts = Vec::new();
+        let mut actual_next = Default::default();
+        // The stored totals are never replaced by a fresh calculation.
+        // Missing history (e.g. governed retention) disables drilldown.
+        if count == report.actual_candidate_count {
+            let cutoff = report.captured_at.parse().map_err(|_| ConnectError::internal("SALES_PERFORMANCE_REPORT_INVALID"))?;
+            let sequence = report.event_sequence.parse().map_err(|_| ConnectError::internal("SALES_PERFORMANCE_REPORT_INVALID"))?;
+            if let Ok((live, totals)) = self.quota_performance(sale_wire::GetSalesQuotaPerformanceRequest {
+                quota_id: report.quota.quota_id.clone(),
+                quota_version: Some(report.quota.version),
+                as_of_unix_nanos: Some(cutoff),
+                event_sequence: Some(sequence),
+                after: input.actual_after,
+                page_size: size as u32,
+                ..Default::default()
+            }).await {
+                let after_count = sales_performance::membership_count(&db, &self.tenant, &report.quota, &report.captured_at, &report.event_sequence)
+                    .await.map_err(|_| ConnectError::internal("SALES_PERFORMANCE_MEMBERSHIP_READ_FAILED"))?;
+                if totals == report.actuals && after_count == count {
+                    actual_history_available = true;
+                    actual_facts = live.facts;
+                    actual_next = live.next;
+                }
+            }
+        }
+        let (sources, next) = sales_performance::forecast_page(&db, &self.tenant, &report, &input.forecast_after, size).await
+            .map_err(|_| ConnectError::internal("SALES_PERFORMANCE_FORECAST_READ_FAILED"))?;
+        RpcResponse::ok(sale_wire::GetSalesPerformanceReportResponse {
+            report: Some(Self::report_wire(report)?).into(),
+            confirmed_mutation: confirmed_mutation.into(),
+            actual_history_available,
+            actual_facts,
+            actual_next,
+            forecast_sources: sources.into_iter().map(Self::forecast_source_wire).collect::<std::result::Result<Vec<_>, _>>()?,
+            forecast_next: next,
+            ..Default::default()
+        })
+    }
+
+    #[worker::send]
+    async fn list_sales_performance_reports(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, sale_wire::ListSalesPerformanceReportsRequest>,
+    ) -> ServiceResult<sale_wire::ListSalesPerformanceReportsResponse> {
+        let input = req.to_owned_message();
+        let size = Self::performance_page_size(input.page.page_size)?;
+        if !input.page.page_token.is_empty() {
+            Self::id(&input.page.page_token)?;
+        }
+        if let Some(id) = &input.quota_id {
+            Self::id(id)?;
+        }
+        let (reports, next) = sales_performance::list(&self.d1()?, &self.tenant, input.quota_id.as_deref(), &input.page.page_token, size).await
+            .map_err(|_| ConnectError::internal("SALES_PERFORMANCE_REPORT_LIST_FAILED"))?;
+        RpcResponse::ok(sale_wire::ListSalesPerformanceReportsResponse {
+            reports: reports.into_iter().map(Self::report_wire).collect::<std::result::Result<Vec<_>, _>>()?,
+            page_info: Some(core_v2::PageInfo { next_page_token: next, ..Default::default() }).into(),
             ..Default::default()
         })
     }

@@ -4,6 +4,7 @@ pub const MODULE_ID: &str = "crm.sales";
 
 pub mod commercial;
 pub mod domain;
+pub mod performance;
 pub mod persistence;
 pub mod pipeline;
 pub mod quotas;
@@ -13,6 +14,7 @@ pub mod views;
 
 pub use commercial::*;
 pub use domain::*;
+pub use performance::*;
 pub use persistence::*;
 pub use pipeline::*;
 pub use quotas::*;

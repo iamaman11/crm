@@ -24,7 +24,7 @@ export type Route =
   | {kind:"account-create";partyId:string}
   | {kind:"deal";dealId:string}
   | {kind:"search";query:string}
-  | {kind:"section";screen:Section;partyId:string;accountId:string;taskId?:string;dealId?:string;contactPointId?:string;relationshipId?:string;search?:string;overdue?:boolean;viewId?:string;pipelineId?:string;assigneeEmail?:string;mine?:boolean;teamId?:string;owner?:string}
+  | {kind:"section";screen:Section;partyId:string;accountId:string;taskId?:string;dealId?:string;contactPointId?:string;relationshipId?:string;search?:string;overdue?:boolean;viewId?:string;pipelineId?:string;assigneeEmail?:string;mine?:boolean;teamId?:string;owner?:string;reportId?:string}
   | {kind:"not-found";path:string};
 
 function isSection(path:string):path is Section {return Object.prototype.hasOwnProperty.call(sectionLabels,path);}
@@ -133,7 +133,13 @@ export function parseRoute(hash:string,allowedStatuses:readonly AccountFilterSta
         return {kind:"deal",dealId:id};
     }catch {/* Malformed URLs do not reach API. */}
   }
-  if(path==="team"&&question>=0)return {kind:"not-found",path:source};
+  if(path==="team"&&question>=0){
+    const ids=params.getAll("reportId"),id=ids[0]??"";
+    let invalid=false;
+    params.forEach((_,key)=>{if(key!=="reportId")invalid=true;});
+    if(invalid||ids.length!==1||!validTeamId(id))return {kind:"not-found",path:source};
+    return {kind:"section",screen:"team",partyId:"",accountId:"",reportId:id};
+  }
   if(isSection(path)){
     const assignees=path==="tasks"?params.getAll("assigneeEmail"):[];
     const teamIds=path==="tasks"?params.getAll("teamId"):[];
@@ -283,6 +289,10 @@ export function salesViewHref(initialAccountId:string,viewId:string,search=""):s
 /** A manually selected Kanban uses the same URL owner, never storage. */
 export function salesPipelineHref(initialAccountId:string,pipelineId:string,search="",owner=""):string {
   return salesSearchHref(initialAccountId,search,"",pipelineId,owner);
+}
+
+export function salesPerformanceReportHref(reportId:string):string {
+  return "#team?"+new URLSearchParams({reportId}).toString();
 }
 
 export function dealHref(dealId:string):string {

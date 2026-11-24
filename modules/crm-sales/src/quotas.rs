@@ -22,7 +22,7 @@ pub struct QuotaDate {
 }
 
 impl QuotaDate {
-    fn calendar(self) -> Result<CalendarDate, SdkError> {
+    pub(crate) fn calendar(self) -> Result<CalendarDate, SdkError> {
         CalendarDate::try_new(self.year, self.month, self.day)
             .map_err(|_| invalid("SALES_QUOTA_DATE_INVALID"))
     }

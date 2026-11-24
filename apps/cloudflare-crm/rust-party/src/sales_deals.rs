@@ -927,7 +927,11 @@ pub(super) async fn close_typed(
     .await
 }
 // SQL supplies versioned credit context only; Sales chooses attribution.
-const CREDIT_TEAMS: &str = "SELECT COALESCE(json_group_array(json_object('id',id,'name',name,'version',version)),'[]') AS snapshot FROM (SELECT t.id,json_extract(t.state,'$.name') name,t.version FROM crm_access_teams t WHERE t.tenant=? AND ((?='team' AND t.id=?) OR (?='actor' AND json_extract(t.state,'$.active')=1 AND EXISTS (SELECT 1 FROM crm_users u WHERE u.tenant_id=t.tenant AND u.email=? AND u.active=1 AND u.email NOT LIKE 'service:%') AND EXISTS (SELECT 1 FROM json_each(t.state,'$.member_emails') m WHERE m.value=?))) ORDER BY t.id)";
+/// Shared SQL projection of current eligible team evidence. Arguments are
+/// static SQL expressions, never user-supplied values.
+pub(super) fn credit_teams_sql(tenant: &str, kind: &str, id: &str) -> String {
+    format!("SELECT COALESCE(json_group_array(json_object('id',id,'name',name,'version',version)),'[]') AS snapshot FROM (SELECT t.id,json_extract(t.state,'$.name') name,t.version FROM crm_access_teams t WHERE t.tenant={tenant} AND (({kind}='team' AND t.id={id}) OR ({kind}='actor' AND json_extract(t.state,'$.active')=1 AND EXISTS (SELECT 1 FROM crm_users u WHERE u.tenant_id=t.tenant AND u.email={id} AND u.active=1 AND u.email NOT LIKE 'service:%') AND EXISTS (SELECT 1 FROM json_each(t.state,'$.member_emails') m WHERE m.value={id}))) ORDER BY t.id)")
+}
 
 #[derive(Deserialize)]
 struct CreditSnapshot {
@@ -1024,11 +1028,15 @@ impl CreditResolution {
             pipeline_id,
             pipeline_version,
         };
-        resolution.teams = bind(db, CREDIT_TEAMS, &resolution.team_parameters(tenant))?
-            .first::<CreditSnapshot>(None)
-            .await?
-            .ok_or_else(|| worker::Error::RustError("SALES_CREDIT_SNAPSHOT_MISSING".into()))?
-            .snapshot;
+        resolution.teams = bind(
+            db,
+            &credit_teams_sql("?", "?", "?"),
+            &resolution.team_parameters(tenant),
+        )?
+        .first::<CreditSnapshot>(None)
+        .await?
+        .ok_or_else(|| worker::Error::RustError("SALES_CREDIT_SNAPSHOT_MISSING".into()))?
+        .snapshot;
         resolution.context.teams = serde_json::from_str(&resolution.teams)
             .map_err(|error| worker::Error::RustError(error.to_string()))?;
         Ok(resolution)
@@ -1104,7 +1112,7 @@ impl CreditResolution {
     }
 
     fn append_guard(&self, sql: &mut String, values: &mut Vec<JsValue>, tenant: &str) {
-        sql.push_str(&format!(" AND ({CREDIT_TEAMS})=?"));
+        sql.push_str(&format!(" AND ({})=?", credit_teams_sql("?", "?", "?")));
         values.extend(self.team_parameters(tenant));
         values.push(JsValue::from_str(&self.teams));
         if let Some(id) = &self.account_id {

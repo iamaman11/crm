@@ -37,7 +37,44 @@ pub struct CloseCreditSelection {
     pub territory_id: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommercialCredit {
+    pub owner: SalesOwnerScope,
+    pub actor: Option<String>,
+    pub team: Option<CommercialDimension>,
+    pub territory: Option<CommercialDimension>,
+    pub assignment_version: Option<i64>,
+    pub catalog_version: Option<i64>,
+}
+
 impl CloseCreditContext {
+    /// Same automatic credit semantics for open estimates and actual closing.
+    pub fn resolve(self, deal_owner: &DealOwner) -> CommercialCredit {
+        let owner = match deal_owner {
+            DealOwner::Actor(id) => SalesOwnerScope::Actor(id.as_str().to_owned()),
+            DealOwner::Team(id) => SalesOwnerScope::Team(id.as_str().to_owned()),
+        };
+        let credited_actor = match &owner {
+            SalesOwnerScope::Actor(id) if !id.starts_with("service:") => Some(id.clone()),
+            _ => None,
+        };
+        let credited_team = match &owner {
+            SalesOwnerScope::Team(id) => self.teams.into_iter().find(|team| &team.id == id),
+            SalesOwnerScope::Actor(_) if credited_actor.is_some() && self.teams.len() == 1 => {
+                self.teams.into_iter().next()
+            }
+            _ => None,
+        };
+        CommercialCredit {
+            owner,
+            actor: credited_actor,
+            team: credited_team,
+            territory: self.territory,
+            assignment_version: self.assignment_version,
+            catalog_version: self.catalog_version,
+        }
+    }
+
     /// Resolve against versioned evidence supplied by storage. No caller
     /// may invent a team membership or override an active account territory.
     pub fn select(
@@ -137,26 +174,12 @@ impl CommercialCloseFact {
         closed_at_unix_nanos: i64,
         context: CloseCreditContext,
     ) -> Result<Self, SdkError> {
-        let owner = match deal.owner() {
-            DealOwner::Actor(id) => SalesOwnerScope::Actor(id.as_str().to_owned()),
-            DealOwner::Team(id) => SalesOwnerScope::Team(id.as_str().to_owned()),
-        };
-        let credited_actor = match &owner {
-            SalesOwnerScope::Actor(id) if !id.starts_with("service:") => Some(id.clone()),
-            _ => None,
-        };
-        let credited_team = match &owner {
-            SalesOwnerScope::Team(id) => context.teams.into_iter().find(|team| &team.id == id),
-            SalesOwnerScope::Actor(_) if credited_actor.is_some() && context.teams.len() == 1 => {
-                context.teams.into_iter().next()
-            }
-            _ => None,
-        };
+        let credit = context.resolve(deal.owner());
         let value = Self {
             close_version: deal.version().checked_add(1).ok_or_else(invalid)?,
             outcome,
             closed_at_unix_nanos,
-            owner,
+            owner: credit.owner,
             account_id: deal.account().map(|account| account.resource_id.clone()),
             pipeline_id: deal.stage().pipeline_id().as_str().to_owned(),
             stage_id: deal.stage().stage_id().as_str().to_owned(),
@@ -164,11 +187,11 @@ impl CommercialCloseFact {
                 minor_units: money.minor_units().to_string(),
                 currency_code: money.currency().as_str().to_owned(),
             }),
-            credited_actor,
-            credited_team,
-            credited_territory: context.territory,
-            assignment_version: context.assignment_version,
-            catalog_version: context.catalog_version,
+            credited_actor: credit.actor,
+            credited_team: credit.team,
+            credited_territory: credit.territory,
+            assignment_version: credit.assignment_version,
+            catalog_version: credit.catalog_version,
         };
         value.validate()?;
         Ok(value)

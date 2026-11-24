@@ -20,7 +20,7 @@ function ScrollTable({label,children}:{label:string;children:ReactNode}) {
 }
 
 /** The original Access enrollment is the single source for a human identity. */
-export function MemberScreen(){
+export function MemberScreen({reportId}:{reportId:string}){
   const [memberEmail,setMemberEmail]=useState("");
   const [memberRole,setMemberRole]=useState(MemberRole.VIEWER);
   const [editing,setEditing]=useState<Member>();
@@ -140,7 +140,7 @@ export function MemberScreen(){
     </section>
     <TeamWorkspace query={teams} members={members} isAdmin={isAdmin} actor={actor} onChanged={workload.reload}/>
     <TerritoryWorkspace isAdmin={isAdmin} choices={ownerChoices(members,teams.data??[])}
-      ownersUnavailable={roster.busy||teams.busy||!!roster.error||!!teams.error}/>
+      ownersUnavailable={roster.busy||teams.busy||!!roster.error||!!teams.error} reportId={reportId}/>
     <section aria-label="Реальная нагрузка команды">
       <h2>Распределение и нагрузка</h2>
       <p>Авторитетные числа по всем задачам до LIMIT, включая завершённые.

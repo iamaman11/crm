@@ -2955,6 +2955,33 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      await routingRegion.getByLabel("Архивное правило",{exact:true}).check();
      await mutation(routingRegion.getByRole("button",{name:"Сохранить правило",exact:true}),"UpdateSalesRoutingRule");
      checkpoint("SK-07.D2 routing administration, automatic preview, atomic Deal attribution, history and archive");
+     const quotaRegion=page.getByRole("region",{name:"Коммерческие цели и план-факт",exact:true});
+     const quotaName="Browser report quota "+runId,reportName="Browser frozen report "+runId;
+     await quotaRegion.getByRole("button",{name:"Создать коммерческую цель",exact:true}).click();
+     const quotaForm=quotaRegion.getByRole("form",{name:"Настройка коммерческой цели"});
+     await quotaForm.getByLabel("Название цели",{exact:true}).fill(quotaName);
+     await quotaForm.getByLabel("Воронка цели",{exact:true}).selectOption(newPipelineId);
+     await quotaForm.getByLabel("Тип периода",{exact:true}).selectOption("3");
+     const year=new Date().getUTCFullYear();
+     await quotaForm.getByLabel("Начало периода",{exact:true}).fill(year+"-01-01");
+     await quotaForm.getByLabel("Последний день периода",{exact:true}).fill(year+"-12-31");
+     await quotaForm.getByLabel("Плановая сумма",{exact:true}).fill("10000");
+     await quotaForm.getByLabel("Причина версии",{exact:true}).fill("qa.report");
+     await quotaForm.getByLabel("Опубликовать цель",{exact:true}).check();
+     await mutation(quotaForm.getByRole("button",{name:"Сохранить цель",exact:true}),"CreateSalesQuota");
+     await quotaRegion.getByRole("row").filter({hasText:quotaName}).getByRole("button",{name:"План-факт",exact:true}).click();
+     const reportRegion=quotaRegion.getByRole("region",{name:"Коммерческие отчёты и прогнозное покрытие"});
+     await reportRegion.getByRole("button",{name:"Предпросмотр покрытия цели"}).click();
+     await reportRegion.getByRole("region",{name:"Текущий прогноз"}).getByRole("heading",{name:"Прогнозное покрытие остатка цели"}).waitFor();
+     await reportRegion.getByLabel("Название отчёта",{exact:true}).fill(reportName);
+     await mutation(reportRegion.getByRole("button",{name:"Сохранить коммерческий отчёт",exact:true}),"SaveSalesPerformanceReport");
+     const reportDetail=reportRegion.getByRole("region",{name:"Сохранённый коммерческий отчёт"});
+     await reportDetail.getByRole("heading",{name:reportName,exact:true}).waitFor();
+     await reportDetail.getByRole("link",{name:"Постоянная ссылка на отчёт",exact:true}).click();
+     await reloadDocument();
+     await reportDetail.getByRole("heading",{name:reportName,exact:true}).waitFor();
+     assert.equal((await sql("SELECT COUNT(*) n FROM crm_sales_performance_reports WHERE tenant=? AND json_extract(state,'$.name')=?",tenantA,reportName))[0].n,1);
+     checkpoint("SK-07.D3 commercial report forecast preview, durable save, direct link, reload and D1");
 
 
    }
