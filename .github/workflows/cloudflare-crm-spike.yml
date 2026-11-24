@@ -101,8 +101,12 @@ jobs:
             ~/.cargo/git/db
             target
             apps/cloudflare-crm/rust-party/target
-          key: ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}
+          # Refresh the immutable cache when workspace profiles/manifests change,
+          # not on every source SHA. Cargo still owns all freshness checks.
+          key: ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}-${{ hashFiles('Cargo.toml', 'apps/cloudflare-crm/rust-party/Cargo.toml') }}
           restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}-
+            ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}
             ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-
       # The scanner is pinned independently of application dependencies.
       # Cache only its executable, not a security result: every run still
@@ -189,8 +193,6 @@ jobs:
         env:
           CARGO_PROFILE_TEST_DEBUG: line-tables-only
           RUST_LOG: worker_build::build=info
-          # Native Cargo freshness reasons; no cache bypass or extra compilation.
-          CARGO_LOG: cargo::compiler::fingerprint=trace,cargo::core::compiler::fingerprint=trace
         working-directory: apps/cloudflare-crm
         shell: bash
         run: |
@@ -212,8 +214,6 @@ jobs:
         working-directory: apps/cloudflare-crm
         env:
           RUST_LOG: worker_build::build=info
-          # Native Cargo freshness reasons; no cache bypass or extra compilation.
-          CARGO_LOG: cargo::compiler::fingerprint=trace,cargo::core::compiler::fingerprint=trace
           CRM_SOURCE_SHA: ${{ github.sha }}
           CRM_RPC_RUNTIME_PROOF: /tmp/crm-rpc-runtime.json
         shell: bash
