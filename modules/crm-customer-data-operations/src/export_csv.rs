@@ -192,7 +192,11 @@ mod tests {
     #[test]
     fn typed_csv_preserves_exact_signed_numbers_without_formula_injection() {
         use CanonicalCsvCell::{Integer, Text};
-        let cells = [Text("=SUM(1,2)"), Integer("-9007199254740993"), Text("a\nb")];
+        let cells = [
+            Text("=SUM(1,2)"),
+            Integer("-9007199254740993"),
+            Text("a\nb"),
+        ];
         assert_eq!(
             encode_typed_csv_record(&cells).unwrap(),
             b"\"'=SUM(1,2)\",-9007199254740993,\"a\nb\"\n"
