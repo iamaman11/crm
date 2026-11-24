@@ -1171,7 +1171,204 @@ impl SalesV2Service {
     }
 }
 
+fn history_status(value: DomainDealStatus) -> sale_wire::DealStatus {
+    match value {
+        DomainDealStatus::Open => sale_wire::DealStatus::DEAL_STATUS_OPEN,
+        DomainDealStatus::Won => sale_wire::DealStatus::DEAL_STATUS_WON,
+        DomainDealStatus::Lost => sale_wire::DealStatus::DEAL_STATUS_LOST,
+    }
+}
+
+fn history_duration(value: crm_sales::HistoryDuration) -> sale_wire::SalesHistoryDuration {
+    sale_wire::SalesHistoryDuration {
+        count: value.count,
+        mean_seconds: value.mean_seconds,
+        median_seconds: value.median_seconds,
+        p90_seconds: value.p90_seconds,
+        ..Default::default()
+    }
+}
+
+fn history_outcomes(value: crm_sales::HistoryOutcomes) -> sale_wire::SalesHistoryOutcomes {
+    sale_wire::SalesHistoryOutcomes {
+        open_count: value.open,
+        won_count: value.won,
+        lost_count: value.lost,
+        denominator: value.denominator(),
+        win_rate_basis_points: value.win_rate_basis_points(),
+        total_count: value.total(),
+        cohort_conversion_basis_points: value.cohort_conversion_basis_points(),
+        ..Default::default()
+    }
+}
+
+fn history_window(value: crm_sales::HistoryWindow) -> sale_wire::SalesHistoryWindow {
+    sale_wire::SalesHistoryWindow {
+        start_unix_nanos: value.lo,
+        end_exclusive_unix_nanos: value.hi,
+        observed_until_exclusive_unix_nanos: value.cutoff,
+        complete_period: value.complete,
+        future_period: value.future,
+        state_at_cutoff: Some(history_outcomes(value.state)).into(),
+        final_closes: Some(history_outcomes(value.final_closes)).into(),
+        creation_cohort: Some(history_outcomes(value.cohort)).into(),
+        unknown_history_count: value.unknown_history,
+        close_event_count: value.close_events,
+        reopen_event_count: value.reopen_events,
+        cycle: Some(history_duration(value.cycle)).into(),
+        close_episode: Some(history_duration(value.episode)).into(),
+        reasons: value.reasons.into_iter().map(|reason| sale_wire::SalesHistoryReason {
+            outcome: history_status(if reason.won { DomainDealStatus::Won } else { DomainDealStatus::Lost }).into(),
+            reason_code: reason.code,
+            deal_count: reason.count,
+            ..Default::default()
+        }).collect(),
+        stages: value.stages.into_iter().map(|stage| sale_wire::SalesHistoryStage {
+            pipeline_id: stage.pipeline_id,
+            stage_id: stage.stage_id,
+            catalog_version: stage.catalog_version,
+            duration: Some(history_duration(stage.duration)).into(),
+            ..Default::default()
+        }).collect(),
+        deals: value.deals.into_iter().map(|deal| sale_wire::SalesHistoricalDeal {
+            deal_id: deal.id,
+            pipeline_id: deal.pipeline_id,
+            status: deal.status.map(|value| history_status(value).into()),
+            created_at_unix_nanos: deal.created_at,
+            last_event_version: deal.last_version,
+            creation_cohort: deal.cohort,
+            final_close_in_period: deal.final_close_in_period,
+            final_close_version: deal.final_close_version,
+            final_close_at_unix_nanos: deal.final_close_at,
+            reason_code: deal.reason,
+            cycle_seconds: deal.cycle_seconds,
+            episode_seconds: deal.episode_seconds,
+            close_versions: deal.close_versions,
+            reopen_versions: deal.reopen_versions,
+            visits: deal.visits.into_iter().map(|visit| sale_wire::SalesHistoryVisit {
+                duration_seconds: visit.seconds(),
+                stage_id: visit.stage_id,
+                catalog_version: visit.catalog_version,
+                entry_version: visit.entry_version,
+                exit_version: visit.exit_version,
+                entry_at_unix_nanos: visit.entry_at,
+                exit_at_unix_nanos: visit.exit_at,
+                ..Default::default()
+            }).collect(),
+            ..Default::default()
+        }).collect(),
+        ..Default::default()
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct HistoricalRow {
+    as_of: String,
+    deal_id: Option<String>,
+    deal_pipeline: Option<String>,
+    record_version: Option<String>,
+    event_version: Option<String>,
+    kind: Option<crm_sales::HistoryKind>,
+    pipeline_id: Option<String>,
+    stage_id: Option<String>,
+    previous_stage_id: Option<String>,
+    status: Option<DomainDealStatus>,
+    previous_status: Option<DomainDealStatus>,
+    reason_code: Option<String>,
+    event_at: Option<String>,
+    catalog_version: Option<String>,
+}
+
 impl sale_wire::DealService for SalesV2Service {
+    #[worker::send]
+    async fn get_sales_history(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, sale_wire::GetSalesHistoryRequest>,
+    ) -> ServiceResult<sale_wire::GetSalesHistoryResponse> {
+        use crm_sales::{DealHistory, HistoryEvent, QuotaCadence, QuotaDate, QuotaPeriod};
+        use wasm_bindgen::JsValue;
+        let input = req.to_owned_message();
+        let period = input.period.as_option().ok_or_else(|| ConnectError::invalid_argument("SALES_HISTORY_PERIOD_REQUIRED"))?;
+        let date = |value: &core_v2::CalendarDate| -> std::result::Result<QuotaDate, ConnectError> {
+            let invalid = || ConnectError::invalid_argument("SALES_HISTORY_DATE_INVALID");
+            Ok(QuotaDate {
+                year: value.year,
+                month: u8::try_from(value.month).map_err(|_| invalid())?,
+                day: u8::try_from(value.day).map_err(|_| invalid())?,
+            })
+        };
+        let start = date(period.start_date.as_option().ok_or_else(|| ConnectError::invalid_argument("SALES_HISTORY_DATE_REQUIRED"))?)?;
+        let end = date(period.end_date.as_option().ok_or_else(|| ConnectError::invalid_argument("SALES_HISTORY_DATE_REQUIRED"))?)?;
+        let period = QuotaPeriod::new(start, end, input.time_zone, QuotaCadence::Custom)
+            .map_err(|error| ConnectError::invalid_argument(error.code))?;
+        let previous_period = input.compare_previous.then(|| crm_sales::previous_history_period(&period))
+            .transpose().map_err(|error| ConnectError::invalid_argument(error.code))?;
+        let db = self.d1()?;
+        if let Some(id) = input.pipeline_id.as_deref() {
+            Self::pipeline_id(id)?;
+            if sales_pipelines::get(&db, &self.tenant, id).await
+                .map_err(|_| ConnectError::internal("SALES_HISTORY_PIPELINE_READ_FAILED"))?.is_none() {
+                return Err(ConnectError::not_found("SALES_PIPELINE_NOT_FOUND"));
+            }
+        }
+        let failure = || ConnectError::internal("SALES_HISTORY_READ_FAILED");
+        let capacity = || ConnectError::resource_exhausted("SALES_HISTORY_CAPACITY");
+        // A single D1 statement captures the clock, retained Deal versions and
+        // event membership together. No repeated page reads or synthetic history.
+        let rows = crate::bind(&db,
+            "WITH clock AS MATERIALIZED (SELECT CAST(strftime('%s','now') AS INTEGER)*1000000000 + CAST(substr(strftime('%f','now'),4,3) AS INTEGER)*1000000 AS nanos) SELECT CAST(c.nanos AS TEXT) as_of,d.id deal_id,json_extract(d.state,'$.stage.pipeline_id') deal_pipeline,CAST(d.version AS TEXT) record_version,CAST(e.deal_version AS TEXT) event_version,e.action kind,e.pipeline_id,e.stage_id,e.previous_stage_id,e.status,e.previous_status,e.reason_code,CAST(e.occurred_at_unix_nanos AS TEXT) event_at,CAST(e.catalog_version AS TEXT) catalog_version FROM clock c LEFT JOIN crm_sales_deal_records d ON d.tenant=?1 AND (?2 IS NULL OR json_extract(d.state,'$.stage.pipeline_id')=?2) LEFT JOIN crm_sales_deal_events e ON e.tenant=d.tenant AND e.deal_id=d.id ORDER BY d.id,e.deal_version LIMIT ?3",
+            &[JsValue::from_str(&self.tenant),input.pipeline_id.as_deref().map_or(JsValue::NULL, JsValue::from_str),JsValue::from_f64((crm_sales::MAX_HISTORY_ROWS + 1) as f64)],
+        ).map_err(|_| failure())?.all().await.map_err(|_| failure())?.results::<HistoricalRow>().map_err(|_| failure())?;
+        if rows.len() > crm_sales::MAX_HISTORY_ROWS {
+            return Err(capacity());
+        }
+        let as_of = rows.first().ok_or_else(failure)?.as_of.parse::<i64>().map_err(|_| failure())?;
+        let mut histories = std::collections::BTreeMap::<String, DealHistory>::new();
+        let integer = |raw: Option<String>| -> std::result::Result<i64, ConnectError> {
+            raw.ok_or_else(failure)?.parse::<i64>().map_err(|_| failure())
+        };
+        for row in rows {
+            let Some(id) = row.deal_id else { continue };
+            let history = histories.entry(id.clone()).or_insert(DealHistory {
+                id,
+                pipeline_id: row.deal_pipeline.ok_or_else(failure)?,
+                version: integer(row.record_version)?,
+                events: Vec::new(),
+            });
+            if let Some(version) = row.event_version {
+                history.events.push(HistoryEvent {
+                    version: integer(Some(version))?,
+                    kind: row.kind.ok_or_else(failure)?,
+                    pipeline_id: row.pipeline_id.ok_or_else(failure)?,
+                    stage_id: row.stage_id.ok_or_else(failure)?,
+                    previous_stage_id: row.previous_stage_id,
+                    status: row.status.ok_or_else(failure)?,
+                    previous_status: row.previous_status,
+                    reason_code: row.reason_code,
+                    at: integer(row.event_at)?,
+                    catalog_version: row.catalog_version.map(|value| integer(Some(value))).transpose()?,
+                });
+            }
+        }
+        if histories.len() > crm_sales::MAX_HISTORY_DEALS {
+            return Err(capacity());
+        }
+        let histories = histories.into_values().collect::<Vec<_>>();
+        let current = crm_sales::historical_window(&histories, &period, as_of).map_err(|e| ConnectError::invalid_argument(e.code))?;
+        let previous = previous_period.as_ref().map(|period| crm_sales::historical_window(&histories, period, as_of))
+            .transpose().map_err(|e| ConnectError::invalid_argument(e.code))?;
+        let (comparable, delta) = crm_sales::history_comparison(&current, previous.as_ref());
+        RpcResponse::ok(sale_wire::GetSalesHistoryResponse {
+            as_of_unix_nanos: as_of,
+            current: Some(history_window(current)).into(),
+            previous: previous.map(history_window).into(),
+            comparison_comparable: comparable,
+            win_rate_delta_basis_points: delta,
+            ..Default::default()
+        })
+    }
+
     #[worker::send]
     async fn export_sales_analytics(
         &self,

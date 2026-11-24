@@ -1087,7 +1087,95 @@ message ExportSalesAnalyticsResponse {
   GetSalesScorecardResponse scorecard = 7;
 }
 
+// Read-only, bounded lifecycle analytics. No current-owner attribution.
+message GetSalesHistoryRequest {
+  SalesAnalysisPeriod period = 1;
+  string time_zone = 2;
+  optional string pipeline_id = 3;
+  bool compare_previous = 4;
+}
+message SalesHistoryDuration {
+  uint64 count = 1;
+  optional uint64 mean_seconds = 2;
+  optional uint64 median_seconds = 3;
+  optional uint64 p90_seconds = 4;
+}
+message SalesHistoryOutcomes {
+  uint64 open_count = 1;
+  uint64 won_count = 2;
+  uint64 lost_count = 3;
+  uint64 denominator = 4;
+  optional uint32 win_rate_basis_points = 5;
+  uint64 total_count = 6;
+  optional uint32 cohort_conversion_basis_points = 7;
+}
+message SalesHistoryReason {
+  DealStatus outcome = 1;
+  optional string reason_code = 2;
+  uint64 deal_count = 3;
+}
+message SalesHistoryStage {
+  string pipeline_id = 1;
+  string stage_id = 2;
+  optional int64 catalog_version = 3;
+  SalesHistoryDuration duration = 4;
+}
+message SalesHistoryVisit {
+  string stage_id = 1;
+  optional int64 catalog_version = 2;
+  int64 entry_version = 3;
+  int64 exit_version = 4;
+  int64 entry_at_unix_nanos = 5;
+  int64 exit_at_unix_nanos = 6;
+  uint64 duration_seconds = 7;
+}
+message SalesHistoricalDeal {
+  string deal_id = 1;
+  string pipeline_id = 2;
+  optional DealStatus status = 3;
+  optional int64 created_at_unix_nanos = 4;
+  optional int64 last_event_version = 5;
+  bool creation_cohort = 6;
+  bool final_close_in_period = 7;
+  optional int64 final_close_version = 8;
+  optional int64 final_close_at_unix_nanos = 9;
+  optional string reason_code = 10;
+  optional uint64 cycle_seconds = 11;
+  optional uint64 episode_seconds = 12;
+  repeated int64 close_versions = 13;
+  repeated int64 reopen_versions = 14;
+  repeated SalesHistoryVisit visits = 15;
+}
+message SalesHistoryWindow {
+  int64 start_unix_nanos = 1;
+  int64 end_exclusive_unix_nanos = 2;
+  int64 observed_until_exclusive_unix_nanos = 3;
+  bool complete_period = 4;
+  bool future_period = 5;
+  SalesHistoryOutcomes state_at_cutoff = 6;
+  SalesHistoryOutcomes final_closes = 7;
+  SalesHistoryOutcomes creation_cohort = 8;
+  uint64 unknown_history_count = 9;
+  uint64 close_event_count = 10;
+  uint64 reopen_event_count = 11;
+  SalesHistoryDuration cycle = 12;
+  SalesHistoryDuration close_episode = 13;
+  repeated SalesHistoryReason reasons = 14;
+  repeated SalesHistoryStage stages = 15;
+  repeated SalesHistoricalDeal deals = 16;
+}
+message GetSalesHistoryResponse {
+  int64 as_of_unix_nanos = 1;
+  SalesHistoryWindow current = 2;
+  SalesHistoryWindow previous = 3;
+  bool comparison_comparable = 4;
+  optional sint32 win_rate_delta_basis_points = 5;
+}
+
 service DealService {
+  rpc GetSalesHistory(GetSalesHistoryRequest) returns (GetSalesHistoryResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   rpc ExportSalesAnalytics(ExportSalesAnalyticsRequest) returns (ExportSalesAnalyticsResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }

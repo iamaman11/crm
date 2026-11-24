@@ -23,7 +23,7 @@ export type Section=keyof typeof sectionLabels;
 export type AccountFilterStatus = AccountStatus.ACTIVE | AccountStatus.INACTIVE;
 export type AccountFilters = {search:string;status:AccountFilterStatus|null;cursor:string};
 export type Route =
-  | {kind:"insights";start:string;end:string;pipelineId:string;includeArchived:boolean;compare:boolean;owner?:string}
+  | {kind:"insights";start:string;end:string;pipelineId:string;includeArchived:boolean;compare:boolean;owner?:string;historyZone?:string}
   | {kind:"workday";day:string;mine:boolean;teamId?:string}
   | ({kind:"accounts"} & AccountFilters)
   | {kind:"account";accountId:string}
@@ -80,7 +80,7 @@ export function parseRoute(hash:string,allowedStatuses:readonly AccountFilterSta
     return {kind:"workday",day,mine:scopes[0]==="mine",...(teamId?{teamId}:{})};
   }
   if(path==="insights"){
-    const allowed=new Set(["start","end","pipelineId","includeArchived","compare","owner"]);
+    const allowed=new Set(["start","end","pipelineId","includeArchived","compare","owner","historyZone"]);
     let invalid=false;
     params.forEach((_,key)=>{if(!allowed.has(key)||params.getAll(key).length!==1)invalid=true;});
     const start=params.get("start")??"",end=params.get("end")??"";
@@ -88,6 +88,8 @@ export function parseRoute(hash:string,allowedStatuses:readonly AccountFilterSta
     const include=params.get("includeArchived")??"";
     const compare=params.get("compare")??"";
     const owner=params.get("owner")??"";
+    const historyZone=params.get("historyZone")??"";
+    if(historyZone.length>128)return {kind:"not-found",path:source};
     const validDate=(day:string)=>{
       if(!/^\d{4}-\d{2}-\d{2}$/.test(day))return false;
       const [y,m,d]=day.split("-").map(Number);
@@ -101,7 +103,7 @@ export function parseRoute(hash:string,allowedStatuses:readonly AccountFilterSta
          pipelineId==="."||pipelineId===".."))||
        (include!==""&&include!=="1")||(compare!==""&&compare!=="1")||
        (compare==="1"&&!start))return {kind:"not-found",path:source};
-    return {kind:"insights",start,end,pipelineId,includeArchived:include==="1",compare:compare==="1",...(owner?{owner}:{})};
+    return {kind:"insights",start,end,pipelineId,includeArchived:include==="1",compare:compare==="1",...(owner?{owner}:{}),...(historyZone?{historyZone}:{})};
   }
   if(path==="search"){
     const queries=params.getAll("query");
@@ -214,12 +216,13 @@ export function parseRoute(hash:string,allowedStatuses:readonly AccountFilterSta
   return {kind:"not-found",path:source};
 }
 export function intelligenceHref(opts:{start?:string;end?:string;pipelineId?:string;
-  includeArchived?:boolean;compare?:boolean;owner?:string}={}):string {
+  includeArchived?:boolean;compare?:boolean;owner?:string;historyZone?:string}={}):string {
   const p=new URLSearchParams();
   if(opts.start)p.set("start",opts.start);
   if(opts.end)p.set("end",opts.end);
   if(opts.pipelineId)p.set("pipelineId",opts.pipelineId);
   if(opts.owner)p.set("owner",opts.owner);
+  if(opts.historyZone&&opts.historyZone!=="UTC")p.set("historyZone",opts.historyZone);
   if(opts.includeArchived)p.set("includeArchived","1");
   if(opts.compare&&opts.start&&opts.end)p.set("compare","1");
   return "#insights"+(p.size?"?"+p.toString():"");

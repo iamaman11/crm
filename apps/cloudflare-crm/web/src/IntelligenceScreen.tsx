@@ -12,12 +12,13 @@ import {allPipelines} from "./salesPipelineCatalog";
 import {salesPipelineHref,intelligenceHref,workdayHref} from "./routes";
 import {navigateTo} from "./navigation";
 import {allOwners,ownerWire} from "./ownerCatalog";
+import {SalesHistory} from "./SalesHistory";
 
 // Infer from the ONE generated Connect client; never maintain a parallel DTO.
 type GetPipelineMetricsResponse=Awaited<ReturnType<typeof api.deals.getPipelineMetrics>>;
 type Slice={pipeline:SalesPipeline;current:GetPipelineMetricsResponse;previous?:GetPipelineMetricsResponse};
 type Portfolio={slices:Slice[];currencies:CurrencyCatalog};
-type Inputs={start:string;end:string;pipelineId:string;includeArchived:boolean;compare:boolean;owner?:string};
+type Inputs={start:string;end:string;pipelineId:string;includeArchived:boolean;compare:boolean;owner?:string;historyZone?:string};
 const MAX_CONCURRENT=4;
 function n(value:bigint):string {return new Intl.NumberFormat("ru-RU").format(value);}
 function signed(value:string):bigint {return BigInt(value);}
@@ -98,7 +99,7 @@ function CurrencyTable({title,rows,catalog}:{title:string;rows:CurrencyTotal[];
 }
 
 /** SK-07: complete authorised native metrics, never partial Deal pages as analytics. */
-export function IntelligenceScreen({start,end,pipelineId,includeArchived,compare,owner=""}:Inputs) {
+export function IntelligenceScreen({start,end,pipelineId,includeArchived,compare,owner="",historyZone="UTC"}:Inputs) {
   const owners=useQuery(useCallback(allOwners,[]));
   const [draftStart,setDraftStart]=useState(start);
   const [draftEnd,setDraftEnd]=useState(end);
@@ -157,7 +158,7 @@ export function IntelligenceScreen({start,end,pipelineId,includeArchived,compare
       if(draftStart&&(!parseDate(draftStart)||!parseDate(draftEnd)||draftStart>draftEnd))
         throw Error("Некорректный период");
       setFormError("");
-      navigateTo(intelligenceHref({
+      navigateTo(intelligenceHref({historyZone,
         start:draftStart,end:draftEnd,pipelineId,includeArchived,owner,compare:compare&&!!draftStart
       }));
     }catch(error){setFormError(error instanceof Error?error.message:"Некорректные даты");}
@@ -167,8 +168,9 @@ export function IntelligenceScreen({start,end,pipelineId,includeArchived,compare
       description="Портфель всех авторизованных воронок, прогноз и причины операционных рисков. Полные показатели рассчитывает исходный Rust Sales owner, не неполные страницы сделок."/>
     <p><a href="#sales">Сделки и настройка воронок</a>{" · "}
       <a href={workdayHref()}>Рабочий день и действия</a></p>
+    <SalesHistory start={start} end={end} pipelineId={pipelineId} compare={compare} historyZone={historyZone} includeArchived={includeArchived} owner={owner}/>
     <QueryNotice query={owners}/>
-    <SelectField label="Ответственный за портфель" value={owner} onChange={e=>navigateTo(intelligenceHref({start,end,pipelineId,includeArchived,compare,owner:e.target.value}))}>
+    <SelectField label="Ответственный за портфель" value={owner} onChange={e=>navigateTo(intelligenceHref({historyZone,start,end,pipelineId,includeArchived,compare,owner:e.target.value}))}>
       <option value="">Все ответственные</option>{owners.data?.choices.map(c=><option key={c.value} value={c.value}>{c.label}</option>)}
     </SelectField>
     {owner&&<p>По текущему владельцу сделки, не историческая атрибуция выручки.</p>}
@@ -180,7 +182,7 @@ export function IntelligenceScreen({start,end,pipelineId,includeArchived,compare
       <Button type="submit">Применить период</Button>{" "}
       <Button type="button" variant="secondary" onClick={()=>{
         setDraftStart("");setDraftEnd("");setFormError("");
-        navigateTo(intelligenceHref({pipelineId,includeArchived,owner}));
+        navigateTo(intelligenceHref({historyZone,pipelineId,includeArchived,owner}));
       }}>Все даты</Button>
     </form>
     <p>Период (UTC, включительно) ограничивает прогноз по ожидаемой дате и
@@ -190,10 +192,10 @@ export function IntelligenceScreen({start,end,pipelineId,includeArchived,compare
     {formError&&<p role="alert">{formError}</p>}
     <p>
       <label><input type="checkbox" checked={includeArchived} onChange={e=>
-        navigateTo(intelligenceHref({start,end,pipelineId,compare,owner,
+        navigateTo(intelligenceHref({historyZone,start,end,pipelineId,compare,owner,
           includeArchived:e.target.checked}))}/> Включить архивные воронки</label>{" · "}
       <label><input type="checkbox" checked={compare} disabled={!start||!end}
-        onChange={e=>navigateTo(intelligenceHref({start,end,pipelineId,owner,
+        onChange={e=>navigateTo(intelligenceHref({historyZone,start,end,pipelineId,owner,
           includeArchived,compare:e.target.checked}))}/>
         Сравнить с предыдущим периодом той же длительности</label>
     </p>

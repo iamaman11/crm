@@ -5806,6 +5806,27 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    const monthlyQuota=(await call("CreateSalesQuota",admin,{quotaId:monthlyId,configuration:monthlyConfig,precondition:pre("monthly-goal")})).quota;
    const scoreInput={axis:3,currencyCode:"EUR",pipelineId:pipeline,firstDate:{year,month,day:1},timeZone:"UTC",cadence:1,periodCount:2};
    const auditBeforeScore=(await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=?","tenant-a"))[0].n;
+   const historyInput={pipelineId:pipeline,timeZone:"UTC",comparePrevious:true,
+     period:{startDate:{year,month:1,day:1},endDate:{year,month:12,day:31}}};
+   const history=await call("GetSalesHistory",viewer,historyInput);
+   assert.ok(history.current);
+   const historyDeal=history.current.deals.find(d=>d.dealId===one.dealId);
+   assert.equal(historyDeal.status,3);
+   assert.equal(historyDeal.finalCloseVersion,5n);
+   assert.deepEqual(historyDeal.closeVersions,[3n,5n]);
+   assert.deepEqual(historyDeal.reopenVersions,[4n]);
+   assert.equal(historyDeal.visits.length,2);
+   assert.equal(historyDeal.reasonCode,"qa.cleanup");
+   assert.equal(history.current.finalCloses.wonCount,0n);
+   assert.equal(history.current.finalCloses.lostCount,4n);
+   const historyAdmin=await call("GetSalesHistory",admin,historyInput);
+   assert.deepEqual(historyAdmin.current.finalCloses,history.current.finalCloses);
+   assert.deepEqual(historyAdmin.current.deals,history.current.deals);
+   await call("GetSalesHistory",tenantB,historyInput,404);
+   const tenantHistory=await call("GetSalesHistory",tenantB,{...historyInput,pipelineId:undefined});
+   assert.equal(tenantHistory.current.deals.some(d=>d.dealId===one.dealId),false);
+   await call("GetSalesHistory",viewer,{...historyInput,timeZone:"Invalid/Zone"},400);
+   assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=?","tenant-a"))[0].n,auditBeforeScore);
    const score=await call("GetSalesScorecard",viewer,scoreInput);
    assert.equal(score.buckets.length,2);
    assert.equal(score.buckets[0].endExclusiveUnixNanos,score.buckets[1].startUnixNanos);

@@ -2667,7 +2667,16 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.ok(new URL(page.url()).hash.includes("start=2026-11-01"));
    await page.getByLabel("Сравнить с предыдущим периодом той же длительности").check();
    await conversion.getByText(/Предыдущий период:/).waitFor();
+   const historical=page.getByRole("region",{name:"Историческая аналитика продаж",exact:true});
+   await historical.getByRole("region",{name:"История выбранного периода",exact:true}).waitFor();
+   await historical.getByLabel("Часовой пояс истории",{exact:true}).fill("Europe/Warsaw");
+   await historical.getByRole("button",{name:"Рассчитать историческую аналитику",exact:true}).click();
+   assert.ok(new URL(page.url()).hash.includes("historyZone=Europe%2FWarsaw"));
+   await historical.getByRole("region",{name:"История выбранного периода",exact:true}).waitFor();
+   await historical.getByRole("region",{name:"История предыдущего периода",exact:true}).waitFor();
    await reloadDocument();
+   await historical.getByRole("region",{name:"История выбранного периода",exact:true}).waitFor();
+   await expect(historical.getByLabel("Часовой пояс истории",{exact:true})).toHaveValue("Europe/Warsaw");
    await conversion.getByText(/Предыдущий период:/).waitFor();
    await page.getByRole("heading",{name:"Аналитика бизнеса",exact:true}).waitFor();
    await expect(page.getByLabel("Конец периода",{exact:true})).toHaveValue("2026-11-30");

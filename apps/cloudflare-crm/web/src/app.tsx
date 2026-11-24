@@ -32,8 +32,8 @@ function App() {
   const hash=useSyncExternalStore(subscribeNavigation,currentRouteHash);
   const route=useMemo(()=>parseRoute(hash,accountFilterStatuses),[hash]);
   const current=route.kind==="workday"?"workday":route.kind==="insights"?"insights":route.kind==="accounts"||route.kind==="account"||route.kind==="account-create"?"accounts":route.kind==="deal"?"sales":route.kind==="search"?"search":route.kind==="section"?route.screen:"";
-  const content=route.kind==="insights"?<IntelligenceScreen
-      key={[route.start,route.end,route.pipelineId,route.includeArchived,route.compare,route.owner??""].join("/")}
+  const content=route.kind==="insights"?<IntelligenceScreen {...(route.historyZone?{historyZone:route.historyZone}:{})}
+      key={[route.start,route.end,route.pipelineId,route.includeArchived,route.compare,route.owner??"",route.historyZone??"UTC"].join("/")}
       start={route.start} end={route.end} pipelineId={route.pipelineId}
       includeArchived={route.includeArchived} compare={route.compare} owner={route.owner??""}/>:
     route.kind==="workday"?<WorkdayScreen key={route.day+"/"+route.mine+"/"+(route.teamId??"")} day={route.day} mine={route.mine} teamId={route.teamId??""}/>:
