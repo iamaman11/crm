@@ -3090,9 +3090,11 @@ impl sale_wire::DealService for SalesV2Service {
             &self.d1()?,
             &self.tenant,
             &id,
-            &self.actor,
-            &self.request_id,
-            self.admin,
+            sales_deals::DealMutationContext {
+                actor: &self.actor,
+                trace: &self.request_id,
+                admin: self.admin,
+            },
         )
         .await
         .map_err(|_| diagnostics::mutation_preparation_failure("UpdateDeal", &self.request_id))?
@@ -3143,9 +3145,11 @@ impl sale_wire::DealService for SalesV2Service {
             &self.d1()?,
             &self.tenant,
             &id,
-            &self.actor,
-            &self.request_id,
-            self.admin,
+            sales_deals::DealMutationContext {
+                actor: &self.actor,
+                trace: &self.request_id,
+                admin: self.admin,
+            },
         )
         .await
         .map_err(|_| diagnostics::mutation_preparation_failure("AdvanceStage", &self.request_id))?
@@ -3259,8 +3263,11 @@ impl sale_wire::DealService for SalesV2Service {
             &self.d1()?,
             &self.tenant,
             &id,
-            &self.actor,
-            &self.request_id,
+            sales_deals::DealMutationContext {
+                actor: &self.actor,
+                trace: &self.request_id,
+                admin: self.admin,
+            },
         )
         .await
         .map_err(|_| diagnostics::mutation_preparation_failure("CloseDeal", &self.request_id))?

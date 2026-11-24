@@ -856,16 +856,26 @@ pub(super) async fn set_participant(
     Ok(reconcile(db, tenant, key, &digest, count == Some(0)).await)
 }
 
+/// Request context from the verified Access identity, never the wire body.
+pub(super) struct DealMutationContext<'a> {
+    pub(super) actor: &'a str,
+    pub(super) trace: &'a str,
+    pub(super) admin: bool,
+}
+
 pub(super) async fn update_typed(
     input: UpdateInput,
     key: &str,
     db: &D1Database,
     tenant: &str,
     id: &str,
-    actor: &str,
-    trace: &str,
-    admin: bool,
+    context: DealMutationContext<'_>,
 ) -> Result<std::result::Result<SalesSaved, MutationFailure>> {
+    let DealMutationContext {
+        actor,
+        trace,
+        admin,
+    } = context;
     if !(8..=120).contains(&key.len()) {
         return Ok(rejected(
             "IDEMPOTENCY_KEY_REQUIRED",
@@ -1089,9 +1099,7 @@ pub(super) async fn advance_typed(
     db: &D1Database,
     tenant: &str,
     id: &str,
-    actor: &str,
-    trace: &str,
-    admin: bool,
+    context: DealMutationContext<'_>,
 ) -> Result<std::result::Result<AdvanceSaved, MutationFailure>> {
     stage_mutation(
         StageMutation::Move(input),
@@ -1099,9 +1107,7 @@ pub(super) async fn advance_typed(
         db,
         tenant,
         id,
-        actor,
-        trace,
-        admin,
+        context,
     )
     .await
 }
@@ -1111,8 +1117,7 @@ pub(super) async fn close_typed(
     db: &D1Database,
     tenant: &str,
     id: &str,
-    actor: &str,
-    trace: &str,
+    context: DealMutationContext<'_>,
 ) -> Result<std::result::Result<AdvanceSaved, MutationFailure>> {
     stage_mutation(
         StageMutation::Close(input),
@@ -1120,9 +1125,7 @@ pub(super) async fn close_typed(
         db,
         tenant,
         id,
-        actor,
-        trace,
-        true,
+        context,
     )
     .await
 }
@@ -1414,10 +1417,16 @@ async fn stage_mutation(
     db: &D1Database,
     tenant: &str,
     id: &str,
-    actor: &str,
-    trace: &str,
-    admin: bool,
+    context: DealMutationContext<'_>,
 ) -> Result<std::result::Result<AdvanceSaved, MutationFailure>> {
+    let DealMutationContext {
+        actor,
+        trace,
+        admin,
+    } = context;
+    if !admin && matches!(&input, StageMutation::Close(_)) {
+        return Ok(rejected("FORBIDDEN", ErrorCategory::Authorization));
+    }
     if !(8..=120).contains(&key.len()) {
         return Ok(rejected(
             "IDEMPOTENCY_KEY_REQUIRED",
