@@ -2,6 +2,7 @@
 
 pub const MODULE_ID: &str = "crm.activities";
 
+pub mod automation;
 pub mod domain;
 pub mod interactions;
 pub mod persistence;

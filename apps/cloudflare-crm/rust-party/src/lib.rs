@@ -128,6 +128,7 @@ async fn native_doctor(env: Env, actor: &access::Actor, request_id: &str) -> Res
         "crm_contact_point_receipts",
         "crm_party_relationship_records",
         "crm_party_relationship_receipts",
+        "crm_activity_automation_source_events",
         "crm_activity_task_records",
         "crm_activity_task_receipts",
         "crm_sales_deal_records",
@@ -1320,5 +1321,29 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     {
         let _ = (req, env);
         error("AUTH_REQUIRED", 403)
+    }
+}
+
+// One native workers-rs entrypoint accepts future Cron Triggers; no cron is
+// configured until rule/run/receipt execution has passed both acceptance gates.
+// This read-only compatibility path never impersonates Access or creates work.
+#[event(scheduled)]
+pub async fn scheduled(_event: ScheduledEvent, env: Env, _ctx: ScheduleContext) {
+    #[derive(Deserialize)]
+    struct Source {
+        event_id: String,
+    }
+    let result = async {
+        let db = env.d1("DB")?;
+        let source = db
+            .prepare("SELECT event_id FROM crm_activity_automation_source_events LIMIT 1")
+            .first::<Source>(None)
+            .await?;
+        Ok::<_, worker::Error>(source.map(|row| row.event_id))
+    }
+    .await;
+    match result {
+        Ok(_) => console_log!("CRM_AUTOMATION_SCHEDULED_DISPATCH_DISABLED"),
+        Err(error) => console_error!("CRM_AUTOMATION_SOURCE_READ_FAILED: {error}"),
     }
 }

@@ -4575,6 +4575,27 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_activity_interactions WHERE tenant=? AND id=?",
    "tenant-a",eventLater))[0].n,1);
  assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_activity_interaction_receipts WHERE tenant='tenant-a'"))[0].n,3);
+ // The original Interaction INSERT, receipt, audit and Activities-owned
+ // immutable automation source event are one physical D1 commit. Replays,
+ // forged/denied requests and other tenants never emit a second event.
+ const sourceEvents=await sql(
+   "SELECT event_id,event_type,source_id,source_version,account_id,deal_id,source_actor,origin_request_id,origin_intent_digest,recorded_at_key "+
+   "FROM crm_activity_automation_source_events WHERE tenant=? AND source_id IN (?,?,?) ORDER BY source_id",
+   "tenant-a",eventLater,eventEarlier,eventNote);
+ assert.equal(sourceEvents.length,3);
+ for(const row of sourceEvents){
+   assert.equal(row.event_type,"crm.activities.interaction_created.v1");
+   assert.equal(row.event_id,"crm.activities.interaction_created.v1:"+row.source_id);
+   assert.equal(row.source_version,1);
+   assert.equal(row.account_id,accountId);
+   assert.equal(row.source_actor,"native-a@example.test");
+   assert.match(row.origin_request_id,/^[0-9a-f-]{36}$/);
+   assert.match(row.origin_intent_digest,/^[a-f0-9]{64}$/);
+   assert.match(row.recorded_at_key,/^[0-9]{20}$/);
+   assert.equal(row.deal_id,row.source_id===eventNote?null:dealId);
+ }
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_activity_automation_source_events WHERE tenant=?","tenant-b"))[0].n,0);
+
  assert.equal((await sql(
    "SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' AND action='activities.interaction.recorded'"))[0].n,
    interactionAuditBefore+3,"replay and rejected writes must not create another audit");
@@ -4634,11 +4655,17 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      failedId))[0].n,0);
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_activity_interaction_receipts WHERE key=?",
      failedInput.precondition.idempotencyKey))[0].n,0);
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_activity_automation_source_events WHERE source_id=?",
+     failedId))[0].n,0);
  }finally{await sql("DROP TRIGGER fixture_fail_sk05_audit");}
  const recovered=await interactionV2("CreateInteraction",admin,failedInput);
  assert.equal(recovered.status,200);
  assert.equal(recovered.body.receipt?.replayed,false);
  assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE subject_id=?",failedId))[0].n,1);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_activity_automation_source_events WHERE source_id=?",failedId))[0].n,1);
+ console.log(JSON.stringify({event:"crm.native-sk08a-interaction-source",result:"PASS",atomic:true,
+   original_activities_owner:true,exact_origin_request:true,tenant_ab:true,
+   replay_single_event:true,failed_audit_rollback:true,automation_execution_disabled:true}));
  console.log(JSON.stringify({event:"crm.native-sk05-interaction",result:"PASS",
    source_sha:sourceSha,original_owner:"crm.activities",binary_connect:true,tenant_ab:true,
    viewer_fields_equal:true,viewer_write_denied:true,account_deal_fk:true,
