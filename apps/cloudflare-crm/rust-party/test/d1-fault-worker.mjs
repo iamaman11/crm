@@ -1,7 +1,14 @@
 // Test-only entrypoint. Import the sealed production Rust Worker unchanged.
 // The real D1 binding retains its prototype, queries, transactions and storage.
 // Only the returned acknowledgement of one successful CreateDeal INSERT is lost.
-import worker from "../build/index.js";
+import Worker from "../build/index.js";
+
+// worker-build 0.9.0 exports a WorkerEntrypoint class (via Proxy),
+// not an object with a static fetch. Instantiate it with the actual workerd
+// execution context and request-scoped bindings, preserving its generated shim.
+function dispatch(request,env,ctx){
+  return new Worker(ctx,env).fetch(request);
+}
 
 function withLostAcknowledgement(db,mode){
   const wrap=statement=>new Proxy(statement,{
@@ -33,12 +40,12 @@ function withLostAcknowledgement(db,mode){
 export default {
   fetch(request,env,ctx){
     const mode=request.headers.get("x-test-d1-fault");
-    if(mode===null)return worker.fetch(request,env,ctx);
+    if(mode===null)return dispatch(request,env,ctx);
     if(!["lost-ack","receipt-read"].includes(mode)||
         new URL(request.url).pathname!=="/crm.sales.v2.DealService/CreateDeal")
       throw Error("Invalid test-only D1 fault");
     const headers=new Headers(request.headers);
     headers.delete("x-test-d1-fault");
-    return worker.fetch(new Request(request,{headers}),{...env,DB:withLostAcknowledgement(env.DB,mode)},ctx);
+    return dispatch(new Request(request,{headers}),{...env,DB:withLostAcknowledgement(env.DB,mode)},ctx);
   }
 };
