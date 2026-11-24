@@ -47,6 +47,30 @@ if len(contract_nodes) != 1 or contract_nodes[0]["features"] != ["sales-activiti
     raise SystemExit("Worker must compile only the original link contract feature")
 print(json.dumps({"event": "crm.worker-contract-features", "result": "PASS",
                   "features": contract_nodes[0]["features"]}), flush=True)
+# The generated crate is a pure contract boundary in both Worker builds.
+# Inspect Cargo's resolved graph; no text scan or second schema registry.
+def generated_contract_graph(graph):
+    packages = {p["id"]: p for p in graph["packages"]}
+    nodes = {n["id"]: n for n in graph["resolve"]["nodes"]}
+    ids = [i for i, p in packages.items() if p["name"] == "crm-connect-contracts"]
+    if len(ids) != 1:
+        raise SystemExit("Expected one generated Connect contract package")
+    node = nodes[ids[0]]
+    names = sorted(packages[d]["name"] for d in node["dependencies"])
+    if any(name.startswith("crm-") or name == "worker" for name in names):
+        raise SystemExit("Generated Connect contracts must not depend on CRM owners or Worker")
+    return {"features": node["features"], "dependencies": names}
+
+ci_metadata = json.loads(subprocess.check_output([
+    "cargo", "metadata", "--locked", "--format-version", "1",
+    "--manifest-path", str(worker / "Cargo.toml"),
+    "--filter-platform", "wasm32-unknown-unknown", "--features", "native-ci",
+], text=True))
+generated_graph = generated_contract_graph(metadata)
+if generated_graph != generated_contract_graph(ci_metadata):
+    raise SystemExit("Generated contract graph must match production and native-ci")
+print(json.dumps({"event": "crm.generated-connect-graph", "result": "PASS",
+                  **generated_graph}), flush=True)
 native_graphs = {}
 for owner, flags in sorted(owner_features.items()):
     if flags:

@@ -9,7 +9,7 @@ struct ActiveVersions {
 
 fn active_protos(proto_root: &Path) -> Vec<PathBuf> {
     let versions: ActiveVersions =
-        serde_json::from_str(include_str!("../active-proto-versions.json"))
+        serde_json::from_str(include_str!("../../active-proto-versions.json"))
             .expect("active CRM Protobuf versions");
     let mut files = Vec::new();
     // The existing Protobuf tree is the only source of Rust service selection.
@@ -58,17 +58,17 @@ fn active_protos(proto_root: &Path) -> Vec<PathBuf> {
 }
 
 fn main() {
-    let proto_root = Path::new("../../../proto");
+    let proto_root = Path::new("../../../../proto");
     let files = active_protos(proto_root);
     let protoc = protoc_bin_vendored::protoc_bin_path().expect("vendored protoc");
     unsafe {
         std::env::set_var("PROTOC", protoc);
     }
-    println!("cargo:rerun-if-changed=../active-proto-versions.json");
-    println!("cargo:rerun-if-changed=../../../proto");
+    println!("cargo:rerun-if-changed=../../active-proto-versions.json");
+    println!("cargo:rerun-if-changed=../../../../proto");
     connectrpc_build::Config::new()
         .files(&files)
-        .includes(&["../../../proto"])
+        .includes(&["../../../../proto"])
         .include_file("_connectrpc.rs")
         .compile()
         .expect("CRM Connect code generation");

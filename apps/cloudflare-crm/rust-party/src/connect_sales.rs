@@ -39,17 +39,8 @@ use std::sync::Arc;
 use tower_service::Service;
 use worker::{D1Database, Env, HttpRequest, Request, Response, Result};
 
-// Use the standard generated package tree, including generator-owned lint
-// attributes. The root import is inherited by its generated `use super::*`
-// statements so the crm.core package also resolves Rust's fmt traits.
-#[expect(
-    clippy::wrong_self_convention,
-    reason = "Buffa 0.9.1 generates from_role/from_party_id getters from Protobuf fields; these are not constructors"
-)]
-pub mod proto {
-    use ::core::fmt;
-    include!(concat!(env!("OUT_DIR"), "/_connectrpc.rs"));
-}
+// Re-export the existing generated contract tree from its stable Cargo crate.
+pub use crm_connect_contracts::proto;
 use proto::crm::access::v2 as member_wire;
 use proto::crm::accounts::v2 as account_wire;
 use proto::crm::activities::v2 as task_wire;

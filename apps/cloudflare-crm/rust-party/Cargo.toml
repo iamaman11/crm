@@ -18,10 +18,17 @@ wasm-opt = ["-O1"]
 [profile.dev.package.crm-native-party-worker]
 debug = false
 
+[profile.dev.package.crm-connect-contracts]
+debug = false
+
 # Measured release candidate: reduce LLVM work for the generated Connect/D1
 # boundary only. Original domain dependencies retain Cargo release opt-level 3;
 # Binaryen -O1 still runs on the final WASM. Compare sealed size and live timings.
 [profile.release.package.crm-native-party-worker]
+opt-level = 2
+
+# Preserve the existing optimization level of the moved generated code.
+[profile.release.package.crm-connect-contracts]
 opt-level = 2
 
 # Optimize only the host-side Connect generators and their Rust formatter.
@@ -52,6 +59,7 @@ native = []
 native-ci = ["native"]
 
 [dependencies]
+crm-connect-contracts = { path = "connect-contracts" }
 crm-customer-360-query-adapter = { path = "../../../crates/crm-customer-360-query-adapter" }
 worker = { version = "=0.9.0", features = ["d1", "http"] }
 connectrpc = { version = "=0.9.1", default-features = false, features = ["json", "axum"] }
@@ -88,9 +96,5 @@ wasm-bindgen-futures = "0.4"
 
 # Separate target package. The existing main Cargo workspace is untouched.
 [workspace]
-
-[build-dependencies]
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-connectrpc-build = "=0.9.0"
-protoc-bin-vendored = "3"
+members = ["connect-contracts"]
+default-members = ["."]

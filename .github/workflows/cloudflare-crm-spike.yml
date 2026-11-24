@@ -76,7 +76,7 @@ jobs:
           cargo --version | grep -F "cargo 1.100.0 "
           set -euo pipefail
           cargo fmt --all -- --check
-          cargo fmt --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml -- --check
+          cargo fmt --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml --all -- --check
       # The Mozilla compiler cache reuses Rust object results across source SHA changes.
       # Cargo still checks fingerprints and compiles changed sources and native feature graphs.
       - name: Install pinned sccache for Rust compilation
@@ -104,9 +104,9 @@ jobs:
             apps/cloudflare-crm/rust-party/target
           # Cache entries are immutable. Refresh when manifests or codegen inputs
           # change; ordinary source edits still use Cargo fingerprints and sccache.
-          key: ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}-${{ hashFiles('Cargo.toml', 'apps/cloudflare-crm/rust-party/Cargo.toml', 'crates/*/Cargo.toml', 'modules/*/Cargo.toml') }}-${{ hashFiles('proto/**/*.proto', 'apps/cloudflare-crm/active-proto-versions.json', 'apps/cloudflare-crm/rust-party/build.rs', 'crates/crm-proto-contracts/build.rs') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}-${{ hashFiles('Cargo.toml', 'apps/cloudflare-crm/rust-party/Cargo.toml', 'apps/cloudflare-crm/rust-party/connect-contracts/Cargo.toml', 'crates/*/Cargo.toml', 'modules/*/Cargo.toml') }}-${{ hashFiles('proto/**/*.proto', 'apps/cloudflare-crm/active-proto-versions.json', 'apps/cloudflare-crm/rust-party/connect-contracts/build.rs', 'crates/crm-proto-contracts/build.rs') }}
           restore-keys: |
-            ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}-${{ hashFiles('Cargo.toml', 'apps/cloudflare-crm/rust-party/Cargo.toml', 'crates/*/Cargo.toml', 'modules/*/Cargo.toml') }}-
+            ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}-${{ hashFiles('Cargo.toml', 'apps/cloudflare-crm/rust-party/Cargo.toml', 'apps/cloudflare-crm/rust-party/connect-contracts/Cargo.toml', 'crates/*/Cargo.toml', 'modules/*/Cargo.toml') }}-
             ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}-
             ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}
             ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-
@@ -157,7 +157,7 @@ jobs:
           set -euo pipefail
           pnpm web:check
           git diff --exit-code -- pnpm-lock.yaml
-          cargo clippy --jobs 2 --locked --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml --target wasm32-unknown-unknown --features native -- -D clippy::all -D unfulfilled_lint_expectations
+          cargo clippy --jobs 2 --locked --workspace --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml --target wasm32-unknown-unknown --features native -- -D clippy::all -D unfulfilled_lint_expectations
       # Installer binaries are cached separately from Cargo compilation outputs.
       - name: Cache pinned native Rust tool CLIs
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
