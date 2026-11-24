@@ -239,7 +239,9 @@ impl sale_wire::DealService for SalesV2Service {
             || (input.event_sequence.is_some()
                 && (input.as_of_unix_nanos.is_none() || input.quota_version.is_none()))
         {
-            return Err(ConnectError::invalid_argument("SALES_QUOTA_SNAPSHOT_INVALID"));
+            return Err(ConnectError::invalid_argument(
+                "SALES_QUOTA_SNAPSHOT_INVALID",
+            ));
         }
         // SQL projects stored attributes, filters indexed candidate events and
         // sums unsigned base-10^9 limbs. Each limb sum fits SQLite INTEGER for
@@ -410,9 +412,10 @@ impl sale_wire::DealService for SalesV2Service {
             facts.push(sale_wire::SalesQuotaFact {
                 deal_id: row.deal_id,
                 deal_version: row.deal_version,
-                event_at_unix_nanos: row.event_at.parse().map_err(|_| {
-                    ConnectError::internal("SALES_QUOTA_EVENT_TIME_INVALID")
-                })?,
+                event_at_unix_nanos: row
+                    .event_at
+                    .parse()
+                    .map_err(|_| ConnectError::internal("SALES_QUOTA_EVENT_TIME_INVALID"))?,
                 reversal,
                 close_fact: Some(Self::commercial_fact_wire(&fact)?).into(),
                 signed_minor_units: amount.map(|value| value.to_string()),
