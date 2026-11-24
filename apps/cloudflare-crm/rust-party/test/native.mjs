@@ -2730,6 +2730,20 @@ console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:
     if(n===1000){
       const portfolio=await salesV2("GetSalesPortfolio",viewer,{pipelineId:"pipeline.other"});
       assert.equal(portfolio.status,200,describeProtobuf(portfolio.body));
+      const historyScope={pipelineId:"pipeline.other",timeZone:"UTC",pageSize:17,
+        period:{startDate:{year:2000,month:1,day:1},endDate:{year:2026,month:12,day:31}}};
+      const history=await salesV2("GetSalesHistory",viewer,historyScope);
+      assert.equal(history.status,200,describeProtobuf(history.body));
+      assert.equal(history.body.current.totalDealCount,1032n);
+      assert.equal(history.body.current.deals.length,17);
+      assert.equal(history.body.current.stateAtCutoff.totalCount+history.body.current.unknownHistoryCount,1032n);
+      const historyNext=await salesV2("GetSalesHistory",viewer,{...historyScope,
+        snapshot:history.body.snapshot,detail:{afterDealId:history.body.current.nextDealId}});
+      assert.equal(historyNext.status,200,describeProtobuf(historyNext.body));
+      assert.equal(historyNext.body.detail.deals.length,17);
+      assert.ok(historyNext.body.detail.deals[0].dealId>history.body.current.nextDealId);
+      console.log(JSON.stringify({event:"crm.native-history-scale",result:"PASS",
+        deals:1032,page_size:17,full_summary:true,fenced_detail:true}));
       assert.equal(portfolio.body.counts.totalDealCount,1032n);
       assert.deepEqual(portfolio.body.forecastCurrencies.map(x=>[
         x.currencyCode,x.totalMinorUnits,x.weightedMinorUnitsTimesBasisPoints,x.amountDealCount
@@ -5879,6 +5893,30 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    assert.equal(historyDeal.reasonCode,"qa.cleanup");
    assert.equal(history.current.finalCloses.wonCount,0n);
    assert.equal(history.current.finalCloses.lostCount,4n);
+   const historyPaged=await call("GetSalesHistory",viewer,{...historyInput,pageSize:1});
+   assert.equal(historyPaged.current.totalDealCount,history.current.totalDealCount);
+   assert.deepEqual(historyPaged.current.finalCloses,history.current.finalCloses);
+   const historyIds=historyPaged.current.deals.map(d=>d.dealId);
+   let historyAfter=historyPaged.current.nextDealId;
+   while(historyAfter){
+     const page=await call("GetSalesHistory",viewer,{...historyInput,pageSize:1,
+       snapshot:historyPaged.snapshot,detail:{afterDealId:historyAfter}});
+     assert.equal(page.current,undefined);
+     assert.equal(page.detail.deals.length,1);
+     historyIds.push(page.detail.deals[0].dealId);
+     historyAfter=page.detail.nextDealId;
+   }
+   assert.deepEqual(historyIds,history.current.deals.map(d=>d.dealId));
+   await call("GetSalesHistory",viewer,{...historyInput,timeZone:"Europe/Warsaw",
+     snapshot:historyPaged.snapshot,detail:{afterDealId:""}},400);
+   const historyExportScope={...historyInput,snapshot:historyPaged.snapshot};
+   const historyCsv=await call("ExportSalesAnalytics",admin,{kind:7,scope:{case:"history",value:historyExportScope}});
+   assert.equal(historyCsv.csvSha256Hex,createHash("sha256").update(historyCsv.csv).digest("hex"));
+   assert.deepEqual(historyCsv.history.current.finalCloses,history.current.finalCloses);
+   assert.ok(Buffer.from(historyCsv.csv).toString("utf8").includes("history_window,current,total_deal_count,"));
+   const historyDetailCsv=await call("ExportSalesAnalytics",admin,{kind:8,scope:{case:"history",value:{...historyExportScope,detail:{}}}});
+   assert.ok(Buffer.from(historyDetailCsv.csv).toString("utf8").includes("historical_deal,"+one.dealId+","));
+   await call("ExportSalesAnalytics",viewer,{kind:7,scope:{case:"history",value:historyExportScope}},403);
    const historyAdmin=await call("GetSalesHistory",admin,historyInput);
    assert.deepEqual(historyAdmin.current.finalCloses,history.current.finalCloses);
    assert.deepEqual(historyAdmin.current.deals,history.current.deals);
@@ -5952,6 +5990,8 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      await sql(scaleInsert.replace("n<"+scaleCount,"n<120"),"tenant-a",one.dealId);
      // A deliberately incomplete stream belongs to the current year only;
      // it must not invalidate a historical window before immutable creation.
+     await call("GetSalesHistory",viewer,{...historyInput,snapshot:historyPaged.snapshot,
+       detail:{afterDealId:""}},409);
      const gappedHistory=await call("GetSalesHistory",viewer,historyInput);
      assert.equal(gappedHistory.current.unknownHistoryCount,1n);
      assert.equal(gappedHistory.current.deals.find(d=>d.dealId===one.dealId).status,undefined);

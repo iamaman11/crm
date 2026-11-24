@@ -4,8 +4,10 @@ use crm_module_sdk::SdkError;
 use serde::Deserialize;
 use std::collections::BTreeMap;
 
-pub const MAX_HISTORY_ROWS: usize = 4096;
-pub const MAX_HISTORY_DEALS: usize = 512;
+// Limits protect a single synchronous Worker invocation, not the browser page.
+pub const MAX_HISTORY_SCAN_ROWS: usize = 65_536;
+pub const MAX_HISTORY_DEAL_EVENTS: usize = 4096;
+const MAX_HISTORY_DETAIL_FACTS: usize = 8192;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -174,7 +176,7 @@ impl HistoryOutcomes {
 
     pub fn win_rate_basis_points(&self) -> Option<u32> {
         let denominator = self.denominator();
-        (denominator > 0).then(|| (self.won * 10_000 / denominator) as u32)
+        (denominator > 0).then(|| (u128::from(self.won) * 10_000 / u128::from(denominator)) as u32)
     }
 
     pub fn total(&self) -> u64 {
@@ -183,7 +185,7 @@ impl HistoryOutcomes {
 
     pub fn cohort_conversion_basis_points(&self) -> Option<u32> {
         let total = self.total();
-        (total > 0).then(|| (self.won * 10_000 / total) as u32)
+        (total > 0).then(|| (u128::from(self.won) * 10_000 / u128::from(total)) as u32)
     }
 }
 
@@ -255,6 +257,8 @@ pub struct HistoryWindow {
     pub reasons: Vec<HistoryReason>,
     pub stages: Vec<HistoryStage>,
     pub deals: Vec<HistoricalDeal>,
+    pub total_deals: u64,
+    pub next_deal_id: String,
 }
 
 /// Only complete periods with no detected retained-history gaps are eligible
@@ -282,48 +286,82 @@ pub fn history_comparison(
     (comparable, delta)
 }
 
-/// Both windows consume the same bounded, tenant-scoped retained history.
-/// Cutoffs are exclusive; equal-time events are ordered by Deal version.
-pub fn historical_window(
-    histories: &[DealHistory],
-    period: &QuotaPeriod,
-    as_of: i64,
-) -> Result<HistoryWindow, SdkError> {
-    let (lo, hi) = period.bounds()?;
-    let cutoff = hi.min(as_of.saturating_add(1));
-    let future = cutoff <= lo;
-    let mut result = HistoryWindow {
-        lo,
-        hi,
-        cutoff,
-        complete: hi <= as_of.saturating_add(1),
-        future,
-        state: HistoryOutcomes::default(),
-        final_closes: HistoryOutcomes::default(),
-        cohort: HistoryOutcomes::default(),
-        unknown_history: 0,
-        close_events: 0,
-        reopen_events: 0,
-        cycle: HistoryDuration::default(),
-        episode: HistoryDuration::default(),
-        reasons: Vec::new(),
-        stages: Vec::new(),
-        deals: Vec::new(),
-    };
-    if future {
-        return Ok(result);
+/// Incremental exact aggregates; only the requested detail page is retained.
+pub struct HistoryAccumulator {
+    result: HistoryWindow,
+    cycles: Vec<i64>,
+    episodes: Vec<i64>,
+    reasons: BTreeMap<(bool, Option<String>), u64>,
+    stages: BTreeMap<(String, String, Option<i64>), Vec<i64>>,
+    page_size: usize,
+    detail_facts: usize,
+}
+
+impl HistoryAccumulator {
+    pub fn new(period: &QuotaPeriod, as_of: i64, page_size: usize) -> Result<Self, SdkError> {
+        let (lo, hi) = period.bounds()?;
+        let cutoff = hi.min(as_of.saturating_add(1));
+        let future = cutoff <= lo;
+        let result = HistoryWindow {
+            lo,
+            hi,
+            cutoff,
+            complete: hi <= as_of.saturating_add(1),
+            future,
+            state: HistoryOutcomes::default(),
+            final_closes: HistoryOutcomes::default(),
+            cohort: HistoryOutcomes::default(),
+            unknown_history: 0,
+            close_events: 0,
+            reopen_events: 0,
+            cycle: HistoryDuration::default(),
+            episode: HistoryDuration::default(),
+            reasons: Vec::new(),
+            stages: Vec::new(),
+            deals: Vec::new(),
+            total_deals: 0,
+            next_deal_id: String::new(),
+        };
+        Ok(Self {
+            result,
+            cycles: Vec::new(),
+            episodes: Vec::new(),
+            reasons: BTreeMap::new(),
+            stages: BTreeMap::new(),
+            page_size,
+            detail_facts: 0,
+        })
     }
-    let mut cycles = Vec::new();
-    let mut episodes = Vec::new();
-    let mut reasons = BTreeMap::<(bool, Option<String>), u64>::new();
-    let mut stages = BTreeMap::<(String, String, Option<i64>), Vec<i64>>::new();
-    let in_window = |at: i64| at >= lo && at < cutoff;
-    for history in histories {
+
+    pub fn has_more(&self) -> bool {
+        self.result.total_deals > self.result.deals.len() as u64
+    }
+
+    fn record_detail(&mut self, detail: HistoricalDeal) {
+        let facts = detail.visits.len() + detail.close_versions.len() + detail.reopen_versions.len();
+        let keep = !self.has_more()
+            && self.result.deals.len() < self.page_size
+            && self.detail_facts.saturating_add(facts) <= MAX_HISTORY_DETAIL_FACTS;
+        self.result.total_deals += 1;
+        if keep {
+            self.detail_facts += facts;
+            self.result.deals.push(detail);
+        }
+    }
+
+    pub fn add(&mut self, history: &DealHistory) {
+        let result = &mut self.result;
+        if result.future {
+            return;
+        }
+        let cutoff = result.cutoff;
+        let lo = result.lo;
+        let in_window = |at: i64| at >= lo && at < cutoff;
         // Immutable creation time establishes membership even when the event
         // stream is incomplete. A Deal not yet created cannot be an unknown
         // historical Deal or contaminate an earlier period comparison.
         if history.created_at >= cutoff {
-            continue;
+            return;
         }
         let mut detail = HistoricalDeal {
             id: history.id.clone(),
@@ -344,8 +382,8 @@ pub fn historical_window(
         };
         if !history.complete() {
             result.unknown_history += 1;
-            result.deals.push(detail);
-            continue;
+            self.record_detail(detail);
+            return;
         }
         let first = &history.events[0];
         detail.cohort = in_window(first.at);
@@ -362,7 +400,7 @@ pub fn historical_window(
                         && in_window(event.at)
                     {
                         let duration = event.at - entered.at;
-                        stages
+                        self.stages
                             .entry((
                                 history.pipeline_id.clone(),
                                 entered.stage_id.clone(),
@@ -386,7 +424,7 @@ pub fn historical_window(
                         if in_window(event.at) {
                             result.close_events += 1;
                             detail.close_versions.push(event.version);
-                            episodes.push(event.at - episode_start);
+                            self.episodes.push(event.at - episode_start);
                         }
                     }
                 }
@@ -415,34 +453,54 @@ pub fn historical_window(
                 detail.final_close_in_period = true;
                 result.final_closes.add(closed.status);
                 let cycle = closed.at - first.at;
-                cycles.push(cycle);
+                self.cycles.push(cycle);
                 detail.cycle_seconds = Some((cycle / 1_000_000_000) as u64);
                 detail.episode_seconds = Some(((closed.at - episode_start) / 1_000_000_000) as u64);
-                *reasons
+                *self.reasons
                     .entry((closed.status == DealStatus::Won, detail.reason.clone()))
                     .or_default() += 1;
             }
         }
-        result.deals.push(detail);
+        self.record_detail(detail);
     }
-    result.cycle = HistoryDuration::from_nanos(cycles);
-    result.episode = HistoryDuration::from_nanos(episodes);
-    result.reasons = reasons
-        .into_iter()
-        .map(|((won, code), count)| HistoryReason { won, code, count })
-        .collect();
-    result.stages = stages
-        .into_iter()
-        .map(
-            |((pipeline_id, stage_id, catalog_version), durations)| HistoryStage {
-                pipeline_id,
-                stage_id,
-                catalog_version,
-                duration: HistoryDuration::from_nanos(durations),
-            },
-        )
-        .collect();
-    Ok(result)
+
+    pub fn finish(self) -> HistoryWindow {
+        let mut result = self.result;
+        result.cycle = HistoryDuration::from_nanos(self.cycles);
+        result.episode = HistoryDuration::from_nanos(self.episodes);
+        result.reasons = self.reasons
+            .into_iter()
+            .map(|((won, code), count)| HistoryReason { won, code, count })
+            .collect();
+        result.stages = self.stages
+            .into_iter()
+            .map(
+                |((pipeline_id, stage_id, catalog_version), durations)| HistoryStage {
+                    pipeline_id,
+                    stage_id,
+                    catalog_version,
+                    duration: HistoryDuration::from_nanos(durations),
+                },
+            )
+            .collect();
+        if result.total_deals > result.deals.len() as u64 {
+            result.next_deal_id = result.deals.last().map_or_else(String::new, |deal| deal.id.clone());
+        }
+        result
+    }
+}
+
+/// Both windows consume the same retained history; cutoff is exclusive.
+pub fn historical_window(
+    histories: &[DealHistory],
+    period: &QuotaPeriod,
+    as_of: i64,
+) -> Result<HistoryWindow, SdkError> {
+    let mut accumulator = HistoryAccumulator::new(period, as_of, usize::MAX)?;
+    for history in histories {
+        accumulator.add(history);
+    }
+    Ok(accumulator.finish())
 }
 
 #[cfg(test)]
@@ -558,6 +616,15 @@ mod tests {
         assert_eq!(first.final_closes.lost, 0);
         assert_eq!(first.unknown_history, 1);
         assert_eq!(first.deals.len(), 2);
+        let mut paged = HistoryAccumulator::new(&period, hi + second, 1).unwrap();
+        for history in &histories {
+            paged.add(history);
+        }
+        let paged = paged.finish();
+        assert_eq!(paged.total_deals, 2);
+        assert_eq!(paged.next_deal_id, "a");
+        assert_eq!(paged.final_closes.won, first.final_closes.won);
+        assert_eq!(paged.unknown_history, first.unknown_history);
         assert_eq!(first.deals[1].created_at, Some(lo - second));
         assert_eq!(first.cohort.won, 1);
         assert_eq!(first.cycle.mean_seconds, Some(3));

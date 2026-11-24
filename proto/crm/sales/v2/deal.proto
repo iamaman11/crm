@@ -1124,6 +1124,8 @@ enum SalesAnalyticsExportKind {
   SALES_ANALYTICS_EXPORT_KIND_REPORT_FORECAST = 4;
   SALES_ANALYTICS_EXPORT_KIND_SCORECARD = 5;
   SALES_ANALYTICS_EXPORT_KIND_SCORECARD_DETAIL = 6;
+  SALES_ANALYTICS_EXPORT_KIND_HISTORY = 7;
+  SALES_ANALYTICS_EXPORT_KIND_HISTORY_DETAIL = 8;
 }
 message SalesReportExportScope {
   string report_id = 1;
@@ -1134,6 +1136,7 @@ message ExportSalesAnalyticsRequest {
   oneof scope {
     SalesReportExportScope report = 2;
     GetSalesScorecardRequest scorecard = 3;
+    GetSalesHistoryRequest history = 4;
   }
 }
 message ExportSalesAnalyticsResponse {
@@ -1145,14 +1148,36 @@ message ExportSalesAnalyticsResponse {
   uint32 row_count = 6;
   // For a live summary, exactly the snapshot used to construct the file.
   GetSalesScorecardResponse scorecard = 7;
+  GetSalesHistoryResponse history = 8;
 }
 
-// Read-only, bounded lifecycle analytics. No current-owner attribution.
+// Read-only lifecycle analytics, fenced to an original tenant revision.
+// No current-owner attribution or synthetic history.
+message SalesHistorySnapshot {
+  int64 as_of_unix_nanos = 1;
+  int64 revision = 2;
+  // Binds the snapshot to the tenant, calendar window, zone and pipeline.
+  string scope_sha256_hex = 3;
+}
+message SalesHistoryDetailRequest {
+  bool previous = 1;
+  string after_deal_id = 2;
+}
+message SalesHistoryDetailPage {
+  bool previous = 1;
+  repeated SalesHistoricalDeal deals = 2;
+  string next_deal_id = 3;
+}
 message GetSalesHistoryRequest {
   SalesAnalysisPeriod period = 1;
   string time_zone = 2;
   optional string pipeline_id = 3;
   bool compare_previous = 4;
+  // Default 100, maximum 100. Summary never depends on the detail page.
+  uint32 page_size = 5;
+  SalesHistorySnapshot snapshot = 6;
+  // When present, only the selected detail page is returned.
+  SalesHistoryDetailRequest detail = 7;
 }
 message SalesHistoryDuration {
   uint64 count = 1;
@@ -1223,6 +1248,8 @@ message SalesHistoryWindow {
   repeated SalesHistoryReason reasons = 14;
   repeated SalesHistoryStage stages = 15;
   repeated SalesHistoricalDeal deals = 16;
+  uint64 total_deal_count = 17;
+  string next_deal_id = 18;
 }
 message GetSalesHistoryResponse {
   int64 as_of_unix_nanos = 1;
@@ -1230,6 +1257,8 @@ message GetSalesHistoryResponse {
   SalesHistoryWindow previous = 3;
   bool comparison_comparable = 4;
   optional sint32 win_rate_delta_basis_points = 5;
+  SalesHistorySnapshot snapshot = 6;
+  SalesHistoryDetailPage detail = 7;
 }
 
 service DealService {

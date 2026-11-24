@@ -3,13 +3,15 @@ import {Button,FilterForm,MetricGrid,ScrollTable,TextField} from "@ultimate-crm/
 import {DealStatus} from "@ultimate-crm/client/cloudflare";
 import {api} from "./api";
 import {parseDate} from "./calendarInput";
-import {QueryNotice,useQuery} from "./hooks";
+import {QueryNotice,useQuery,useReadAction} from "./hooks";
 import {dealHref,intelligenceHref} from "./routes";
 import {navigateTo,currentRouteHash} from "./navigation";
 import {percent} from "./money";
 
 type Response=Awaited<ReturnType<typeof api.deals.getSalesHistory>>;
 type Window=NonNullable<Response["current"]>;
+type Request=Extract<Parameters<typeof api.deals.getSalesHistory>[0],{$typeName?:never}>;
+type Detail=NonNullable<Response["detail"]>;
 type Props={start:string;end:string;pipelineId:string;compare:boolean;historyZone:string;includeArchived:boolean;owner:string};
 const count=(value:bigint|undefined)=>value?.toString()??"—";
 const duration=(value:bigint|undefined)=>value===undefined?"—":value.toString()+" с";
@@ -22,8 +24,17 @@ function status(value:DealStatus|undefined):string {
   return "История неизвестна";
 }
 
-function HistoryWindow({window,title}:{window:Window;title:string}) {
+function HistoryWindow({window,title,request,snapshot,previous}:{window:Window;title:string;request:Request;snapshot:NonNullable<Response["snapshot"]>;previous:boolean}) {
   const state=window.stateAtCutoff,closed=window.finalCloses,cohort=window.creationCohort;
+  const [page,setPage]=useState<Detail|undefined>(undefined);
+  const detail=useReadAction<Detail>();
+  const deals=page?.deals??window.deals,next=page?.nextDealId??window.nextDealId;
+  const nextPage=()=>void detail.run(async signal=>{
+    const result=await api.deals.getSalesHistory({...request,snapshot,detail:{previous,afterDealId:next}},{signal});
+    if(!result.detail)throw Error("Сервер не вернул страницу истории");
+    setPage(result.detail);
+    return result.detail;
+  });
   return <section aria-label={title}>
     <h3>{title}</h3>
     <p>{instant(window.startUnixNanos)} — {instant(window.endExclusiveUnixNanos)} (исключительно).
@@ -51,11 +62,15 @@ function HistoryWindow({window,title}:{window:Window;title:string}) {
         {window.stages.map(row=><tr key={row.pipelineId+":"+row.stageId+":"+row.catalogVersion}><th scope="row">{row.pipelineId} / {row.stageId}</th><td>{count(row.catalogVersion)}</td><td>{count(row.duration?.count)}</td><td>{duration(row.duration?.meanSeconds)}</td><td>{duration(row.duration?.medianSeconds)}</td><td>{duration(row.duration?.p90Seconds)}</td></tr>)}
       </tbody></table></ScrollTable>
       {window.stages.length===0&&<p>Нет известных завершённых посещений.</p>}
-      <details><summary>Исходные сделки и события ({window.deals.length})</summary>
+      <details><summary>Исходные сделки и события ({count(window.totalDealCount)})</summary>
         <ScrollTable label={title+" — сделки"}><table><thead><tr><th scope="col">Сделка</th><th scope="col">Состояние на дату</th><th scope="col">Создание / когорта</th><th scope="col">Финальное закрытие</th><th scope="col">Цикл / эпизод</th><th scope="col">Версии событий</th></tr></thead><tbody>
-          {window.deals.map(deal=><tr key={deal.dealId}><th scope="row"><a href={dealHref(deal.dealId)}>{deal.dealId}</a></th><td>{status(deal.status)} · v{count(deal.lastEventVersion)}</td><td>{instant(deal.createdAtUnixNanos)}{deal.creationCohort?" · когорта":""}</td><td>{instant(deal.finalCloseAtUnixNanos)} · v{count(deal.finalCloseVersion)} · {deal.reasonCode??"—"}{deal.finalCloseInPeriod?" · в периоде":""}</td><td>{duration(deal.cycleSeconds)} / {duration(deal.episodeSeconds)}</td><td>Закрытия: {deal.closeVersions.map(String).join(", ")||"—"}; переоткрытия: {deal.reopenVersions.map(String).join(", ")||"—"}
+          {deals.map(deal=><tr key={deal.dealId}><th scope="row"><a href={dealHref(deal.dealId)}>{deal.dealId}</a></th><td>{status(deal.status)} · v{count(deal.lastEventVersion)}</td><td>{instant(deal.createdAtUnixNanos)}{deal.creationCohort?" · когорта":""}</td><td>{instant(deal.finalCloseAtUnixNanos)} · v{count(deal.finalCloseVersion)} · {deal.reasonCode??"—"}{deal.finalCloseInPeriod?" · в периоде":""}</td><td>{duration(deal.cycleSeconds)} / {duration(deal.episodeSeconds)}</td><td>Закрытия: {deal.closeVersions.map(String).join(", ")||"—"}; переоткрытия: {deal.reopenVersions.map(String).join(", ")||"—"}
             {deal.visits.length>0&&<details><summary>Посещения этапов</summary>{deal.visits.map(visit=><p key={visit.exitVersion.toString()}>{visit.stageId} · v{count(visit.entryVersion)} → v{count(visit.exitVersion)} · {duration(visit.durationSeconds)} · {instant(visit.entryAtUnixNanos)} → {instant(visit.exitAtUnixNanos)}</p>)}</details>}</td></tr>)}
         </tbody></table></ScrollTable>
+        {detail.error&&<p role="alert">{detail.error}. Обновите исторический срез перед продолжением.</p>}
+        <p>На странице: {deals.length} из {count(window.totalDealCount)}.</p>
+        {page&&<Button variant="secondary" disabled={detail.busy} onClick={()=>{setPage(undefined);}}>Первая страница</Button>}
+        {next&&<Button variant="secondary" disabled={detail.busy} onClick={nextPage}>Следующая страница истории</Button>}
       </details>
     </>}
   </section>;
@@ -63,13 +78,20 @@ function HistoryWindow({window,title}:{window:Window;title:string}) {
 
 export function SalesHistory({start,end,pipelineId,compare,historyZone,includeArchived,owner}:Props){
   const [formError,setFormError]=useState("");
-  const query=useQuery(useCallback(async(signal:AbortSignal)=>{
+  const request=useCallback(():Request|undefined=>{
     if(!start||!end)return undefined;
     const startDate=parseDate(start),endDate=parseDate(end);
     if(!startDate||!endDate)throw Error("Укажите обе даты");
-    return api.deals.getSalesHistory({period:{startDate,endDate},timeZone:historyZone,...(pipelineId?{pipelineId}:{}),comparePrevious:compare},{signal});
-  },[start,end,pipelineId,historyZone,compare]));
-  const data=query.data;
+    return {period:{startDate,endDate},timeZone:historyZone,...(pipelineId?{pipelineId}:{}),comparePrevious:compare};
+  },[start,end,pipelineId,historyZone,compare]);
+  const query=useQuery(useCallback(async(signal:AbortSignal)=>{
+    const scope=request();
+    if(!scope)return undefined;
+    const data=await api.deals.getSalesHistory(scope,{signal});
+    if(!data.snapshot||!data.current)throw Error("Сервер не вернул исторический срез");
+    return {data,scope};
+  },[request]));
+  const data=query.data?.data,scope=query.data?.scope;
   return <section aria-label="Историческая аналитика продаж">
     <h2>Историческая аналитика продаж</h2>
     <p>По сохранённым сделкам и полным цепочкам событий. Все воронки, включая архивные, если не выбрана конкретная. Текущий ответственный не подменяет историческую атрибуцию. Удалённые сделки не восстанавливаются; неполная история явно исключается из достоверных показателей.</p>
@@ -92,10 +114,10 @@ export function SalesHistory({start,end,pipelineId,compare,historyZone,includeAr
     {formError&&<p role="alert">{formError}</p>}
     {start&&end&&<QueryNotice query={query}/>}
     {query.error&&<Button type="button" variant="secondary" onClick={()=>void query.reload().catch(()=>{})}>Повторить исторический запрос</Button>}
-    {data&&!query.stale&&!query.error&&data.current&&<>
+    {data&&scope&&!query.stale&&!query.error&&data.current&&data.snapshot&&<>
       <p>Срез {instant(data.asOfUnixNanos)}. Границы периода рассчитаны Rust в {historyZone}.</p>
-      <HistoryWindow window={data.current} title="История выбранного периода"/>
-      {data.previous&&<><p>{data.comparisonComparable?"Полные периоды без обнаруженных пропусков.":"Периоды не сопоставимы: незавершённый период или неполная история."} Изменение Win rate: {data.winRateDeltaBasisPoints===undefined?"—":percent(data.winRateDeltaBasisPoints)+" п.п."}</p><HistoryWindow window={data.previous} title="История предыдущего периода"/></>}
+      <HistoryWindow key={data.snapshot.scopeSha256Hex+":current"} window={data.current} title="История выбранного периода" request={scope} snapshot={data.snapshot} previous={false}/>
+      {data.previous&&<><p>{data.comparisonComparable?"Полные периоды без обнаруженных пропусков.":"Периоды не сопоставимы: незавершённый период или неполная история."} Изменение Win rate: {data.winRateDeltaBasisPoints===undefined?"—":percent(data.winRateDeltaBasisPoints)+" п.п."}</p><HistoryWindow key={data.snapshot.scopeSha256Hex+":previous"} window={data.previous} title="История предыдущего периода" request={scope} snapshot={data.snapshot} previous/></>}
     </>}
   </section>;
 }
