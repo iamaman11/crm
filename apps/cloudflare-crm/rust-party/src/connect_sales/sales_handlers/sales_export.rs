@@ -549,7 +549,8 @@ fn history_csv_outcomes(
     outcomes: &sale_wire::SalesHistoryOutcomes,
 ) -> ExportResult<()> {
     csv.fields(
-        section, id,
+        section,
+        id,
         [
             ("open_count", n(outcomes.open_count)),
             ("won_count", n(outcomes.won_count)),
@@ -557,7 +558,10 @@ fn history_csv_outcomes(
             ("total_count", n(outcomes.total_count)),
             ("denominator", n(outcomes.denominator)),
             ("win_rate_basis_points", opt(outcomes.win_rate_basis_points)),
-            ("cohort_conversion_basis_points", opt(outcomes.cohort_conversion_basis_points)),
+            (
+                "cohort_conversion_basis_points",
+                opt(outcomes.cohort_conversion_basis_points),
+            ),
         ],
     )
 }
@@ -569,7 +573,8 @@ fn history_csv_duration(
     duration: &sale_wire::SalesHistoryDuration,
 ) -> ExportResult<()> {
     csv.fields(
-        section, id,
+        section,
+        id,
         [
             ("count", n(duration.count)),
             ("mean_seconds", opt(duration.mean_seconds)),
@@ -585,11 +590,18 @@ fn history_csv_window(
     window: &sale_wire::SalesHistoryWindow,
 ) -> ExportResult<()> {
     csv.fields(
-        "history_window", id,
+        "history_window",
+        id,
         [
             ("start_unix_nanos", n(window.start_unix_nanos)),
-            ("end_exclusive_unix_nanos", n(window.end_exclusive_unix_nanos)),
-            ("observed_until_exclusive_unix_nanos", n(window.observed_until_exclusive_unix_nanos)),
+            (
+                "end_exclusive_unix_nanos",
+                n(window.end_exclusive_unix_nanos),
+            ),
+            (
+                "observed_until_exclusive_unix_nanos",
+                n(window.observed_until_exclusive_unix_nanos),
+            ),
             ("complete_period", t(window.complete_period)),
             ("future_period", t(window.future_period)),
             ("total_deal_count", n(window.total_deal_count)),
@@ -614,10 +626,14 @@ fn history_csv_window(
     for (index, reason) in window.reasons.iter().enumerate() {
         let key = format!("{id}:{index}");
         csv.fields(
-            "history_reason", &key,
+            "history_reason",
+            &key,
             [
                 ("outcome", t(format!("{:?}", reason.outcome))),
-                ("reason_code", t(reason.reason_code.as_deref().unwrap_or(""))),
+                (
+                    "reason_code",
+                    t(reason.reason_code.as_deref().unwrap_or("")),
+                ),
                 ("deal_count", n(reason.deal_count)),
             ],
         )?;
@@ -625,14 +641,20 @@ fn history_csv_window(
     for (index, stage) in window.stages.iter().enumerate() {
         let key = format!("{id}:{index}");
         csv.fields(
-            "history_stage", &key,
+            "history_stage",
+            &key,
             [
                 ("pipeline_id", t(&stage.pipeline_id)),
                 ("stage_id", t(&stage.stage_id)),
                 ("catalog_version", opt(stage.catalog_version)),
             ],
         )?;
-        history_csv_duration(csv, "history_stage", &key, stage.duration.as_option().ok_or_else(malformed)?)?;
+        history_csv_duration(
+            csv,
+            "history_stage",
+            &key,
+            stage.duration.as_option().ok_or_else(malformed)?,
+        )?;
     }
     Ok(())
 }
@@ -640,16 +662,23 @@ fn history_csv_window(
 fn history_csv_deal(csv: &mut Csv, deal: &sale_wire::SalesHistoricalDeal) -> ExportResult<()> {
     let id = &deal.deal_id;
     csv.fields(
-        "historical_deal", id,
+        "historical_deal",
+        id,
         [
             ("pipeline_id", t(&deal.pipeline_id)),
-            ("status", t(deal.status.map_or_else(String::new, |v| format!("{v:?}")))),
+            (
+                "status",
+                t(deal.status.map_or_else(String::new, |v| format!("{v:?}"))),
+            ),
             ("created_at_unix_nanos", opt(deal.created_at_unix_nanos)),
             ("last_event_version", opt(deal.last_event_version)),
             ("creation_cohort", t(deal.creation_cohort)),
             ("final_close_in_period", t(deal.final_close_in_period)),
             ("final_close_version", opt(deal.final_close_version)),
-            ("final_close_at_unix_nanos", opt(deal.final_close_at_unix_nanos)),
+            (
+                "final_close_at_unix_nanos",
+                opt(deal.final_close_at_unix_nanos),
+            ),
             ("reason_code", t(deal.reason_code.as_deref().unwrap_or(""))),
             ("cycle_seconds", opt(deal.cycle_seconds)),
             ("episode_seconds", opt(deal.episode_seconds)),
@@ -664,7 +693,8 @@ fn history_csv_deal(csv: &mut Csv, deal: &sale_wire::SalesHistoricalDeal) -> Exp
     for visit in &deal.visits {
         let key = format!("{id}:{}", visit.exit_version);
         csv.fields(
-            "history_visit", &key,
+            "history_visit",
+            &key,
             [
                 ("deal_id", t(id)),
                 ("stage_id", t(&visit.stage_id)),
@@ -885,27 +915,39 @@ impl SalesV2Service {
                 }
                 let snapshot = request.snapshot.as_option().ok_or_else(invalid)?;
                 csv.fields(
-                    "metadata", "",
+                    "metadata",
+                    "",
                     [
                         ("as_of_unix_nanos", n(snapshot.as_of_unix_nanos)),
                         ("revision", n(snapshot.revision)),
                         ("scope_sha256_hex", t(&snapshot.scope_sha256_hex)),
                         ("time_zone", t(&request.time_zone)),
-                        ("pipeline_id", t(request.pipeline_id.as_deref().unwrap_or(""))),
+                        (
+                            "pipeline_id",
+                            t(request.pipeline_id.as_deref().unwrap_or("")),
+                        ),
                     ],
                 )?;
                 request.page_size = 100;
                 if summary {
                     let data = self.read_history(request).await?;
-                    history_csv_window(&mut csv, "current", data.current.as_option().ok_or_else(malformed)?)?;
+                    history_csv_window(
+                        &mut csv,
+                        "current",
+                        data.current.as_option().ok_or_else(malformed)?,
+                    )?;
                     if let Some(previous) = data.previous.as_option() {
                         history_csv_window(&mut csv, "previous", previous)?;
                     }
                     csv.fields(
-                        "metadata", "",
+                        "metadata",
+                        "",
                         [
                             ("comparison_comparable", t(data.comparison_comparable)),
-                            ("win_rate_delta_basis_points", opt(data.win_rate_delta_basis_points)),
+                            (
+                                "win_rate_delta_basis_points",
+                                opt(data.win_rate_delta_basis_points),
+                            ),
                         ],
                     )?;
                     let mut result = csv.finish("crm-sales-history.csv");

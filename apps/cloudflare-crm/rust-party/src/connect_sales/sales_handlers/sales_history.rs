@@ -1,6 +1,8 @@
 //! Keyset scans of original Deal lifecycle events with a tenant-local read fence.
 use super::*;
-use crm_sales::{DealHistory, HistoryAccumulator, HistoryEvent, QuotaCadence, QuotaDate, QuotaPeriod};
+use crm_sales::{
+    DealHistory, HistoryAccumulator, HistoryEvent, QuotaCadence, QuotaDate, QuotaPeriod,
+};
 use sha2::{Digest, Sha256};
 use wasm_bindgen::JsValue;
 
@@ -245,9 +247,7 @@ impl SalesV2Service {
         };
         let detail = input.detail.as_option();
         if let Some(detail) = detail {
-            if input.snapshot.as_option().is_none()
-                || (detail.previous && previous.is_none())
-            {
+            if input.snapshot.as_option().is_none() || (detail.previous && previous.is_none()) {
                 return Err(invalid());
             }
             if !detail.after_deal_id.is_empty() {
@@ -275,14 +275,19 @@ impl SalesV2Service {
         let now = integer(Some(anchor.as_of))?;
         let revision = integer(Some(anchor.revision))?;
         let as_of = if let Some(snapshot) = input.snapshot.as_option() {
-            if snapshot.as_of_unix_nanos <= 0 || snapshot.as_of_unix_nanos > now
+            if snapshot.as_of_unix_nanos <= 0
+                || snapshot.as_of_unix_nanos > now
                 || snapshot.revision < 0
             {
                 return Err(invalid());
             }
             let digest = scope_digest(
-                &self.tenant, pipeline, &period, input.compare_previous,
-                snapshot.as_of_unix_nanos, snapshot.revision,
+                &self.tenant,
+                pipeline,
+                &period,
+                input.compare_previous,
+                snapshot.as_of_unix_nanos,
+                snapshot.revision,
             )?;
             if snapshot.scope_sha256_hex != digest {
                 return Err(invalid());
@@ -298,7 +303,12 @@ impl SalesV2Service {
             as_of_unix_nanos: as_of,
             revision,
             scope_sha256_hex: scope_digest(
-                &self.tenant, pipeline, &period, input.compare_previous, as_of, revision,
+                &self.tenant,
+                pipeline,
+                &period,
+                input.compare_previous,
+                as_of,
+                revision,
             )?,
             ..Default::default()
         };
@@ -321,8 +331,12 @@ impl SalesV2Service {
             detail: detail.is_some(),
         };
         scan_history(
-            &db, &self.tenant, pipeline, revision,
-            detail.map_or("", |d| d.after_deal_id.as_str()), &mut scan,
+            &db,
+            &self.tenant,
+            pipeline,
+            revision,
+            detail.map_or("", |d| d.after_deal_id.as_str()),
+            &mut scan,
         )
         .await?;
         let current = scan.current.finish();
@@ -335,7 +349,8 @@ impl SalesV2Service {
                     deals: current.deals.into_iter().map(history_deal).collect(),
                     next_deal_id: current.next_deal_id,
                     ..Default::default()
-                }).into(),
+                })
+                .into(),
                 ..Default::default()
             });
         }
