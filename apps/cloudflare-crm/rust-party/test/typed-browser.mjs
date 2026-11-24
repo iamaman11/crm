@@ -3134,23 +3134,35 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      const coordinatorContext=await browser.newContext({extraHTTPHeaders:viewerHeaders});
      watch(coordinatorContext);
      try {
-       const coordinatorPage=await coordinatorContext.newPage();
        for(const [route,id,method,table,editLabel] of [
          [coordinationTaskRoute,coordinationTask,"UpdateTask","crm_activity_task_records","Редактировать задачу"],
          ["sales/"+encodeURIComponent(ownedDealId),ownedDealId,"UpdateDeal","crm_sales_deal_records","Редактировать сделку"]
        ]){
+         // Each deep link starts a fresh document under the same signed identity.
+         const coordinatorPage=await coordinatorContext.newPage();
          await coordinatorPage.goto(base+"/#"+route);
-         const distribution=coordinatorPage.getByRole("form",{name:"Распределение из очереди команды",exact:true});
-         await distribution.waitFor();
-         await expect(coordinatorPage.getByRole("button",{name:editLabel,exact:true})).toHaveCount(0);
+         const isTask=method==="UpdateTask";
+         await coordinatorPage.getByRole("heading",{name:isTask?"Карточка задачи":"Карточка сделки",exact:true}).waitFor();
+         const record=isTask
+           ?coordinatorPage.locator("section").filter({has:coordinatorPage.getByRole("heading",{name:poolName,exact:true})})
+           :coordinatorPage.getByRole("region",{name:"Подробности сделки "+id,exact:true});
+         await expect(record).toHaveCount(1);
+         const distribution=record.getByRole("form",{name:"Распределение из очереди команды",exact:true});
+         await expect(distribution).toHaveCount(1);
+         await expect(distribution).toBeVisible();
+         await expect(coordinatorPage.getByRole("form",{name:"Распределение из очереди команды",exact:true})).toHaveCount(1);
+         await expect(record.getByRole("button",{name:editLabel,exact:true})).toHaveCount(0);
          await distribution.getByLabel("Назначить сотруднику команды",{exact:true}).selectOption("native-viewer@example.test");
          const response=coordinatorPage.waitForResponse(r=>responsePathEndsWith(r,"/"+method)&&r.request().method()==="POST");
          await distribution.getByRole("button",{name:"Распределить из очереди",exact:true}).click();
          assert.equal((await response).status(),200);
          await distribution.waitFor({state:"hidden"});
          await coordinatorPage.reload();
-         await coordinatorPage.getByText("Ответственный: native-viewer@example.test",{exact:true}).waitFor();
+         await record.getByText("Ответственный: native-viewer@example.test",{exact:true}).waitFor();
+         await expect(record.getByRole("form",{name:"Распределение из очереди команды",exact:true})).toHaveCount(0);
          assert.equal((await sql("SELECT json_extract(state,'$.owner.actor_id') AS owner FROM "+table+" WHERE tenant=? AND id=?",tenantA,id))[0].owner,"native-viewer@example.test");
+         checkpoint("SK-07 signed coordinator "+method+" exact record, D1 and reload");
+         await coordinatorPage.close();
        }
      } finally {await coordinatorContext.close();}
      await navigate("team","Команда и распределение работы");
