@@ -11,6 +11,7 @@ import {decimalUnits,minorUnits} from "./money";
 import {inputDate,parseDate} from "./calendarInput";
 import {dealHref} from "./routes";
 import {SalesPerformanceReports} from "./SalesPerformanceReports";
+import {SalesScorecards} from "./SalesScorecards";
 
 type Choices=Awaited<ReturnType<typeof allOwners>>["choices"];
 function scopeValue(scope:SalesQuotaScope|undefined):string {
@@ -80,6 +81,7 @@ export function SalesQuotaWorkspace({isAdmin,choices,ownersUnavailable,territori
   return <section aria-label="Коммерческие цели и план-факт">
     <h3>Коммерческие цели и план-факт</h3>
     <p>Факт — сумма выигранных сделок за период минус сторно в периоде. Это не бухгалтерская выручка. Цели разных областей и периодов не складываются.</p>
+    {catalog.data&&<SalesScorecards catalog={catalog.data} labels={labels} onQuota={select}/>}
     <QueryNotice query={quotas}/><QueryNotice query={catalog}/>
     <p><label><input type="checkbox" checked={includeArchived} onChange={e=>setIncludeArchived(e.target.checked)}/> Показать архивные цели</label></p>
     {isAdmin&&<Button disabled={!ready||pending} onClick={()=>start()}>Создать коммерческую цель</Button>}

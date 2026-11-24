@@ -823,6 +823,12 @@ const RPC_POLICIES: &[(&str, RpcPolicy)] = &[
         },
     ),
     (
+        "/crm.sales.v2.DealService/GetSalesScorecard",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
         "/crm.sales.v2.DealService/GetSalesQuotaPerformance",
         RpcPolicy {
             permission: RpcPermission::Read,

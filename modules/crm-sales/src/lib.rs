@@ -9,6 +9,7 @@ pub mod persistence;
 pub mod pipeline;
 pub mod quotas;
 pub mod routing;
+pub mod scorecards;
 pub mod territories;
 pub mod views;
 
@@ -19,6 +20,7 @@ pub use persistence::*;
 pub use pipeline::*;
 pub use quotas::*;
 pub use routing::*;
+pub use scorecards::*;
 pub use territories::*;
 pub use views::*;
 

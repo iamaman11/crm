@@ -260,6 +260,7 @@ impl SalesQuota {
 
 /// Homogeneous persisted event group. Storage supplies counts and exact
 /// nonnegative decimal components; only Sales decides attribution and signs.
+#[derive(Clone, Copy)]
 pub struct QuotaFactGroup<'a> {
     pub outcome: Option<DealStatus>,
     pub dimension: Option<&'a str>,
@@ -306,6 +307,17 @@ impl QuotaActuals {
         quota: &SalesQuota,
         group: QuotaFactGroup<'_>,
     ) -> Result<bool, SdkError> {
+        self.observe_scope(&quota.currency_code, quota.scope.dimension_id(), group)
+    }
+
+    /// Shared commercial calculation for quota and scorecard reads. A missing
+    /// scope restriction means all known credit, not an inferred attribution.
+    pub(crate) fn observe_scope(
+        &mut self,
+        currency: &str,
+        dimension: Option<&str>,
+        group: QuotaFactGroup<'_>,
+    ) -> Result<bool, SdkError> {
         fn add(total: &mut u64, count: u64) -> Result<(), SdkError> {
             *total = total
                 .checked_add(count)
@@ -324,11 +336,11 @@ impl QuotaActuals {
         }
         if group
             .currency
-            .is_some_and(|currency| currency != quota.currency_code)
+            .is_some_and(|value| value != currency)
         {
             return Ok(false);
         }
-        if let Some(dimension) = quota.scope.dimension_id() {
+        if let Some(dimension) = dimension {
             if group.dimension.is_none() {
                 add(&mut self.unallocated_count, group.count)?;
             }
@@ -394,6 +406,15 @@ impl QuotaActuals {
             },
         )?;
         Ok(included.then(|| booked.map(|value| if reversal { -value } else { value })))
+    }
+
+    pub fn target_progress(&self, quota: &SalesQuota) -> Result<(i128, i128), SdkError> {
+        let net = self.net()?;
+        let target = quota.target()?;
+        let overflow = || invalid("SALES_QUOTA_TOTAL_OVERFLOW");
+        let remaining = target.checked_sub(net).ok_or_else(overflow)?;
+        let attainment = net.checked_mul(10_000).ok_or_else(overflow)? / target;
+        Ok((remaining, attainment))
     }
 
     pub fn net(&self) -> Result<i128, SdkError> {

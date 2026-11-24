@@ -63,9 +63,7 @@ impl PerformanceActuals {
 
     pub fn new(quota: &SalesQuota, actual: &QuotaActuals) -> Result<Self, SdkError> {
         let net = actual.net()?;
-        let target = quota.target()?;
-        let remaining = target.checked_sub(net).ok_or_else(overflow)?;
-        let attainment = net.checked_mul(10_000).ok_or_else(overflow)? / target;
+        let (remaining, attainment) = actual.target_progress(quota)?;
         Ok(Self {
             gross: actual.gross.to_string(),
             reversals: actual.reversals.to_string(),

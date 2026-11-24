@@ -5797,6 +5797,50 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    assert.equal(perf.facts.length,1);assert.ok(perf.next);
    const page2=await call("GetSalesQuotaPerformance",viewer,{quotaId,quotaVersion:2n,asOfUnixNanos:perf.asOfUnixNanos,eventSequence:perf.eventSequence,after:perf.next,pageSize:1});
    assert.equal(page2.netMinorUnits,perf.netMinorUnits);assert.notDeepEqual(page2.facts[0],perf.facts[0]);
+   // Scorecard shares the immutable ledger and exact quota semantics. A
+   // monthly goal does not borrow the custom annual target.
+   const month=new Date().getUTCMonth()+1;
+   const monthlyId="quota-month-"+suffix;
+   const monthlyConfig={...publish.configuration,name:"Monthly "+suffix,
+     period:{startDate:{year,month,day:1},endDate:{year,month,day:new Date(Date.UTC(year,month,0)).getUTCDate()},timeZone:"UTC",cadence:1}};
+   const monthlyQuota=(await call("CreateSalesQuota",admin,{quotaId:monthlyId,configuration:monthlyConfig,precondition:pre("monthly-goal")})).quota;
+   const scoreInput={axis:3,currencyCode:"EUR",pipelineId:pipeline,firstDate:{year,month,day:1},timeZone:"UTC",cadence:1,periodCount:2};
+   const auditBeforeScore=(await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=?","tenant-a"))[0].n;
+   const score=await call("GetSalesScorecard",viewer,scoreInput);
+   assert.equal(score.buckets.length,2);
+   assert.equal(score.buckets[0].endExclusiveUnixNanos,score.buckets[1].startUnixNanos);
+   const scoreTeam=score.buckets[0].dimensions.find(d=>d.dimensionId===team).cell;
+   assert.equal(scoreTeam.quota.quotaId,monthlyId);
+   assert.equal(scoreTeam.quota.version,monthlyQuota.version);
+   for(const field of ["grossMinorUnits","reversalMinorUnits","netMinorUnits","wonCount","lostCount","reversalCount","remainingMinorUnits","attainmentBasisPoints"])
+     assert.equal(scoreTeam[field],perf[field],field);
+   assert.equal(score.buckets[1].dimensions.find(d=>d.dimensionId===team).cell.netMinorUnits,"0");
+   assert.equal(score.buckets[1].dimensions.find(d=>d.dimensionId===team).cell.quota,undefined);
+   assert.equal(score.buckets[0].organization.quota,undefined);
+   assert.deepEqual((await call("GetSalesScorecard",admin,scoreInput)).buckets,score.buckets);
+   for(const axis of [1,2,4]){
+     const other=await call("GetSalesScorecard",viewer,{...scoreInput,axis});
+     for(const field of ["grossMinorUnits","reversalMinorUnits","netMinorUnits","wonCount","lostCount","sourceEventCount"])
+       assert.equal(other.buckets[0].organization[field],score.buckets[0].organization[field],field);
+     if(axis!==1)assert.equal(other.buckets[0].dimensions.reduce((n,d)=>n+BigInt(d.cell.netMinorUnits),0n),BigInt(other.buckets[0].organization.netMinorUnits));
+   }
+   const otherTenant=await call("GetSalesScorecard",tenantB,scoreInput);
+   assert.equal(otherTenant.buckets[0].organization.sourceEventCount,0n);
+   assert.equal(otherTenant.buckets[0].organization.netMinorUnits,"0");
+   assert.ok(!otherTenant.buckets[0].dimensions.some(d=>d.dimensionId===team));
+   await call("GetSalesScorecard",viewer,{...scoreInput,periodCount:25},400);
+   await call("GetSalesScorecard",viewer,{...scoreInput,firstDate:{year,month,day:2}},400);
+   const scoreDetail={...scoreInput,detail:{bucketIndex:0,organization:false,dimensionId:team,
+     asOfUnixNanos:score.asOfUnixNanos,eventSequence:score.eventSequence,expectedEventCount:scoreTeam.sourceEventCount,pageSize:1}};
+   const firstScorePage=(await call("GetSalesScorecard",viewer,scoreDetail)).detail;
+   assert.equal(firstScorePage.facts.length,1);assert.ok(firstScorePage.next);
+   assert.equal(firstScorePage.sourceEventCount,scoreTeam.sourceEventCount);
+   assert.deepEqual((await call("GetSalesScorecard",admin,scoreDetail)).detail,firstScorePage);
+   const nextScorePage=(await call("GetSalesScorecard",viewer,{...scoreDetail,detail:{...scoreDetail.detail,after:firstScorePage.next}})).detail;
+   assert.notDeepEqual(nextScorePage.facts[0],firstScorePage.facts[0]);
+   await call("GetSalesScorecard",tenantB,scoreDetail,409);
+   await call("GetSalesScorecard",viewer,{...scoreDetail,detail:{...scoreDetail.detail,expectedEventCount:scoreTeam.sourceEventCount+1n}},409);
+   assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=?","tenant-a"))[0].n,auditBeforeScore);
    // Disposable fixture: more than the former 2000-event limit, exact values beyond JS safe integers.
    const scaleCount=2501,scaleAmount=9007199254740993n;
    const scaleInsert=`WITH RECURSIVE nums(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM nums WHERE n<${scaleCount})
@@ -5806,7 +5850,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
        e.previous_status,e.status,e.reason_code,e.actor,e.request_id,e.occurred_at_unix_nanos,e.catalog_version,
        json_set(e.commercial_close_fact,'$.close_version',10000+n,'$.amount.minor_units','${scaleAmount}')
        FROM nums CROSS JOIN crm_sales_deal_events e WHERE e.tenant=? AND e.deal_id=? AND e.deal_version=3`;
-   let scaleReport;
+   let scaleReport,scaledScoreDetail;
    const scaleReportId="report-scale-"+suffix;
    try{
      await sql(scaleInsert,"tenant-a",one.dealId);
@@ -5820,6 +5864,17 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      assert.ok(scaled.eventSequence>perf.eventSequence);
      assert.equal(scaled.facts.length,1);
      assert.ok(scaled.next);
+     const scoreStarted=Date.now();
+     const scaledScore=await call("GetSalesScorecard",viewer,scoreInput);
+     const scoreElapsed=Date.now()-scoreStarted;
+     const scaledTeam=scaledScore.buckets[0].dimensions.find(d=>d.dimensionId===team).cell;
+     assert.equal(scaledTeam.netMinorUnits,scaled.netMinorUnits);
+     assert.equal(scaledTeam.sourceEventCount,scoreTeam.sourceEventCount+BigInt(scaleCount));
+     assert.deepEqual((await call("GetSalesScorecard",viewer,scoreDetail)).detail,firstScorePage);
+     scaledScoreDetail={...scoreDetail,detail:{...scoreDetail.detail,asOfUnixNanos:scaledScore.asOfUnixNanos,
+       eventSequence:scaledScore.eventSequence,expectedEventCount:scaledTeam.sourceEventCount}};
+     assert.equal((await call("GetSalesScorecard",viewer,scaledScoreDetail)).detail.sourceEventCount,scaledTeam.sourceEventCount);
+     console.log(JSON.stringify({event:"crm.native-d3-scorecard-scale",result:"PASS",added_events:scaleCount,periods:2,elapsed_ms:scoreElapsed,exact_i128:true,frozen_membership:true}));
      const frozenRequest={quotaId,quotaVersion:2n,asOfUnixNanos:perf.asOfUnixNanos,eventSequence:perf.eventSequence,pageSize:1};
      assert.deepEqual(await call("GetSalesQuotaPerformance",viewer,frozenRequest),perf);
      assert.deepEqual(await call("GetSalesQuotaPerformance",admin,frozenRequest),perf);
@@ -5837,6 +5892,13 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    }finally{
      await sql("DELETE FROM crm_sales_deal_events WHERE tenant=? AND deal_id=? AND deal_version BETWEEN 10001 AND 12501","tenant-a",one.dealId);
    }
+   await call("GetSalesScorecard",viewer,scaledScoreDetail,409);
+   await call("UpdateSalesQuota",admin,{quotaId:monthlyId,configuration:{...monthlyConfig,archived:true,revisionReason:"qa.monthly-archive"},precondition:pre("monthly-archive",monthlyQuota.version)});
+   const archivedScore=(await call("GetSalesScorecard",viewer,scoreInput)).buckets[0].dimensions.find(d=>d.dimensionId===team).cell;
+   assert.equal(archivedScore.quota.configuration.archived,true);
+   assert.equal(archivedScore.quota.version,monthlyQuota.version+1n);
+   assert.equal(archivedScore.netMinorUnits,scoreTeam.netMinorUnits);
+   console.log(JSON.stringify({event:"crm.native-d3-scorecards",result:"PASS",calendar:true,dimensions:true,quota_versions:true,exact_totals:true,detail_paging:true,retention_visible:true,tenant_ab:true,viewer_parity:true,no_read_audit:true}));
    // D3 durable report and forecast: exact estimates, frozen inputs, replay,
    // independent read rights, exclusions, mutation rollback and no new audit on reads.
    const retainedReport=await call("GetSalesPerformanceReport",viewer,{reportId:scaleReportId,pageSize:1});

@@ -2991,6 +2991,23 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      await difference.getByRole("row").filter({has:page.getByRole("rowheader",{name:"Выполнение",exact:true})}).getByRole("cell",{name:"0.00 п. п.",exact:true}).waitFor();
      checkpoint("SK-07.D3 commercial report forecast preview, durable save, direct link, reload and D1");
      checkpoint("SK-07.D3 frozen report comparison through typed Connect");
+     const scoreRegion=quotaRegion.getByRole("region",{name:"Коммерческая эффективность",exact:true});
+     await scoreRegion.getByLabel("Измерение эффективности",{exact:true}).selectOption("2");
+     await scoreRegion.getByLabel("Воронка эффективности",{exact:true}).selectOption(newPipelineId);
+     await scoreRegion.getByLabel("Первый день периода",{exact:true}).fill(year+"-"+String(new Date().getUTCMonth()+1).padStart(2,"0")+"-01");
+     await scoreRegion.getByLabel("Число периодов",{exact:true}).fill("2");
+     await scoreRegion.getByRole("button",{name:"Рассчитать эффективность",exact:true}).click();
+     const scoreTable=scoreRegion.getByRole("region",{name:"Таблица коммерческой эффективности",exact:true});
+     const actorRow=scoreTable.getByRole("row").filter({has:scoreTable.getByRole("rowheader",{name:"native-a@example.test",exact:true})});
+     await actorRow.getByRole("cell",{name:"Нет цели",exact:true}).waitFor();
+     await actorRow.getByRole("button",{name:"Исходные события",exact:true}).click();
+     const scoreFacts=scoreRegion.getByRole("region",{name:"Исходные коммерческие события",exact:true});
+     await scoreFacts.getByRole("link",{name:"Сделка "+autoId,exact:true}).waitFor();
+     const trend=scoreRegion.getByRole("region",{name:"Динамика коммерческой эффективности",exact:true});
+     assert.equal(await trend.getByRole("row").count(),3);
+     await scoreRegion.getByLabel("Период scorecard",{exact:true}).selectOption("1");
+     await actorRow.getByRole("cell",{name:"0.00 EUR",exact:true}).first().waitFor();
+     checkpoint("SK-07.D3 scorecard historical credit, period trends and event detail");
 
 
    }

@@ -802,6 +802,78 @@ message SalesQuotaFactCursor {
   string deal_id = 1;
   int64 deal_version = 2;
 }
+enum SalesScorecardAxis {
+  SALES_SCORECARD_AXIS_UNSPECIFIED = 0;
+  SALES_SCORECARD_AXIS_ORGANIZATION = 1;
+  SALES_SCORECARD_AXIS_ACTOR = 2;
+  SALES_SCORECARD_AXIS_TEAM = 3;
+  SALES_SCORECARD_AXIS_TERRITORY = 4;
+}
+message GetSalesScorecardRequest {
+  SalesScorecardAxis axis = 1;
+  string currency_code = 2;
+  optional string pipeline_id = 3;
+  crm.core.v2.CalendarDate first_date = 4;
+  string time_zone = 5;
+  SalesQuotaCadence cadence = 6;
+  uint32 period_count = 7;
+  // A detail-only read uses the original bucket and committed event membership.
+  SalesScorecardDetailRequest detail = 8;
+}
+message SalesScorecardDetailRequest {
+  uint32 bucket_index = 1;
+  // True selects all organization events, including unknown history.
+  // False with no dimension_id selects known events with unallocated credit.
+  bool organization = 2;
+  optional string dimension_id = 3;
+  int64 as_of_unix_nanos = 4;
+  int64 event_sequence = 5;
+  uint64 expected_event_count = 6;
+  SalesQuotaFactCursor after = 7;
+  uint32 page_size = 8;
+}
+message SalesScorecardDetail {
+  repeated SalesQuotaFact facts = 1;
+  SalesQuotaFactCursor next = 2;
+  uint64 source_event_count = 3;
+}
+message SalesScorecardCell {
+  string gross_minor_units = 1;
+  string reversal_minor_units = 2;
+  string net_minor_units = 3;
+  uint64 won_count = 4;
+  uint64 lost_count = 5;
+  uint64 reversal_count = 6;
+  uint64 missing_amount_count = 7;
+  uint64 unknown_history_count = 8;
+  uint64 unallocated_count = 9;
+  optional uint32 win_rate_basis_points = 10;
+  SalesQuota quota = 11;
+  optional string remaining_minor_units = 12;
+  optional string attainment_basis_points = 13;
+  uint64 source_event_count = 14;
+}
+message SalesScorecardDimension {
+  // Absent ID means known facts with no credit on the selected axis.
+  optional string dimension_id = 1;
+  SalesScorecardCell cell = 2;
+}
+message SalesScorecardBucket {
+  SalesQuotaPeriod period = 1;
+  int64 start_unix_nanos = 2;
+  int64 end_exclusive_unix_nanos = 3;
+  SalesScorecardCell organization = 4;
+  repeated SalesScorecardDimension dimensions = 5;
+}
+message GetSalesScorecardResponse {
+  int64 as_of_unix_nanos = 1;
+  int64 event_sequence = 2;
+  string currency_code = 3;
+  SalesScorecardAxis axis = 4;
+  repeated SalesScorecardBucket buckets = 5;
+  SalesScorecardDetail detail = 6;
+}
+
 message GetSalesQuotaPerformanceRequest {
   string quota_id = 1;
   optional int64 quota_version = 2;
@@ -995,6 +1067,9 @@ service DealService {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
   rpc ListSalesQuotas(ListSalesQuotasRequest) returns (ListSalesQuotasResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc GetSalesScorecard(GetSalesScorecardRequest) returns (GetSalesScorecardResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
   rpc GetSalesQuotaPerformance(GetSalesQuotaPerformanceRequest) returns (GetSalesQuotaPerformanceResponse) {
