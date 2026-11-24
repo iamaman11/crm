@@ -9,7 +9,7 @@ import {allMembers,humanMember} from "./memberCatalog";
 
 // The screen is ONLY a generated Connect/Rust projection. No browser rule
 // interpreter, callback that mutates Tasks, tenant field, or stored second state.
-export function AutomationScreen() {
+export function AutomationScreen({initialInteractionId=""}:{initialInteractionId?:string}) {
   const [ruleCursor,setRuleCursor]=useState("");
   const [runCursor,setRunCursor]=useState("");
   const [editing,setEditing]=useState<AutomationRule>();
@@ -18,7 +18,7 @@ export function AutomationScreen() {
   const [assignee,setAssignee]=useState("");
   const [delay,setDelay]=useState("0");
   const [enabled,setEnabled]=useState(false);
-  const [interactionId,setInteractionId]=useState("");
+  const [interactionId,setInteractionId]=useState(initialInteractionId);
   const [runFilter,setRunFilter]=useState("");
   const me=useQuery(useCallback(async(signal:AbortSignal)=>
     (await api.members.getMyMembership({}, {signal})).member,[]));

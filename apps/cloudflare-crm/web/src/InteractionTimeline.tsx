@@ -5,7 +5,7 @@ import type {Interaction} from "@ultimate-crm/client/cloudflare";
 import {api,field,newId,timestamp,dateText} from "./api";
 import {enumValue} from "./enumFields";
 import {useQuery,useMutation,prepareMutation,QueryNotice,MutationNotice} from "./hooks";
-import {dealHref} from "./routes";
+import {automationHref,dealHref} from "./routes";
 
 function localTime():string {
   const now=new Date();
@@ -49,6 +49,7 @@ export function InteractionTimeline({accountId,dealId=""}:{accountId:string;deal
       <p>{item.text}</p>
       <p>Автор: {item.author} · записано: {dateText(item.recordedAt)}
         {!dealId&&item.dealId?<> · <a href={dealHref(item.dealId)}>Связанная сделка</a></>:null}
+        {" · "}<a href={automationHref(item.interactionId)}>Правила для взаимодействия</a>
       </p>
     </li>)}</ol>
     {!history.busy&&!history.error&&items.length===0&&<p>Записей на этой странице нет.</p>}

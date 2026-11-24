@@ -31,7 +31,7 @@ export type Route =
   | {kind:"account-create";partyId:string}
   | {kind:"deal";dealId:string}
   | {kind:"search";query:string}
-  | {kind:"section";screen:Section;partyId:string;accountId:string;taskId?:string;dealId?:string;contactPointId?:string;relationshipId?:string;search?:string;overdue?:boolean;viewId?:string;pipelineId?:string;assigneeEmail?:string;mine?:boolean;teamId?:string;owner?:string;reportId?:string;scorecard?:ScorecardFilters}
+  | {kind:"section";screen:Section;partyId:string;accountId:string;interactionId?:string;taskId?:string;dealId?:string;contactPointId?:string;relationshipId?:string;search?:string;overdue?:boolean;viewId?:string;pipelineId?:string;assigneeEmail?:string;mine?:boolean;teamId?:string;owner?:string;reportId?:string;scorecard?:ScorecardFilters}
   | {kind:"not-found";path:string};
 
 function isSection(path:string):path is Section {return Object.prototype.hasOwnProperty.call(sectionLabels,path);}
@@ -166,6 +166,16 @@ export function parseRoute(hash:string,allowedStatuses:readonly AccountFilterSta
     if(invalid||ids.length!==1||!validTeamId(id))return {kind:"not-found",path:source};
     return {kind:"section",screen:"team",partyId:"",accountId:"",reportId:id};
   }
+  if(path==="automation"){
+    const ids=params.getAll("interactionId"),id=ids[0]??"";
+    let invalid=false;
+    params.forEach((_,key)=>{if(key!=="interactionId")invalid=true;});
+    if(invalid||ids.length>1||(id&&(id.length>180||id.includes("/")||
+      id.includes("\\")||id.includes("%")||id==="."||id===".."||id!==id.trim())))
+      return {kind:"not-found",path:source};
+    return {kind:"section",screen:"automation",partyId:"",accountId:"",
+      ...(id?{interactionId:id}:{})};
+  }
   if(isSection(path)){
     const assignees=path==="tasks"?params.getAll("assigneeEmail"):[];
     const teamIds=path==="tasks"?params.getAll("teamId"):[];
@@ -227,6 +237,11 @@ export function intelligenceHref(opts:{start?:string;end?:string;pipelineId?:str
   if(opts.includeArchived)p.set("includeArchived","1");
   if(opts.compare&&opts.start&&opts.end)p.set("compare","1");
   return "#insights"+(p.size?"?"+p.toString():"");
+}
+/** A bounded original Interaction ID is only a URL selection, never a
+ * browser-side rule or authorization decision. */
+export function automationHref(interactionId:string):string {
+  return "#automation?"+new URLSearchParams({interactionId}).toString();
 }
 export function workdayHref(day="",mine=false,teamId=""):string {
   const p=new URLSearchParams();
