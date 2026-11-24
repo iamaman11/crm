@@ -2430,6 +2430,7 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id=?"
   // Remove only these deterministic QA records after every assertion.
   const qaIds=[id,ungrantedId,revokedId,versionId,raceId];
   await batch(qaIds.flatMap(dealId=>[
+    statement("DELETE FROM crm_sales_link_delivery_records WHERE tenant=? AND deal_id=?","tenant-a",dealId),
     statement("DELETE FROM crm_sales_deal_events WHERE tenant=? AND deal_id=?","tenant-a",dealId),
     statement("DELETE FROM crm_sales_deal_receipts WHERE tenant=? AND json_extract(state,'$.deal_id')=?","tenant-a",dealId),
     statement("DELETE FROM crm_audit WHERE tenant_id=? AND subject_id=?","tenant-a",dealId),
