@@ -157,7 +157,9 @@ jobs:
           set -euo pipefail
           pnpm web:check
           git diff --exit-code -- pnpm-lock.yaml
-          cargo clippy --jobs 2 --locked --workspace --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml --target wasm32-unknown-unknown --features native -- -D clippy::all -D unfulfilled_lint_expectations
+          # TypeScript/Buf has finished: allow three compiler jobs on the four-vCPU runner.
+          # Preserve the serial gate boundary that avoids codegen/Clippy EAGAIN.
+          cargo clippy --jobs 3 --locked --workspace --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml --target wasm32-unknown-unknown --features native -- -D clippy::all -D unfulfilled_lint_expectations
       # Installer binaries are cached separately from Cargo compilation outputs.
       - name: Cache pinned native Rust tool CLIs
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
