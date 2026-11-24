@@ -1,4 +1,4 @@
-import {useCallback,useEffect,useState} from "react";
+import {useCallback,useEffect,useRef,useState} from "react";
 import {Button,Card,RecordPanel,FormGrid,PageHeader,SelectField,TextField} from "@ultimate-crm/ui";
 import type {Deal,SalesPipeline,SalesDealView,PreviewSalesRoutingResponse} from "@ultimate-crm/client/cloudflare";
 import {DealStatus,ProbabilitySource,ForecastCategory} from "@ultimate-crm/client/cloudflare";
@@ -82,6 +82,7 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
   const [editorMode,setEditorMode]=useState<EditorMode>(null);
   const [draftId,setDraftId]=useState(newId);
   const [formAccountId,setFormAccountId]=useState("");
+  const dealForm=useRef<HTMLFormElement>(null);
   const [autoRouting,setAutoRouting]=useState(false);
   const [previewVisible,setPreviewVisible]=useState(false);
   const routingPreview=useReadAction<{key:string;response:PreviewSalesRoutingResponse}>();
@@ -840,7 +841,7 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
              editorMode==="reopen"?"Открыть повторно":"Сохранить этап"}
         </Button>{" "}
         <Button variant="secondary" type="button" disabled={mutation.busy||mutation.pending} onClick={()=>{setEditorMode(null);setAdvance(undefined);mutation.changed();}}>Отмена</Button>
-      </form>:<form key={selected?selected.dealId+selected.version:draftId} onChange={()=>{mutation.changed();setPreviewVisible(false);}} onSubmit={e=>{
+      </form>:<form ref={dealForm} key={selected?selected.dealId+selected.version:draftId} onChange={()=>{mutation.changed();setPreviewVisible(false);}} onSubmit={e=>{
         e.preventDefault();const data=new FormData(e.currentTarget);
         void mutation.runIntent(()=>{
           const currencyCode=field(data,"currency"),amountText=field(data,"amount");
@@ -922,8 +923,8 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
             <option value="">По портфелю клиента</option>
             {territories.data?.filter(t=>!t.configuration?.archived).map(t=><option key={t.territoryId} value={t.territoryId}>{t.configuration?.name}</option>)}
           </SelectField>
-          <Button type="button" variant="secondary" disabled={routingPreview.busy||territories.busy||!!territories.error} onClick={e=>{
-            const form=e.currentTarget.form;if(!form)return;
+          <Button type="button" variant="secondary" disabled={routingPreview.busy||territories.busy||!!territories.error} onClick={()=>{
+            const form=dealForm.current;if(!form)return;
             const data=new FormData(form);setPreviewVisible(false);
             void routingPreview.run(async signal=>{const {key,request}=routingInput(data);return {key,response:await api.deals.previewSalesRouting(request,{signal})};}).then(value=>setPreviewVisible(!!value));
           }}>Проверить распределение</Button>
