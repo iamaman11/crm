@@ -5,7 +5,12 @@ use crm_module_sdk::{ErrorCategory, SdkError};
 use serde::{Deserialize, Serialize};
 
 fn invalid(code: &'static str) -> SdkError {
-    SdkError::new(code, ErrorCategory::InvalidArgument, false, "Invalid Sales quota.")
+    SdkError::new(
+        code,
+        ErrorCategory::InvalidArgument,
+        false,
+        "Invalid Sales quota.",
+    )
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
