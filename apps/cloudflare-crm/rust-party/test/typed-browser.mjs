@@ -1090,8 +1090,25 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await expect(page.getByLabel("Воронка продаж",{exact:true})).toHaveValue(newPipelineId);
    await page.getByRole("region",{name:"Kanban — этапы и сделки"}).getByRole(
      "heading",{name:/Первичный контакт · 1/}).waitFor();
-   await reloadDocument();
-   await expect(page.getByLabel("Воронка продаж",{exact:true})).toHaveValue(newPipelineId);
+   const initialStageRequests=[];
+   const countInitialStageRead=request=>{
+     if(request.method()==="POST"&&new URL(request.url()).pathname.endsWith("/ListStageDeals"))
+       initialStageRequests.push(request);
+   };
+   page.on("request",countInitialStageRead);
+   try {
+     await reloadDocument();
+     await expect(page.getByLabel("Воронка продаж",{exact:true})).toHaveValue(newPipelineId);
+     // This populated stage heading is rendered only after the complete board
+     // Promise.all resolves. Counting requests (not only responses) also catches
+     // duplicate reads that the query hook has already aborted.
+     await page.getByRole("region",{name:"Kanban — этапы и сделки"}).getByRole(
+       "heading",{name:/Первичный контакт · 1/}).waitFor();
+     assert.equal(initialStageRequests.length,ownStageIds.length,
+       "unchanged empty cursor reset must not restart the initial stage queries");
+   }finally{
+     page.off("request",countInitialStageRead);
+   }
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
      sk05BackAuditBefore,"manual board navigation must not write D1 audit");
    checkpoint("M2-01 native board and M2-02 exact Deal Contact direct Get survive reload/Back without read-audit");

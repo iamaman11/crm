@@ -20,6 +20,9 @@ import {RoutingExplanation} from "./SalesRouting";
 
 type EditorMode="create"|"edit"|"advance"|"close"|"reopen"|null;
 type StageDraft={stageId:string;name:string;probability:string;archived:boolean};
+// A no-op cursor reset must retain referential identity so useQuery does not
+// abort and reissue every stage read on route/catalog reconciliation.
+const EMPTY_STAGE_CURSORS:Readonly<Record<string,string>>=Object.freeze({});
 function stageDrafts(pipeline?:SalesPipeline):StageDraft[] {
   return pipeline?.stages.map(stage=>({
     stageId:stage.stageId,name:stage.name,probability:percent(stage.probabilityBasisPoints),
@@ -46,7 +49,7 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
   initialAccountId?:string;initialSearch?:string;initialViewId?:string;
   initialPipelineId?:string;focusedDealId?:string;initialOwner?:string;
 }) {
-  const [stageCursors,setStageCursors]=useState<Record<string,string>>({});
+  const [stageCursors,setStageCursors]=useState<Readonly<Record<string,string>>>(EMPTY_STAGE_CURSORS);
   // Native DnD is presentation only: the existing confirmed advance form
   // remains the ONE mutation path (no optimistic Deal update).
   const [draggingDeal,setDraggingDeal]=useState<{
@@ -58,7 +61,7 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
   const [owner,setOwner]=useState(initialOwner);
   const owners=useQuery(useCallback(allOwners,[]));
   const ownerChoices=owners.data?.choices??[];
-  useEffect(()=>{if(!initialViewId){setOwner(initialOwner);setStageCursors({});setAllDealsCursor("");}},[initialOwner,initialViewId]);
+  useEffect(()=>{if(!initialViewId){setOwner(initialOwner);setStageCursors(EMPTY_STAGE_CURSORS);setAllDealsCursor("");}},[initialOwner,initialViewId]);
   // Deal lookup is independent of saved views, Kanban metrics and stage totals.
   const [dealSearch,setDealSearch]=useState(initialSearch);
   // Hash navigation/Back may change search without leaving SalesScreen.
@@ -128,7 +131,7 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
     refresh:async marker=>{
       await pipelinesQuery.reload();
       setPipelineId(marker.resourceId);
-      setPipelineEditor(null);setPipelineDirty(false);setStageCursors({});
+      setPipelineEditor(null);setPipelineDirty(false);setStageCursors(EMPTY_STAGE_CURSORS);
       if(!selectedViewId)navigateTo(salesPipelineHref(initialAccountId,marker.resourceId,dealSearch,owner));
     }
   });
@@ -141,7 +144,7 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
       const current=(await api.deals.getSalesView({viewId:marker.resourceId})).view;
       await savedViewsQuery.reload();
       setCreateViewOpen(false);setViewDraftId(newId());
-      setStageCursors({});setAllDealsCursor("");
+      setStageCursors(EMPTY_STAGE_CURSORS);setAllDealsCursor("");
       if(!current||current.archived){
         setSelectedViewId("");setViewName("");
         setPipelineId("");setStatus("");setAccountId("");setOwner("");
@@ -167,7 +170,7 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
     setPipelineId(view.pipelineId??"");
     setStatus(view.status===undefined?"":String(view.status));
     setAccountId(view.accountId??"");setOwner(ownerValue(view.ownerFilter));
-    setStageCursors({});setAllDealsCursor("");
+    setStageCursors(EMPTY_STAGE_CURSORS);setAllDealsCursor("");
   },[initialViewId,savedViewsQuery.data]);
   const selectedView=savedViews.find(view=>view.viewId===selectedViewId);
   const viewStatus=()=>status?enumValue(status,
@@ -192,7 +195,7 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
     setPipelineId(view.pipelineId??"");
     setStatus(view.status===undefined?"":String(view.status));
     setAccountId(view.accountId??"");setOwner(ownerValue(view.ownerFilter));
-    setStageCursors({});
+    setStageCursors(EMPTY_STAGE_CURSORS);
     setAllDealsCursor("");
     viewMutation.changed();
     setCreateViewOpen(false);
@@ -201,7 +204,7 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
     // Manual selection is URL-backed. Draft changes to an existing saved
     // view remain unsaved until its explicit UpdateSalesView confirmation.
     if(!selectedViewId&&!navigateTo(salesPipelineHref(initialAccountId,id,dealSearch,owner)))return;
-    setPipelineId(id);setStageCursors({});viewMutation.changed();
+    setPipelineId(id);setStageCursors(EMPTY_STAGE_CURSORS);viewMutation.changed();
   };
   const saveView=(archive=false,asNew=false)=>{
     const old=selectedView;
@@ -230,7 +233,7 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
       if(archive){
         setSelectedViewId("");setViewName("");setCreateViewOpen(false);
         setPipelineId("");setStatus("");setAccountId("");setOwner("");
-        setStageCursors({});setAllDealsCursor("");
+        setStageCursors(EMPTY_STAGE_CURSORS);setAllDealsCursor("");
         navigateTo(salesViewHref(initialAccountId,"",dealSearch));
       }
     });
@@ -242,7 +245,7 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
     // ListPipelines is tenant-scoped; a fabricated URL is not an authority.
     const id=initialPipelineId;
     setPipelineId(id&&pipelinesQuery.data.pipelines.some(p=>p.pipelineId===id)?id:"");
-    setStageCursors({});
+    setStageCursors(EMPTY_STAGE_CURSORS);
   },[initialPipelineId,initialViewId,pipelinesQuery.data]);
   const missingPipeline=!!initialPipelineId&&!initialViewId&&!!pipelinesQuery.data&&
     !pipelines.some(p=>p.pipelineId===initialPipelineId);
@@ -434,15 +437,15 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
       </option>)}
     </SelectField>
     <AccountPicker label="Фильтр по клиенту" value={accountId} required={false}
-      onSelect={id=>{setAccountId(id);setStageCursors({});setAllDealsCursor("");viewMutation.changed();}}/>
+      onSelect={id=>{setAccountId(id);setStageCursors(EMPTY_STAGE_CURSORS);setAllDealsCursor("");viewMutation.changed();}}/>
     <QueryNotice query={owners}/>
     <SelectField label="Ответственный за сделки: фильтр" value={owner} onChange={e=>{
       const next=e.target.value;
       if(!selectedViewId&&!navigateTo(salesPipelineHref(initialAccountId,pipelineId,dealSearch,next)))return;
-      setOwner(next);setStageCursors({});setAllDealsCursor("");viewMutation.changed();
+      setOwner(next);setStageCursors(EMPTY_STAGE_CURSORS);setAllDealsCursor("");viewMutation.changed();
     }}><option value="">Все ответственные</option>{ownerChoices.map(c=><option key={c.value} value={c.value}>{c.label}</option>)}</SelectField>
     {owner&&<p>Показатели по текущему ответственному, не историческая атрибуция выручки.</p>}
-    <SelectField label="Статус сделки" value={status} onChange={e=>{setStatus(e.target.value);setStageCursors({});setAllDealsCursor("");viewMutation.changed();}}>
+    <SelectField label="Статус сделки" value={status} onChange={e=>{setStatus(e.target.value);setStageCursors(EMPTY_STAGE_CURSORS);setAllDealsCursor("");viewMutation.changed();}}>
       <option value="">Все</option><option value={DealStatus.OPEN}>Открытые</option>
       <option value={DealStatus.WON}>Выигранные</option><option value={DealStatus.LOST}>Проигранные</option>
     </SelectField>
@@ -760,7 +763,7 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
             setPipelineId(destination);
             if(!selectedViewId)navigateTo(salesPipelineHref(initialAccountId,destination,dealSearch,owner));
           }
-          setStageCursors({});await refreshSales();
+          setStageCursors(EMPTY_STAGE_CURSORS);await refreshSales();
         });
       }}>
         <TextField label="Название воронки" value={pipelineName} onChange={e=>setPipelineName(e.target.value)} required/>

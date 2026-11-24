@@ -18,6 +18,10 @@ jobs:
   cloudflare-crm-spike:
     runs-on: ubuntu-26.04
     timeout-minutes: 30
+    # Cargo Book rebuild diagnostics: observe actual fingerprint invalidation
+    # on ephemeral runners. No source timestamp changes or custom cache keys.
+    env:
+      CARGO_LOG: cargo::compiler::fingerprint=info
     outputs:
       bundle_name: ${{ steps.seal.outputs.bundle_name }}
     steps:
