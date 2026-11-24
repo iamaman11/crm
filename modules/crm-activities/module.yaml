@@ -89,6 +89,36 @@ provides:
       binding:
         kind: protobuf_rpc
         rpc: crm.activities.v2.TaskService.ListTaskWorkload
+    - id: activities.automation.rule.put
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.activities.v2.AutomationService.PutAutomationRule
+    - id: activities.automation.rule.get
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.activities.v2.AutomationService.GetAutomationRule
+    - id: activities.automation.rule.list
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.activities.v2.AutomationService.ListAutomationRules
+    - id: activities.automation.interaction.run
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.activities.v2.AutomationService.RunInteractionAutomation
+    - id: activities.automation.run.get
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.activities.v2.AutomationService.GetAutomationRun
+    - id: activities.automation.runs.list
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.activities.v2.AutomationService.ListAutomationRuns
     - id: activities.interaction.create
       version: 2.0.0
       binding:

@@ -12,6 +12,7 @@ export const sectionLabels={
   relationships:"Связи",
   sales:"Сделки",
   tasks:"Задачи",
+  automation:"Автоматизация",
   team:"Команда",
   consents:"Коммуникации",
   review:"Качество и совпадения",

@@ -1,0 +1,129 @@
+syntax = "proto3";
+
+package crm.activities.v2;
+
+import "crm/core/v2/operation.proto";
+
+// A bounded Activities-owned rule, not an arbitrary script/graph/ACL policy.
+// Only the Interaction-created action is executable in this first vertical
+// slice. Task-overdue remains a typed future trigger, not a silent capability.
+enum AutomationTrigger {
+  AUTOMATION_TRIGGER_UNSPECIFIED = 0;
+  AUTOMATION_TRIGGER_INTERACTION_CREATED = 1;
+  AUTOMATION_TRIGGER_TASK_OVERDUE = 2;
+}
+
+message AutomationRule {
+  string rule_id = 1;
+  int64 version = 2;
+  AutomationTrigger trigger = 3;
+  bool enabled = 4;
+  string task_subject = 5;
+  // Only a real, active human from this tenant; service identities are forbidden.
+  string assignee_email = 6;
+  int64 due_after_seconds = 7;
+}
+
+message PutAutomationRuleRequest {
+  string rule_id = 1;
+  AutomationTrigger trigger = 2;
+  bool enabled = 3;
+  string task_subject = 4;
+  string assignee_email = 5;
+  int64 due_after_seconds = 6;
+  // Absent expected_version creates; present expected_version replaces by CAS.
+  crm.core.v2.MutationPrecondition precondition = 7;
+}
+message PutAutomationRuleResponse {
+  AutomationRule rule = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+message GetAutomationRuleRequest {
+  string rule_id = 1;
+  optional string receipt_idempotency_key = 2;
+}
+message GetAutomationRuleResponse {
+  AutomationRule rule = 1;
+  crm.core.v2.MutationCommitEvidence confirmed_mutation = 2;
+}
+message ListAutomationRulesRequest {
+  crm.core.v2.PageRequest page = 1;
+}
+message ListAutomationRulesResponse {
+  repeated AutomationRule rules = 1;
+  crm.core.v2.PageInfo page_info = 2;
+}
+
+// Manual signed-admin execution. It is intentionally NOT a Cron or hidden
+// browser callback. Durable run source/intent and original Task receipt allow
+// recovery after a lost acknowledgement.
+message RunInteractionAutomationRequest {
+  string rule_id = 1;
+  string interaction_id = 2;
+  // expected_version protects the published configuration; stable Task identity
+  // still survives revision changes after the first run was recorded.
+  crm.core.v2.MutationPrecondition precondition = 3;
+  int64 expected_rule_version = 4;
+}
+enum AutomationRunStatus {
+  AUTOMATION_RUN_STATUS_UNSPECIFIED = 0;
+  AUTOMATION_RUN_STATUS_PENDING = 1;
+  AUTOMATION_RUN_STATUS_COMMITTED = 2;
+}
+message AutomationRun {
+  string rule_id = 1;
+  int64 rule_version = 2;
+  string source_event_id = 3;
+  string interaction_id = 4;
+  string task_id = 5;
+  AutomationRunStatus status = 6;
+  string requested_by = 7;
+  string original_request_id = 8;
+  string task_request_id = 9;
+  int64 created_at_unix_millis = 10;
+  int64 completed_at_unix_millis = 11;
+}
+message RunInteractionAutomationResponse {
+  AutomationRun run = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+message GetAutomationRunRequest {
+  string rule_id = 1;
+  string interaction_id = 2;
+  // Only this exact original caller intent can prove its pending mutation.
+  optional string receipt_idempotency_key = 3;
+}
+message GetAutomationRunResponse {
+  AutomationRun run = 1;
+  crm.core.v2.MutationCommitEvidence confirmed_mutation = 2;
+}
+message ListAutomationRunsRequest {
+  string rule_id = 1;
+  crm.core.v2.PageRequest page = 2;
+}
+message ListAutomationRunsResponse {
+  repeated AutomationRun runs = 1;
+  crm.core.v2.PageInfo page_info = 2;
+}
+
+service AutomationService {
+  rpc PutAutomationRule(PutAutomationRuleRequest) returns (PutAutomationRuleResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc GetAutomationRule(GetAutomationRuleRequest) returns (GetAutomationRuleResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListAutomationRules(ListAutomationRulesRequest) returns (ListAutomationRulesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc RunInteractionAutomation(RunInteractionAutomationRequest) returns (RunInteractionAutomationResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc GetAutomationRun(GetAutomationRunRequest) returns (GetAutomationRunResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListAutomationRuns(ListAutomationRunsRequest) returns (ListAutomationRunsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}

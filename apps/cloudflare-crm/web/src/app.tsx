@@ -7,6 +7,7 @@ import {AccountScreen,AccountPage,AccountCreatePage,accountFilterStatuses} from 
 import {ContactScreen} from "./ContactScreen";
 import {RelationshipScreen} from "./RelationshipScreen";
 import {TaskScreen} from "./TaskScreen";
+import {AutomationScreen} from "./AutomationScreen";
 import {MemberScreen} from "./MemberScreen";
 import {WorkdayScreen} from "./WorkdayScreen";
 import {IntelligenceScreen} from "./IntelligenceScreen";
@@ -48,6 +49,7 @@ function App() {
       initialPartyId={route.partyId} focusedContactPointId={route.contactPointId??""}/>:
     route.screen==="relationships"?<RelationshipScreen key={route.partyId+"/"+(route.relationshipId??"")}
       initialPartyId={route.partyId} focusedRelationshipId={route.relationshipId??""}/>:
+    route.screen==="automation"?<AutomationScreen/>:
     route.screen==="tasks"?<TaskScreen key={route.accountId+"/"+(route.taskId??"")+"/"+(route.dealId??"")+"/"+(route.overdue?"overdue":"all")+"/"+(route.assigneeEmail??"")+"/"+(route.mine?"mine":"team")+"/"+(route.teamId??"")}
       initialAccountId={route.accountId} focusedTaskId={route.taskId??""}
       initialDealId={route.dealId??""} initialSearch={route.search??""}

@@ -2,7 +2,7 @@
 //! Cloudflare Access and tenant selection happen BEFORE routing here.
 //! Domain rules and storage belong exclusively to existing crm-sales and D1.
 use super::{
-    access, access_members, access_teams, accounts, activity_tasks, consents, contact_points,
+    access, access_members, access_teams, accounts, activity_automation, activity_tasks, consents, contact_points,
     data_quality, identity_resolution, parties, party_relationships, sales_deals,
     sales_performance, sales_pipelines, sales_routing, sales_territories, sales_views,
 };
@@ -43,6 +43,7 @@ use worker::{D1Database, Env, HttpRequest, Request, Response, Result};
 pub use crm_connect_contracts::proto;
 use proto::crm::access::v2 as member_wire;
 use proto::crm::accounts::v2 as account_wire;
+use proto::crm::activities::v2 as auto_wire;
 use proto::crm::activities::v2 as task_wire;
 use proto::crm::activities::v2 as interaction_wire;
 use proto::crm::consents::v2 as consent_wire;
@@ -56,6 +57,7 @@ use proto::crm::sales::v2 as sale_wire;
 
 // Domain Connect traits live in native Rust submodules; one router below.
 mod account_handlers;
+mod automation_handlers;
 mod consent_handlers;
 mod contact_handlers;
 mod identity_handlers;
@@ -139,6 +141,7 @@ enum CrudReceiptOwner {
     Relationship,
     Task,
     Interaction,
+    Automation,
     Privacy,
     Consent,
     Pipeline,
@@ -175,6 +178,10 @@ impl CrudReceiptOwner {
             ),
             Self::Interaction => concat!(
                 "SELECT state,original_request_id FROM crm_activity_interaction_receipts",
+                " WHERE tenant=? AND key=?"
+            ),
+            Self::Automation => concat!(
+                "SELECT state,original_request_id FROM crm_activity_automation_rule_receipts",
                 " WHERE tenant=? AND key=?"
             ),
             Self::Privacy => concat!(
@@ -673,6 +680,17 @@ impl MemberV2Service {
             ..Default::default()
         }
     }
+}
+
+// One Activities owner for typed automation configuration and explicit,
+// signed-admin manual execution. No system impersonation/cron Task writes.
+struct AutomationV2Service {
+    env: Arc<Env>,
+    actor: access::Actor,
+    request_id: String,
+}
+impl OwnedService for AutomationV2Service {
+    const OWNER: &'static str = crm_activities::MODULE_ID;
 }
 
 // Native generated Connect service for the ORIGINAL crm-activities Task.
@@ -1661,6 +1679,11 @@ pub(super) fn router(
         request_id: request_id.to_owned(),
     }))
     .add_service(Arc::new(InteractionV2Service {
+        env: Arc::clone(&env),
+        actor: verified.clone(),
+        request_id: request_id.to_owned(),
+    }))
+    .add_service(Arc::new(AutomationV2Service {
         env: Arc::clone(&env),
         actor: verified.clone(),
         request_id: request_id.to_owned(),

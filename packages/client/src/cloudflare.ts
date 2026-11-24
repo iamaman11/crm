@@ -9,6 +9,7 @@ import { PartyRelationshipService } from "../gen/crm/party_relationships/v2/rela
 import { TaskService } from "../gen/crm/activities/v2/task_pb";
 import { MemberService } from "../gen/crm/access/v2/member_pb";
 import { InteractionService } from "../gen/crm/activities/v2/interaction_pb";
+import { AutomationService } from "../gen/crm/activities/v2/automation_pb";
 import { DataQualityService } from "../gen/crm/data_quality/v2/quality_pb";
 import { IdentityResolutionService } from "../gen/crm/identity_resolution/v2/identity_pb";
 import { ConsentAuthorizationService } from "../gen/crm/consents/v2/consent_pb";
@@ -26,6 +27,8 @@ export type { PartyRelationship } from "../gen/crm/party_relationships/v2/relati
 export type { Task } from "../gen/crm/activities/v2/task_pb";
 export type { Member, Team } from "../gen/crm/access/v2/member_pb";
 export type { Interaction } from "../gen/crm/activities/v2/interaction_pb";
+export type { AutomationRule, AutomationRun } from "../gen/crm/activities/v2/automation_pb";
+export { AutomationTrigger, AutomationRunStatus } from "../gen/crm/activities/v2/automation_pb";
 export type { Deal, DealCapabilities, OpportunityParticipant } from "../gen/crm/sales/v2/deal_pb";
 export { OpportunityTeamRole } from "../gen/crm/sales/v2/deal_pb";
 export type { SalesQuota, SalesQuotaConfiguration, SalesQuotaScope, SalesQuotaFactCursor, GetSalesQuotaPerformanceResponse } from "../gen/crm/sales/v2/deal_pb";
@@ -69,6 +72,7 @@ export function createCloudflareCrmClient(baseUrl: string) {
     tasks: createClient(TaskService, transport),
     members: createClient(MemberService, transport),
     interactions: createClient(InteractionService, transport),
+    automations: createClient(AutomationService, transport),
     dataQuality: createClient(DataQualityService, transport),
     identityResolution: createClient(IdentityResolutionService, transport),
     consents: createClient(ConsentAuthorizationService, transport),

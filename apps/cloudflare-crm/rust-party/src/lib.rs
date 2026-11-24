@@ -19,6 +19,8 @@ mod account_overview;
 #[cfg(feature = "native")]
 mod accounts;
 #[cfg(feature = "native")]
+mod activity_automation;
+#[cfg(feature = "native")]
 mod activity_interactions;
 #[cfg(feature = "native")]
 mod activity_tasks;
@@ -129,6 +131,10 @@ async fn native_doctor(env: Env, actor: &access::Actor, request_id: &str) -> Res
         "crm_party_relationship_records",
         "crm_party_relationship_receipts",
         "crm_activity_automation_source_events",
+        "crm_activity_automation_rules",
+        "crm_activity_automation_rule_receipts",
+        "crm_activity_automation_rule_versions",
+        "crm_activity_automation_runs",
         "crm_activity_task_records",
         "crm_activity_task_receipts",
         "crm_sales_deal_records",
@@ -455,6 +461,42 @@ const RPC_POLICIES: &[(&str, RpcPolicy)] = &[
         "/crm.access.v2.MemberService/UpdateMember",
         RpcPolicy {
             permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.activities.v2.AutomationService/PutAutomationRule",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.activities.v2.AutomationService/GetAutomationRule",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.activities.v2.AutomationService/ListAutomationRules",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.activities.v2.AutomationService/RunInteractionAutomation",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.activities.v2.AutomationService/GetAutomationRun",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.activities.v2.AutomationService/ListAutomationRuns",
+        RpcPolicy {
+            permission: RpcPermission::Read,
         },
     ),
     (
