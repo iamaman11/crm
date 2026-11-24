@@ -1706,6 +1706,19 @@ impl AnalysisPeriod {
         Ok(Self { start, end })
     }
 
+    pub(super) fn previous(self) -> std::result::Result<Self, &'static str> {
+        let invalid = "SALES_ANALYSIS_PREVIOUS_PERIOD_INVALID";
+        let days = i32::try_from(self.start.days_until(self.end) + 1).map_err(|_| invalid)?;
+        Ok(Self {
+            start: self.start.checked_add_days(-days).map_err(|_| invalid)?,
+            end: self.start.checked_add_days(-1).map_err(|_| invalid)?,
+        })
+    }
+
+    pub(super) fn dates(self) -> (CalendarDate, CalendarDate) {
+        (self.start, self.end)
+    }
+
     fn includes(self, date: CalendarDate) -> bool {
         self.start <= date && date <= self.end
     }
@@ -1719,6 +1732,36 @@ pub(super) struct ClosedOutcomeMetric {
 }
 
 impl ClosedOutcomeMetric {
+    fn add_deal(
+        &mut self,
+        deal: &Deal,
+        period: Option<AnalysisPeriod>,
+    ) -> std::result::Result<(), ReadFailureReason> {
+        match deal.close_outcome() {
+            None => count_one(&mut self.unknown_close_count)?,
+            Some(outcome) => {
+                let date = crm_core_contracts::UtcInstant::from_unix_nanos(
+                    outcome.closed_at_unix_nanos(),
+                )
+                .utc_date();
+                if period.is_none_or(|period| period.includes(date)) {
+                    match deal.status() {
+                        DealStatus::Won => count_one(&mut self.won_count)?,
+                        DealStatus::Lost => count_one(&mut self.lost_count)?,
+                        DealStatus::Open => unreachable!("closed outcome branch"),
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn merge(&mut self, other: &Self) -> std::result::Result<(), ReadFailureReason> {
+        add_count(&mut self.won_count, other.won_count)?;
+        add_count(&mut self.lost_count, other.lost_count)?;
+        add_count(&mut self.unknown_close_count, other.unknown_close_count)
+    }
+
     pub(super) fn denominator(&self) -> u64 {
         self.won_count + self.lost_count
     }
@@ -1813,8 +1856,34 @@ pub(super) struct PipelineMetrics {
     pub undated_forecast_categories: Vec<ForecastCategoryMetric>,
     pub undated_forecast_currencies: Vec<ForecastCurrencyMetric>,
     pub closed_outcomes: Option<ClosedOutcomeMetric>,
+    previous_closed_outcomes: Option<ClosedOutcomeMetric>,
     pub as_of_unix_seconds: i64,
 }
+
+// Shared SQL projection: original immutable stage clock, linked Task risk and
+// exact Deal serialization are identical for stage metrics and the portfolio.
+const METRIC_CLOCK: &str = r#"snapshot_clock AS MATERIALIZED (
+           SELECT CAST(strftime('%s','now') AS INTEGER)*1000000000
+                + CAST(substr(strftime('%f','now'),4,3) AS INTEGER)*1000000 AS nanos
+         )"#;
+const METRIC_FIELDS: &str = r#"CAST(c.nanos AS TEXT) AS as_of_nanos,
+           d.state AS state,
+           (SELECT CAST(e.occurred_at_unix_nanos AS TEXT)
+              FROM crm_sales_deal_events e
+             WHERE e.tenant=d.tenant AND e.deal_id=d.id
+               AND e.action IN ('created','moved')
+             ORDER BY e.deal_version DESC LIMIT 1) AS stage_entered_at_nanos,
+           COALESCE((SELECT MAX(CASE
+                       WHEN json_type(t.state,'$.due_at_unix_nanos') IS NULL
+                         OR json_type(t.state,'$.due_at_unix_nanos')='null' THEN 0
+                       WHEN json_type(t.state,'$.due_at_unix_nanos')<>'integer' THEN 2
+                       WHEN json_extract(t.state,'$.due_at_unix_nanos') < c.nanos THEN 1
+                       ELSE 0 END)
+                     FROM crm_sales_link_delivery_records l
+                     JOIN crm_activity_task_records t
+                       ON t.tenant=l.tenant AND t.id=l.task_id
+                    WHERE l.tenant=d.tenant AND l.deal_id=d.id
+                      AND json_extract(t.state,'$.status')='open'),0) AS has_overdue_linked_task"#;
 
 // One indexed SELECT provides a single D1 read snapshot of Deals, Tasks
 // and events. Stage/page cursors never participate, and monetary arithmetic
@@ -1847,30 +1916,7 @@ pub(super) async fn pipeline_metrics(
     // Materialize the database clock once; correlated indexed event/task
     // lookups are evaluated inside the same read statement.
     let sql = format!(
-        r#"WITH snapshot_clock AS MATERIALIZED (
-           SELECT CAST(strftime('%s','now') AS INTEGER)*1000000000
-                + CAST(substr(strftime('%f','now'),4,3) AS INTEGER)*1000000 AS nanos
-         )
-         SELECT CAST(c.nanos AS TEXT) AS as_of_nanos,
-           d.state AS state,
-           (SELECT CAST(e.occurred_at_unix_nanos AS TEXT)
-              FROM crm_sales_deal_events e
-             WHERE e.tenant=d.tenant AND e.deal_id=d.id
-               AND e.action IN ('created','moved')
-             ORDER BY e.deal_version DESC LIMIT 1) AS stage_entered_at_nanos,
-           COALESCE((SELECT MAX(CASE
-                       WHEN json_type(t.state,'$.due_at_unix_nanos') IS NULL
-                         OR json_type(t.state,'$.due_at_unix_nanos')='null' THEN 0
-                       WHEN json_type(t.state,'$.due_at_unix_nanos')<>'integer' THEN 2
-                       WHEN json_extract(t.state,'$.due_at_unix_nanos') < c.nanos THEN 1
-                       ELSE 0 END)
-                     FROM crm_sales_link_delivery_records l
-                     JOIN crm_activity_task_records t
-                       ON t.tenant=l.tenant AND t.id=l.task_id
-                    WHERE l.tenant=d.tenant AND l.deal_id=d.id
-                      AND json_extract(t.state,'$.status')='open'),0) AS has_overdue_linked_task
-         FROM snapshot_clock c CROSS JOIN crm_sales_deal_records d
-        WHERE {condition}"#
+        "WITH {METRIC_CLOCK} SELECT {METRIC_FIELDS} FROM snapshot_clock c CROSS JOIN crm_sales_deal_records d WHERE {condition}"
     );
     // Resource-limit errors fail the request; never emit a truncated summary.
     // Empty results have no persisted facts to date.
@@ -1885,6 +1931,16 @@ pub(super) async fn pipeline_metrics(
             .map_err(|_| ReadFailureReason::SalesMetricsSnapshotTimeInvalid)?,
         None => now_nanos(),
     };
+    aggregate_pipeline_metrics(&rows, as_of_nanos, status, period, None)
+}
+
+fn aggregate_pipeline_metrics(
+    rows: &[PipelineMoneyRow],
+    as_of_nanos: i64,
+    status: Option<DealStatus>,
+    period: Option<AnalysisPeriod>,
+    previous: Option<AnalysisPeriod>,
+) -> std::result::Result<PipelineMetrics, ReadFailureReason> {
     let as_of_text = as_of_nanos.to_string();
     let as_of = crm_core_contracts::UtcInstant::from_unix_nanos(as_of_nanos);
     let as_of_unix_seconds = as_of.proto_parts().0;
@@ -1896,7 +1952,8 @@ pub(super) async fn pipeline_metrics(
     let mut forecast = ForecastTotals::default();
     let mut undated_forecast = ForecastTotals::default();
     let mut closed_outcomes = status.is_none().then(ClosedOutcomeMetric::default);
-    for row in &rows {
+    let mut previous_closed_outcomes = previous.map(|_| ClosedOutcomeMetric::default());
+    for row in rows {
         if row.as_of_nanos != as_of_text {
             return Err(ReadFailureReason::SalesMetricsSnapshotTimeInvalid);
         }
@@ -1973,22 +2030,9 @@ pub(super) async fn pipeline_metrics(
                 }
             }
         } else if let Some(counts) = &mut closed_outcomes {
-            match deal.close_outcome() {
-                None => count_one(&mut counts.unknown_close_count)?,
-                Some(outcome) => {
-                    // Domain close timestamp is an instant, never a locally
-                    // interpreted date or another Gregorian implementation.
-                    let closed_at = outcome.closed_at_unix_nanos();
-                    let date =
-                        crm_core_contracts::UtcInstant::from_unix_nanos(closed_at).utc_date();
-                    if period.is_none_or(|period| period.includes(date)) {
-                        match status {
-                            DealStatus::Won => count_one(&mut counts.won_count)?,
-                            DealStatus::Lost => count_one(&mut counts.lost_count)?,
-                            DealStatus::Open => unreachable!("closed outcome branch"),
-                        }
-                    }
-                }
+            counts.add_deal(&deal, period)?;
+            if let Some(counts) = &mut previous_closed_outcomes {
+                counts.add_deal(&deal, previous)?;
             }
         }
         if let Some(amount) = deal.amount() {
@@ -2061,8 +2105,326 @@ pub(super) async fn pipeline_metrics(
         undated_forecast_categories,
         undated_forecast_currencies,
         closed_outcomes,
+        previous_closed_outcomes,
         as_of_unix_seconds,
     })
+}
+
+fn add_count(total: &mut u64, count: u64) -> std::result::Result<(), ReadFailureReason> {
+    *total = total
+        .checked_add(count)
+        .ok_or(ReadFailureReason::SalesMetricsCountOverflow)?;
+    Ok(())
+}
+
+#[derive(Default)]
+pub(super) struct PortfolioCounts {
+    pub pipeline_count: u64,
+    pub total_deal_count: u64,
+    pub open_count: u64,
+    pub won_count: u64,
+    pub lost_count: u64,
+    pub overdue_expected_close_count: u64,
+    pub due_next_30_days_count: u64,
+    pub no_expected_close_count: u64,
+    pub overdue_linked_task_count: u64,
+}
+
+impl PortfolioCounts {
+    fn from_metrics(metrics: &PipelineMetrics) -> std::result::Result<Self, ReadFailureReason> {
+        let mut counts = Self {
+            pipeline_count: 1,
+            total_deal_count: metrics.total_deal_count,
+            ..Default::default()
+        };
+        for row in &metrics.statuses {
+            let target = match row.status {
+                DealStatus::Open => &mut counts.open_count,
+                DealStatus::Won => &mut counts.won_count,
+                DealStatus::Lost => &mut counts.lost_count,
+            };
+            add_count(target, row.deal_count)?;
+        }
+        for row in &metrics.operational {
+            add_count(
+                &mut counts.overdue_expected_close_count,
+                row.overdue_expected_close_count,
+            )?;
+            add_count(&mut counts.due_next_30_days_count, row.due_next_30_days_count)?;
+            add_count(&mut counts.no_expected_close_count, row.no_expected_close_count)?;
+            add_count(&mut counts.overdue_linked_task_count, row.overdue_linked_task_count)?;
+        }
+        Ok(counts)
+    }
+
+    fn merge(&mut self, row: &Self) -> std::result::Result<(), ReadFailureReason> {
+        add_count(&mut self.pipeline_count, row.pipeline_count)?;
+        add_count(&mut self.total_deal_count, row.total_deal_count)?;
+        add_count(&mut self.open_count, row.open_count)?;
+        add_count(&mut self.won_count, row.won_count)?;
+        add_count(&mut self.lost_count, row.lost_count)?;
+        add_count(
+            &mut self.overdue_expected_close_count,
+            row.overdue_expected_close_count,
+        )?;
+        add_count(&mut self.due_next_30_days_count, row.due_next_30_days_count)?;
+        add_count(&mut self.no_expected_close_count, row.no_expected_close_count)?;
+        add_count(&mut self.overdue_linked_task_count, row.overdue_linked_task_count)
+    }
+}
+
+pub(super) struct PortfolioStage {
+    pub stage_id: String,
+    pub stage_name: String,
+    pub stage_archived: bool,
+    pub status: DealStatus,
+    pub deal_count: u64,
+    pub overdue_expected_close_count: u64,
+    pub due_next_30_days_count: u64,
+    pub average_stage_age_days: Option<u64>,
+}
+
+pub(super) struct PortfolioPipeline {
+    pub pipeline: crm_sales::SalesPipeline,
+    pub counts: PortfolioCounts,
+    pub stages: Vec<PortfolioStage>,
+}
+
+pub(super) type PortfolioCurrencyTotals = BTreeMap<String, (i128, i128, u64)>;
+
+pub(super) struct PortfolioMetrics {
+    pub as_of_unix_seconds: i64,
+    pub counts: PortfolioCounts,
+    pub pipelines: Vec<PortfolioPipeline>,
+    pub forecast_categories: BTreeMap<ForecastCategory, (u64, u64)>,
+    pub forecast_currencies: PortfolioCurrencyTotals,
+    pub undated_forecast_currencies: PortfolioCurrencyTotals,
+    pub closed_outcomes: ClosedOutcomeMetric,
+    pub previous_closed_outcomes: Option<ClosedOutcomeMetric>,
+}
+
+impl PortfolioMetrics {
+    fn add(
+        &mut self,
+        pipeline: crm_sales::SalesPipeline,
+        metrics: PipelineMetrics,
+    ) -> std::result::Result<(), ReadFailureReason> {
+        let counts = PortfolioCounts::from_metrics(&metrics)?;
+        self.counts.merge(&counts)?;
+        if let Some(outcomes) = &metrics.closed_outcomes {
+            self.closed_outcomes.merge(outcomes)?;
+        }
+        if let Some(outcomes) = &metrics.previous_closed_outcomes
+            && let Some(total) = &mut self.previous_closed_outcomes
+        {
+            total.merge(outcomes)?;
+        }
+        for row in &metrics.forecast_categories {
+            add_count(
+                &mut self.forecast_categories.entry(row.category).or_default().0,
+                row.deal_count,
+            )?;
+        }
+        for row in &metrics.undated_forecast_categories {
+            add_count(
+                &mut self.forecast_categories.entry(row.category).or_default().1,
+                row.deal_count,
+            )?;
+        }
+        for (rows, totals) in [
+            (&metrics.forecast_currencies, &mut self.forecast_currencies),
+            (
+                &metrics.undated_forecast_currencies,
+                &mut self.undated_forecast_currencies,
+            ),
+        ] {
+            for row in rows {
+                if row.category == ForecastCategory::Omitted {
+                    continue;
+                }
+                let total = totals.entry(row.currency_code.clone()).or_default();
+                total.0 = total
+                    .0
+                    .checked_add(row.total_minor_units)
+                    .ok_or(ReadFailureReason::SalesMetricsMoneyOverflow)?;
+                total.1 = total
+                    .1
+                    .checked_add(row.weighted_minor_units_times_basis_points)
+                    .ok_or(ReadFailureReason::SalesMetricsWeightOverflow)?;
+                add_count(&mut total.2, row.amount_deal_count)?;
+            }
+        }
+        let mut stages = Vec::new();
+        // Catalog order and names come from the same D1 snapshot as the facts.
+        for stage in &pipeline.stages {
+            for status in [DealStatus::Open, DealStatus::Won, DealStatus::Lost] {
+                let Some(row) = metrics
+                    .statuses
+                    .iter()
+                    .find(|row| row.stage_id == stage.stage_id && row.status == status)
+                else {
+                    continue;
+                };
+                let op = metrics
+                    .operational
+                    .iter()
+                    .find(|row| row.stage_id == stage.stage_id && row.status == status);
+                let average_stage_age_days = op
+                    .filter(|row| row.known_stage_age_count > 0)
+                    .map(|row| {
+                        u64::try_from(
+                            row.total_stage_age_seconds / i128::from(row.known_stage_age_count)
+                                / 86_400,
+                        )
+                        .map_err(|_| ReadFailureReason::SalesMetricsStageTimeOverflow)
+                    })
+                    .transpose()?;
+                stages.push(PortfolioStage {
+                    stage_id: stage.stage_id.clone(),
+                    stage_name: stage.name.clone(),
+                    stage_archived: stage.archived,
+                    status,
+                    deal_count: row.deal_count,
+                    overdue_expected_close_count: op
+                        .map_or(0, |row| row.overdue_expected_close_count),
+                    due_next_30_days_count: op.map_or(0, |row| row.due_next_30_days_count),
+                    average_stage_age_days,
+                });
+            }
+        }
+        if stages.len() != metrics.statuses.len() {
+            return Err(ReadFailureReason::SalesStateDecodeFailed);
+        }
+        self.pipelines.push(PortfolioPipeline {
+            pipeline,
+            counts,
+            stages,
+        });
+        Ok(())
+    }
+}
+
+#[derive(Deserialize)]
+struct PortfolioSnapshotRow {
+    as_of_nanos: String,
+    state: Option<String>,
+    stage_entered_at_nanos: Option<String>,
+    has_overdue_linked_task: i64,
+    pipeline_id: Option<String>,
+    pipeline_state: Option<String>,
+}
+
+/// One tenant-scoped statement captures catalog membership (including empty
+/// pipelines), current Deals, immutable stage entries, linked Tasks and clock.
+/// The previous close-date window is evaluated from these same Deal states.
+pub(super) async fn portfolio_metrics(
+    db: &D1Database,
+    tenant: &str,
+    pipeline_id: Option<&str>,
+    include_archived: bool,
+    period: Option<AnalysisPeriod>,
+    previous: Option<AnalysisPeriod>,
+    owner_filter: Option<&SalesOwnerScope>,
+) -> std::result::Result<Option<PortfolioMetrics>, ReadFailureReason> {
+    let id = pipeline_id.map_or(JsValue::NULL, JsValue::from_str);
+    let mut arguments = vec![
+        JsValue::from_str(tenant),
+        id.clone(),
+        id,
+        JsValue::from_str(tenant),
+        JsValue::from_f64(if include_archived { 1.0 } else { 0.0 }),
+    ];
+    let mut condition = String::from(
+        "d.tenant=? AND json_extract(d.state,'$.stage.pipeline_id') IN (SELECT id FROM eligible WHERE ? OR json_extract(state,'$.archived')=0)",
+    );
+    append_owner_filter(&mut condition, &mut arguments, owner_filter);
+    let sql = format!(
+        r#"WITH {METRIC_CLOCK},
+        eligible AS MATERIALIZED (
+            SELECT id,state FROM crm_sales_pipeline_records WHERE tenant=? AND (? IS NULL OR id=?)
+        ),
+        selected_deals AS (
+            SELECT d.tenant,d.id,d.state FROM crm_sales_deal_records d WHERE {condition}
+        )
+        SELECT CAST(c.nanos AS TEXT) AS as_of_nanos,NULL AS state,
+            NULL AS stage_entered_at_nanos,0 AS has_overdue_linked_task,
+            p.id AS pipeline_id,p.state AS pipeline_state
+        FROM snapshot_clock c LEFT JOIN eligible p ON 1
+        UNION ALL
+        SELECT {METRIC_FIELDS},json_extract(d.state,'$.stage.pipeline_id') AS pipeline_id,
+            NULL AS pipeline_state
+        FROM snapshot_clock c CROSS JOIN selected_deals d"#
+    );
+    let rows = bind(db, &sql, &arguments)?
+        .all()
+        .await?
+        .results::<PortfolioSnapshotRow>()?;
+    let as_of_nanos = rows
+        .first()
+        .ok_or(ReadFailureReason::SalesMetricsSnapshotTimeInvalid)?
+        .as_of_nanos
+        .parse::<i64>()
+        .map_err(|_| ReadFailureReason::SalesMetricsSnapshotTimeInvalid)?;
+    let as_of_text = as_of_nanos.to_string();
+    let mut catalog = BTreeMap::new();
+    let mut groups = BTreeMap::<String, Vec<PipelineMoneyRow>>::new();
+    for row in rows {
+        if row.as_of_nanos != as_of_text {
+            return Err(ReadFailureReason::SalesMetricsSnapshotTimeInvalid);
+        }
+        let Some(id) = row.pipeline_id else {
+            continue;
+        };
+        if let Some(state) = row.pipeline_state {
+            let pipeline = crm_sales::SalesPipeline::decode(state.as_bytes())
+                .map_err(|_| ReadFailureReason::SalesStateDecodeFailed)?;
+            if pipeline.pipeline_id != id || catalog.insert(id, pipeline).is_some() {
+                return Err(ReadFailureReason::SalesStateDecodeFailed);
+            }
+        } else {
+            groups.entry(id).or_default().push(PipelineMoneyRow {
+                as_of_nanos: row.as_of_nanos,
+                state: row.state.ok_or(ReadFailureReason::SalesStateDecodeFailed)?,
+                stage_entered_at_nanos: row.stage_entered_at_nanos,
+                has_overdue_linked_task: row.has_overdue_linked_task,
+            });
+        }
+    }
+    if pipeline_id.is_some() && catalog.is_empty() {
+        return Ok(None);
+    }
+    let mut result = PortfolioMetrics {
+        as_of_unix_seconds: crm_core_contracts::UtcInstant::from_unix_nanos(as_of_nanos)
+            .proto_parts()
+            .0,
+        counts: PortfolioCounts::default(),
+        pipelines: Vec::new(),
+        forecast_categories: [
+            ForecastCategory::Pipeline,
+            ForecastCategory::BestCase,
+            ForecastCategory::Commit,
+            ForecastCategory::Omitted,
+        ]
+        .into_iter()
+        .map(|category| (category, (0, 0)))
+        .collect(),
+        forecast_currencies: BTreeMap::new(),
+        undated_forecast_currencies: BTreeMap::new(),
+        closed_outcomes: ClosedOutcomeMetric::default(),
+        previous_closed_outcomes: previous.map(|_| ClosedOutcomeMetric::default()),
+    };
+    for (id, pipeline) in catalog {
+        if pipeline.archived && !include_archived {
+            continue;
+        }
+        let rows = groups.remove(&id).unwrap_or_default();
+        let metrics = aggregate_pipeline_metrics(&rows, as_of_nanos, None, period, previous)?;
+        result.add(pipeline, metrics)?;
+    }
+    if !groups.is_empty() {
+        return Err(ReadFailureReason::SalesStateDecodeFailed);
+    }
+    Ok(Some(result))
 }
 
 /// Both count and currency sums refer to the full tenant/pipeline/stage filter,

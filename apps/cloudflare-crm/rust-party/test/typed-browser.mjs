@@ -2644,6 +2644,11 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    // SK-07: complete portfolio analysis from existing Sales owner metrics,
    // not the visible first Deal pages. Audited read-only, URL-owned period.
    const intelligenceAudit=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   const portfolioRequests=[];
+   const capturePortfolio=request=>{
+     if(request.url().includes("/crm.sales.v2.DealService/"))portfolioRequests.push(request.url());
+   };
+   page.on("request",capturePortfolio);
    await navigate("insights","Аналитика бизнеса");
    const portfolio=page.getByRole("region",{name:"Общий портфель"});
    const risks=page.getByRole("region",{name:"Операционные риски"});
@@ -2653,6 +2658,10 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await risks.getByText(/Просрочена ожидаемая дата закрытия:/).waitFor();
    await portfolioForecast.getByRole("heading",{name:"Прогноз и категории"}).waitFor();
    await conversion.getByText(/Знаменатель:/).waitFor();
+   page.off("request",capturePortfolio);
+   assert.equal(portfolioRequests.filter(url=>url.endsWith("/GetSalesPortfolio")).length,1);
+   assert.equal(portfolioRequests.filter(url=>url.endsWith("/GetPipelineMetrics")).length,0);
+   assert.equal(portfolioRequests.filter(url=>url.endsWith("/ListPipelines")).length,0);
    const portfolioLink=page.getByRole("link",{name:"Открыть воронку Browser Pipeline "+runId,exact:true});
    await portfolioLink.waitFor();
    await portfolioLink.click();

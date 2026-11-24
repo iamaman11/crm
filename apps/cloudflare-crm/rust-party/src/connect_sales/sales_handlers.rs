@@ -1301,7 +1301,185 @@ struct HistoricalRow {
     catalog_version: Option<String>,
 }
 
+fn sales_analysis_period(
+    period: Option<&sale_wire::SalesAnalysisPeriod>,
+) -> std::result::Result<Option<sales_deals::AnalysisPeriod>, ConnectError> {
+    period
+        .map(|period| {
+            let date = |value: &core_v2::CalendarDate| sales_deals::DateInput {
+                year: value.year,
+                month: value.month,
+                day: value.day,
+            };
+            let start = period.start_date.as_option().ok_or_else(|| {
+                ConnectError::invalid_argument("SALES_ANALYSIS_PERIOD_START_REQUIRED")
+            })?;
+            let end = period.end_date.as_option().ok_or_else(|| {
+                ConnectError::invalid_argument("SALES_ANALYSIS_PERIOD_END_REQUIRED")
+            })?;
+            sales_deals::AnalysisPeriod::new(date(start), date(end))
+                .map_err(ConnectError::invalid_argument)
+        })
+        .transpose()
+}
+
+fn portfolio_period(period: sales_deals::AnalysisPeriod) -> sale_wire::SalesAnalysisPeriod {
+    let date = |value: crm_core_contracts::CalendarDate| core_v2::CalendarDate {
+        year: value.year(),
+        month: u32::from(value.month()),
+        day: u32::from(value.day()),
+        ..Default::default()
+    };
+    let (start, end) = period.dates();
+    sale_wire::SalesAnalysisPeriod {
+        start_date: Some(date(start)).into(),
+        end_date: Some(date(end)).into(),
+        ..Default::default()
+    }
+}
+
+fn portfolio_counts(value: sales_deals::PortfolioCounts) -> sale_wire::SalesPortfolioCounts {
+    sale_wire::SalesPortfolioCounts {
+        pipeline_count: value.pipeline_count,
+        total_deal_count: value.total_deal_count,
+        open_count: value.open_count,
+        won_count: value.won_count,
+        lost_count: value.lost_count,
+        overdue_expected_close_count: value.overdue_expected_close_count,
+        due_next_30_days_count: value.due_next_30_days_count,
+        no_expected_close_count: value.no_expected_close_count,
+        overdue_linked_task_count: value.overdue_linked_task_count,
+        ..Default::default()
+    }
+}
+
+fn portfolio_currency_totals(
+    value: sales_deals::PortfolioCurrencyTotals,
+) -> Vec<sale_wire::SalesPortfolioCurrencyTotal> {
+    value
+        .into_iter()
+        .map(|(currency_code, (total, weighted, amount_deal_count))| {
+            sale_wire::SalesPortfolioCurrencyTotal {
+                currency_code,
+                total_minor_units: total.to_string(),
+                weighted_minor_units_times_basis_points: weighted.to_string(),
+                amount_deal_count,
+                ..Default::default()
+            }
+        })
+        .collect()
+}
+
+fn closed_outcome_metric(value: sales_deals::ClosedOutcomeMetric) -> sale_wire::SalesClosedOutcomeMetric {
+    sale_wire::SalesClosedOutcomeMetric {
+        won_count: value.won_count,
+        lost_count: value.lost_count,
+        unknown_close_count: value.unknown_close_count,
+        denominator: value.denominator(),
+        win_rate_basis_points: value.win_rate_basis_points(),
+        ..Default::default()
+    }
+}
+
 impl sale_wire::DealService for SalesV2Service {
+    #[worker::send]
+    async fn get_sales_portfolio(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, sale_wire::GetSalesPortfolioRequest>,
+    ) -> ServiceResult<sale_wire::GetSalesPortfolioResponse> {
+        let input = req.to_owned_message();
+        if let Some(id) = input.pipeline_id.as_deref() {
+            Self::pipeline_id(id)?;
+        }
+        let period = sales_analysis_period(input.analysis_period.as_option())?;
+        let previous = if input.compare_previous {
+            Some(
+                period
+                    .ok_or_else(|| ConnectError::invalid_argument("SALES_ANALYSIS_PERIOD_REQUIRED"))?
+                    .previous()
+                    .map_err(ConnectError::invalid_argument)?,
+            )
+        } else {
+            None
+        };
+        let owner = Self::owner_scope(input.owner_filter.as_option())?;
+        let portfolio = sales_deals::portfolio_metrics(
+            &self.d1()?,
+            &self.tenant,
+            input.pipeline_id.as_deref(),
+            input.include_archived,
+            period,
+            previous,
+            owner.as_ref(),
+        )
+        .await
+        .map_err(|error| {
+            diagnostics::read_failure(&self.request_id, "sales_portfolio", error);
+            ConnectError::internal("Sales D1 portfolio read failed")
+        })?
+        .ok_or_else(|| ConnectError::not_found("SALES_PIPELINE_NOT_FOUND"))?;
+        RpcResponse::ok(sale_wire::GetSalesPortfolioResponse {
+            as_of_unix_seconds: portfolio.as_of_unix_seconds,
+            counts: Some(portfolio_counts(portfolio.counts)).into(),
+            pipelines: portfolio
+                .pipelines
+                .into_iter()
+                .map(|slice| sale_wire::SalesPortfolioPipeline {
+                    pipeline: Some(Self::pipeline(&slice.pipeline)).into(),
+                    counts: Some(portfolio_counts(slice.counts)).into(),
+                    stages: slice
+                        .stages
+                        .into_iter()
+                        .map(|row| sale_wire::SalesPortfolioStage {
+                            stage_id: row.stage_id,
+                            stage_name: row.stage_name,
+                            stage_archived: row.stage_archived,
+                            status: history_status(row.status).into(),
+                            deal_count: row.deal_count,
+                            overdue_expected_close_count: row.overdue_expected_close_count,
+                            due_next_30_days_count: row.due_next_30_days_count,
+                            average_stage_age_days: row.average_stage_age_days,
+                            ..Default::default()
+                        })
+                        .collect(),
+                    ..Default::default()
+                })
+                .collect(),
+            forecast_categories: portfolio
+                .forecast_categories
+                .into_iter()
+                .map(|(category, (deal_count, undated_deal_count))| {
+                    sale_wire::SalesPortfolioForecastCategory {
+                        category: Self::forecast_wire(category).into(),
+                        deal_count,
+                        undated_deal_count,
+                        ..Default::default()
+                    }
+                })
+                .collect(),
+            forecast_currencies: portfolio_currency_totals(portfolio.forecast_currencies),
+            undated_forecast_currencies: portfolio_currency_totals(
+                portfolio.undated_forecast_currencies,
+            ),
+            closed_outcomes: Some(closed_outcome_metric(portfolio.closed_outcomes)).into(),
+            previous_period: previous.map(portfolio_period).into(),
+            previous_closed_outcomes: portfolio
+                .previous_closed_outcomes
+                .map(closed_outcome_metric)
+                .into(),
+            currencies: crm_core_contracts::CurrencyCode::catalog()
+                .into_iter()
+                .map(|currency| core_v2::CurrencyDefinition {
+                    currency_code: currency.as_str().to_owned(),
+                    minor_unit_exponent: Some(u32::from(currency.exponent())),
+                    ..Default::default()
+                })
+                .collect(),
+            ..Default::default()
+        })
+    }
+
     #[worker::send]
     async fn get_sales_history(
         &self,
@@ -2700,25 +2878,7 @@ impl sale_wire::DealService for SalesV2Service {
             return Err(ConnectError::not_found("SALES_PIPELINE_NOT_FOUND"));
         }
         let input = req.to_owned_message();
-        let period = input
-            .analysis_period
-            .as_option()
-            .map(|period| {
-                let date = |value: &core_v2::CalendarDate| sales_deals::DateInput {
-                    year: value.year,
-                    month: value.month,
-                    day: value.day,
-                };
-                let start = period.start_date.as_option().ok_or_else(|| {
-                    ConnectError::invalid_argument("SALES_ANALYSIS_PERIOD_START_REQUIRED")
-                })?;
-                let end = period.end_date.as_option().ok_or_else(|| {
-                    ConnectError::invalid_argument("SALES_ANALYSIS_PERIOD_END_REQUIRED")
-                })?;
-                sales_deals::AnalysisPeriod::new(date(start), date(end))
-                    .map_err(ConnectError::invalid_argument)
-            })
-            .transpose()?;
+        let period = sales_analysis_period(input.analysis_period.as_option())?;
         let owner_filter = Self::owner_scope(input.owner_filter.as_option())?;
         let metrics = sales_deals::pipeline_metrics(
             &db,
@@ -2824,14 +2984,7 @@ impl sale_wire::DealService for SalesV2Service {
                 .collect(),
             closed_outcomes: metrics
                 .closed_outcomes
-                .map(|row| sale_wire::SalesClosedOutcomeMetric {
-                    won_count: row.won_count,
-                    lost_count: row.lost_count,
-                    unknown_close_count: row.unknown_close_count,
-                    denominator: row.denominator(),
-                    win_rate_basis_points: row.win_rate_basis_points(),
-                    ..Default::default()
-                })
+                .map(closed_outcome_metric)
                 .into(),
             analysis_period: input.analysis_period,
             as_of_unix_seconds: metrics.as_of_unix_seconds,

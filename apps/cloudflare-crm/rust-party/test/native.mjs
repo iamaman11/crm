@@ -2552,6 +2552,38 @@ assert.ok(initialMetric.body.asOfUnixSeconds>0n);
 const metricsTenantDenied=await salesV2("GetPipelineMetrics",tenantB,{
   pipelineId:"pipeline.other"});
 assert.equal(metricsTenantDenied.status,404,"other tenant cannot read foreign Pipeline totals");
+const portfolioAudit=(await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=?","tenant-a"))[0].n;
+const portfolioRequest={pipelineId:"pipeline.other"};
+const portfolio=(await salesV2("GetSalesPortfolio",viewer,portfolioRequest));
+assert.equal(portfolio.status,200,describeProtobuf(portfolio.body));
+assert.equal(portfolio.body.counts.pipelineCount,1n);
+assert.equal(portfolio.body.counts.totalDealCount,32n);
+assert.equal(portfolio.body.counts.openCount,32n);
+assert.equal(portfolio.body.counts.noExpectedCloseCount,30n);
+assert.equal(portfolio.body.counts.overdueExpectedCloseCount,1n);
+assert.deepEqual(portfolio.body.pipelines[0].counts,portfolio.body.counts);
+assert.equal(portfolio.body.pipelines[0].stages[0].dealCount,32n);
+assert.equal(portfolio.body.pipelines[0].stages[0].stageId,"lead");
+assert.ok(portfolio.body.pipelines[0].stages[0].averageStageAgeDays>=0n);
+assert.deepEqual(portfolio.body.forecastCurrencies.map(x=>[
+  x.currencyCode,x.totalMinorUnits,x.weightedMinorUnitsTimesBasisPoints,x.amountDealCount
+]),initialMetric.body.currencies.map(x=>[
+  x.currencyCode,x.totalMinorUnits,x.weightedMinorUnitsTimesBasisPoints,x.amountDealCount
+]));
+const portfolioAdmin=(await salesV2("GetSalesPortfolio",admin,portfolioRequest)).body;
+assert.deepEqual(portfolioAdmin.counts,portfolio.body.counts);
+assert.deepEqual(portfolioAdmin.forecastCurrencies,portfolio.body.forecastCurrencies);
+assert.equal((await salesV2("GetSalesPortfolio",tenantB,portfolioRequest)).status,404);
+assert.equal((await salesV2("GetSalesPortfolio",viewer,{...portfolioRequest,comparePrevious:true})).status,400);
+const comparison=await salesV2("GetSalesPortfolio",viewer,{...portfolioRequest,comparePrevious:true,
+  analysisPeriod:{startDate:{year:2026,month:3,day:1},endDate:{year:2026,month:3,day:2}}});
+assert.equal(comparison.status,200,describeProtobuf(comparison.body));
+assert.deepEqual(comparison.body.previousPeriod.startDate,{...comparison.body.previousPeriod.startDate,year:2026,month:2,day:27});
+assert.deepEqual(comparison.body.previousPeriod.endDate,{...comparison.body.previousPeriod.endDate,year:2026,month:2,day:28});
+assert.equal(comparison.body.previousClosedOutcomes.denominator,0n);
+assert.equal(comparison.body.previousClosedOutcomes.winRateBasisPoints,undefined);
+assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=?","tenant-a"))[0].n,portfolioAudit);
+console.log(JSON.stringify({event:"crm.native-sales-portfolio",result:"PASS",exact_i128:true,server_period:true,viewer_parity:true,tenant_ab:true,no_read_audit:true}));
 assert.equal((await salesV2("GetPipelineMetrics",viewer,{
   pipelineId:"pipeline.other",status:2})).body.totalDealCount,0n);
 assert.equal((await salesV2("GetPipelineMetrics",viewer,{
@@ -2696,6 +2728,14 @@ console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:
       added_deals:n,matched_deals:facts.length,latency_ms:metricMs,exact_sql_comparison:true,
       nested_filters:true,exact_i128:true}));
     if(n===1000){
+      const portfolio=await salesV2("GetSalesPortfolio",viewer,{pipelineId:"pipeline.other"});
+      assert.equal(portfolio.status,200,describeProtobuf(portfolio.body));
+      assert.equal(portfolio.body.counts.totalDealCount,1032n);
+      assert.deepEqual(portfolio.body.forecastCurrencies.map(x=>[
+        x.currencyCode,x.totalMinorUnits,x.weightedMinorUnitsTimesBasisPoints,x.amountDealCount
+      ]),metrics.body.forecastCurrencies.map(x=>[
+        x.currencyCode,x.totalMinorUnits,x.weightedMinorUnitsTimesBasisPoints,x.amountDealCount
+      ]));
       // Both ends of the old paged scan change in a single fixture transaction.
       // Every committed state has the same total and weighted amount.
       const ids=["r7-scale-0000","r7-scale-0999"];
@@ -2735,6 +2775,13 @@ console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:
           "a concurrent atomic balance swap must not create a mixed money snapshot");
         assert.deepEqual(snapshot.body.forecastCurrencies,forecastBaseline,
           "forecast must share the same consistent snapshot");
+        const whole=await salesV2("GetSalesPortfolio",viewer,{pipelineId:"pipeline.other"});
+        assert.equal(whole.status,200,describeProtobuf(whole.body));
+        assert.deepEqual(whole.body.forecastCurrencies.map(x=>[
+          x.currencyCode,x.totalMinorUnits,x.weightedMinorUnitsTimesBasisPoints,x.amountDealCount
+        ]),forecastBaseline.map(x=>[
+          x.currencyCode,x.totalMinorUnits,x.weightedMinorUnitsTimesBasisPoints,x.amountDealCount
+        ]));
       }
       const after=await salesV2("GetPipelineMetrics",viewer,filter);
       assert.equal(after.status,200,describeProtobuf(after.body));

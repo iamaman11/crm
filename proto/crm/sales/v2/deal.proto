@@ -492,6 +492,66 @@ message GetPipelineMetricsResponse {
   SalesAnalysisPeriod analysis_period = 12;
 }
 
+// Authoritative current portfolio and optional previous close-date comparison.
+// All eligible pipelines, Deal states, linked Tasks and stage events share one
+// D1 read snapshot. This is not historical lifecycle reconstruction.
+message GetSalesPortfolioRequest {
+  optional string pipeline_id = 1;
+  bool include_archived = 2;
+  SalesAnalysisPeriod analysis_period = 3;
+  bool compare_previous = 4;
+  crm.core.v2.ActorOrTeamOwner owner_filter = 5;
+}
+message SalesPortfolioCounts {
+  uint64 pipeline_count = 1;
+  uint64 total_deal_count = 2;
+  uint64 open_count = 3;
+  uint64 won_count = 4;
+  uint64 lost_count = 5;
+  uint64 overdue_expected_close_count = 6;
+  uint64 due_next_30_days_count = 7;
+  uint64 no_expected_close_count = 8;
+  uint64 overdue_linked_task_count = 9;
+}
+message SalesPortfolioForecastCategory {
+  ForecastCategory category = 1;
+  uint64 deal_count = 2;
+  uint64 undated_deal_count = 3;
+}
+message SalesPortfolioCurrencyTotal {
+  string currency_code = 1;
+  string total_minor_units = 2;
+  string weighted_minor_units_times_basis_points = 3;
+  uint64 amount_deal_count = 4;
+}
+message SalesPortfolioStage {
+  string stage_id = 1;
+  string stage_name = 2;
+  bool stage_archived = 3;
+  DealStatus status = 4;
+  uint64 deal_count = 5;
+  uint64 overdue_expected_close_count = 6;
+  uint64 due_next_30_days_count = 7;
+  optional uint64 average_stage_age_days = 8;
+}
+message SalesPortfolioPipeline {
+  SalesPipeline pipeline = 1;
+  SalesPortfolioCounts counts = 2;
+  repeated SalesPortfolioStage stages = 3;
+}
+message GetSalesPortfolioResponse {
+  int64 as_of_unix_seconds = 1;
+  SalesPortfolioCounts counts = 2;
+  repeated SalesPortfolioPipeline pipelines = 3;
+  repeated SalesPortfolioForecastCategory forecast_categories = 4;
+  repeated SalesPortfolioCurrencyTotal forecast_currencies = 5;
+  repeated SalesPortfolioCurrencyTotal undated_forecast_currencies = 6;
+  SalesClosedOutcomeMetric closed_outcomes = 7;
+  SalesAnalysisPeriod previous_period = 8;
+  SalesClosedOutcomeMetric previous_closed_outcomes = 9;
+  repeated crm.core.v2.CurrencyDefinition currencies = 10;
+}
+
 // Sales coverage is independent of customer identity and Access roles.
 message TerritoryConfiguration {
   string name = 1;
@@ -1277,6 +1337,9 @@ service DealService {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
   rpc GetPipelineMetrics(GetPipelineMetricsRequest) returns (GetPipelineMetricsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc GetSalesPortfolio(GetSalesPortfolioRequest) returns (GetSalesPortfolioResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
   rpc CreateDeal(CreateDealRequest) returns (CreateDealResponse) {

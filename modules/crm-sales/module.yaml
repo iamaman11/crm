@@ -119,6 +119,11 @@ provides:
       binding:
         kind: protobuf_rpc
         rpc: crm.sales.v2.DealService.GetPipelineMetrics
+    - id: sales.portfolio.get
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.GetSalesPortfolio
     - id: sales.view.create
       version: 2.0.0
       binding:
