@@ -60,13 +60,10 @@ impl CloseCreditContext {
         match owner {
             DealOwner::Team(id) => {
                 if selection.leave_team_unallocated
-                    || selection
-                        .team_id
-                        .as_ref()
-                        .is_some_and(|selected| {
-                            selected != id.as_str()
-                                || !self.teams.iter().any(|team| &team.id == selected)
-                        })
+                    || selection.team_id.as_ref().is_some_and(|selected| {
+                        selected != id.as_str()
+                            || !self.teams.iter().any(|team| &team.id == selected)
+                    })
                 {
                     return Err(reject());
                 }
@@ -276,11 +273,7 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(
-            context
-                .clone()
-                .select(&owner, &chosen, None)
-                .unwrap()
-                .teams,
+            context.clone().select(&owner, &chosen, None).unwrap().teams,
             vec![dimension("team-b")]
         );
         assert!(
