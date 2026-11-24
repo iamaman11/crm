@@ -1060,7 +1060,11 @@ impl CreditResolution {
         } else {
             None
         };
-        match self.context.clone().select(deal.owner(), selection, explicit) {
+        match self
+            .context
+            .clone()
+            .select(deal.owner(), selection, explicit)
+        {
             Ok(context) => {
                 self.territory = context
                     .territory

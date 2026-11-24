@@ -1836,7 +1836,12 @@ impl sale_wire::DealService for SalesV2Service {
             credited_actor: preview.fact.credited_actor,
             eligible_teams: preview.teams.iter().map(dimension).collect(),
             credited_team: preview.fact.credited_team.as_ref().map(dimension).into(),
-            credited_territory: preview.fact.credited_territory.as_ref().map(dimension).into(),
+            credited_territory: preview
+                .fact
+                .credited_territory
+                .as_ref()
+                .map(dimension)
+                .into(),
             territory_assigned: preview.territory_assigned,
             expected_decision: preview.fingerprint,
             ..Default::default()
