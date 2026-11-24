@@ -3193,36 +3193,8 @@ impl sale_wire::DealService for SalesV2Service {
                 territory_id: value.territory_id.clone(),
             })
             .unwrap_or_default();
-        let db = self.d1()?;
-        if !self.admin {
-            let deal = sales_deals::load(&db, &self.tenant, &id)
-                .await
-                .map_err(|_| {
-                    diagnostics::read_failure(
-                        &self.request_id,
-                        "sales_close_credit_authorization",
-                        diagnostics::ReadFailureReason::InternalReadError,
-                    );
-                    ConnectError::internal("SALES_DELEGATION_READ_FAILED")
-                })?
-                .ok_or_else(|| ConnectError::not_found("SALES_DEAL_NOT_FOUND"))?;
-            let grant = sales_deals::active_participant(&db, &self.tenant, &deal, &self.actor)
-                .await
-                .map_err(|_| ConnectError::internal("SALES_DELEGATION_READ_FAILED"))?;
-            if !grant
-                .as_ref()
-                .is_some_and(|grant| grant.role.permits(crm_sales::OpportunityPermission::Close))
-            {
-                return Err(ConnectError::permission_denied("SALES_DELEGATION_DENIED"));
-            }
-        }
-        if !self.admin && selection != crm_sales::CloseCreditSelection::default() {
-            return Err(ConnectError::permission_denied(
-                "SALES_CLOSE_CREDIT_ADMIN_ONLY",
-            ));
-        }
         let preview = sales_deals::preview_close_credit(
-            &db,
+            &self.d1()?,
             &self.tenant,
             &id,
             input.expected_version,

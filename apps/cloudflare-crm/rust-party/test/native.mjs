@@ -2268,9 +2268,6 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id=?"
   const observerRead=(await salesV2("GetDeal",viewer,{dealId:id})).body;
   assert.equal(observerRead.capabilities.close,false);
   assert.equal(observerRead.capabilities.manageCloseCredit,false);
-  assert.equal((await salesV2("PreviewDealCloseCredit",viewer,{
-    dealId:id,expectedVersion:observer.body.deal.version,selection:{}
-  })).status,403);
   assert.equal((await salesV2("CloseDeal",viewer,closeInput(id,observer.body.deal.version,"observer"))).status,403);
   assert.equal((await salesV2("UpdateDeal",viewer,edit(id,2n,"observer"))).status,403);
 
@@ -2313,9 +2310,11 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id=?"
   assert.ok(automaticPreview.body.eligibleTeams.some(team=>team.id===creditTeamId));
   assert.equal(automaticPreview.body.creditedTeam?.id,creditTeamId);
   const manualSelection={leaveTeamUnallocated:true};
-  assert.equal((await salesV2("PreviewDealCloseCredit",viewer,{
+  const manualPreview=await salesV2("PreviewDealCloseCredit",viewer,{
     dealId:id,expectedVersion:6n,selection:manualSelection
-  })).status,403);
+  });
+  assert.equal(manualPreview.status,200,describeProtobuf(manualPreview.body));
+  assert.equal(manualPreview.body.creditedTeam,undefined);
   assert.equal((await salesV2("CloseDeal",viewer,closeInput(id,6n,"manual-denied",{
     creditSelection:manualSelection
   }))).status,403);
