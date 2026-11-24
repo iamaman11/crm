@@ -9,7 +9,7 @@ import {useQuery,QueryNotice} from "./hooks";
 import {dealHref} from "./routes";
 import type {allPipelines} from "./salesPipelineCatalog";
 
-type Request=Parameters<typeof api.deals.getSalesScorecard>[0];
+type Request=Extract<Parameters<typeof api.deals.getSalesScorecard>[0],{$typeName?:never}>;
 type Detail=NonNullable<Request["detail"]>;
 type Labels=ReadonlyArray<{value:string;label:string;eligible:boolean}>;
 type Selection={organization:boolean;dimensionId?:string};
