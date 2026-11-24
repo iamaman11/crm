@@ -2910,9 +2910,13 @@ console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:
       "tenant-a","pipeline.other","lead","open",accountId);
     assert.ok(plan.some(row=>row.detail.includes("idx_crm_sales_board_stage")),
       "the 1000+ row snapshot must use the existing stage/ID index");
-    const query=rust.match(/r#"WITH snapshot_clock AS MATERIALIZED \([\s\S]*?WHERE \{condition\}"#/)?.[0];
-    assert.ok(query,"canonical metrics SELECT must be present");
-    const metricsSql=query.slice(3,-2).replace("{condition}",
+    // Compose the actual Rust format string from its shared raw SQL constants.
+    // Preserve the same indexed plan checks after extracting the common fields.
+    const clock=rust.match(/const METRIC_CLOCK: &str = r#"([\s\S]*?)"#;/)?.[1];
+    const fields=rust.match(/const METRIC_FIELDS: &str = r#"([\s\S]*?)"#;/)?.[1];
+    const query=rust.match(/"WITH \{METRIC_CLOCK\} SELECT \{METRIC_FIELDS\} FROM snapshot_clock c CROSS JOIN crm_sales_deal_records d WHERE \{condition\}"/)?.[0];
+    assert.ok(clock&&fields&&query,"canonical metrics SELECT must be present");
+    const metricsSql=query.slice(1,-1).replace("{METRIC_CLOCK}",clock).replace("{METRIC_FIELDS}",fields).replace("{condition}",
       "d.tenant=? AND json_extract(d.state,'$.stage.pipeline_id')=? "+
       "AND json_extract(d.state,'$.status')=? AND d.account_id=?");
     const metricsPlan=await sql("EXPLAIN QUERY PLAN "+metricsSql,
@@ -2920,6 +2924,15 @@ console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:
     assert.ok(metricsPlan.some(row=>row.detail.includes("idx_crm_sales_board_stage")));
     assert.ok(metricsPlan.some(row=>row.detail.includes("crm_sales_deal_events")));
     assert.ok(metricsPlan.some(row=>row.detail.includes("idx_crm_sales_link_deal")));
+    const portfolioQuery=rust.match(/r#"(WITH \{METRIC_CLOCK\},[\s\S]*?FROM snapshot_clock c CROSS JOIN selected_deals d)"#/)?.[1];
+    const portfolioCondition=rust.match(/"(d\.tenant=\? AND json_extract\(d\.state,'\$\.stage\.pipeline_id'\) IN \(SELECT id FROM eligible WHERE \? OR json_extract\(state,'\$\.archived'\)=0\))"/)?.[1];
+    assert.ok(portfolioQuery&&portfolioCondition,"canonical portfolio snapshot SELECT must be present");
+    const portfolioSql=portfolioQuery.replace("{METRIC_CLOCK}",clock).replace("{METRIC_FIELDS}",fields).replace("{condition}",portfolioCondition);
+    const portfolioPlan=await sql("EXPLAIN QUERY PLAN "+portfolioSql,
+      "tenant-a","pipeline.other","pipeline.other","tenant-a",0);
+    assert.ok(portfolioPlan.some(row=>row.detail.includes("crm_sales_pipeline_records")),describeProtobuf(portfolioPlan));
+    assert.ok(portfolioPlan.some(row=>row.detail.includes("crm_sales_deal_events")),describeProtobuf(portfolioPlan));
+    assert.ok(portfolioPlan.some(row=>row.detail.includes("idx_crm_sales_link_deal")),describeProtobuf(portfolioPlan));
     // The new forecast capture has a different keyset access pattern. Verify
     // both exact query variants without weakening the original plan assertions.
     const captureRust=readFileSync(join(cwd,"src","sales_performance.rs"),"utf8");
