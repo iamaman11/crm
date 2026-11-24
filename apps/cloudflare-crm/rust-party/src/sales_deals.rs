@@ -710,7 +710,11 @@ async fn member_version(db: &D1Database, tenant: &str, email: &str) -> Result<Op
     .first::<MemberVersion>(None)
     .await?;
     value
-        .map(|row| row.version.parse().map_err(|_| worker::Error::RustError("invalid enrollment version".into())))
+        .map(|row| {
+            row.version
+                .parse()
+                .map_err(|_| worker::Error::RustError("invalid enrollment version".into()))
+        })
         .transpose()
 }
 
@@ -723,8 +727,10 @@ pub(super) async fn active_participant(
     let Some(grant) = deal.opportunity_participant(actor) else {
         return Ok(None);
     };
-    Ok((member_version(db, tenant, actor).await? == Some(grant.member_version))
-        .then(|| grant.clone()))
+    Ok(
+        (member_version(db, tenant, actor).await? == Some(grant.member_version))
+            .then(|| grant.clone()),
+    )
 }
 
 // No global viewer role expansion. Authorization is checked before receipt
@@ -741,7 +747,10 @@ async fn delegation(
         return Ok(Ok(None));
     }
     let Some(deal) = load(db, tenant, id).await? else {
-        return Ok(rejected("SALES_DELEGATION_DENIED", ErrorCategory::Authorization));
+        return Ok(rejected(
+            "SALES_DELEGATION_DENIED",
+            ErrorCategory::Authorization,
+        ));
     };
     let grant = active_participant(db, tenant, &deal, actor).await?;
     Ok(match grant {
@@ -788,11 +797,17 @@ pub(super) async fn set_participant(
         return Ok(rejected("NOT_FOUND", ErrorCategory::NotFound));
     };
     if super::access_members::email(&input.email).ok().as_deref() != Some(input.email.as_str()) {
-        return Ok(rejected("SALES_OPPORTUNITY_MEMBER_INVALID", ErrorCategory::InvalidArgument));
+        return Ok(rejected(
+            "SALES_OPPORTUNITY_MEMBER_INVALID",
+            ErrorCategory::InvalidArgument,
+        ));
     }
     let participant = if let Some(role) = input.role {
         let Some(member_version) = member_version(db, tenant, &input.email).await? else {
-            return Ok(rejected("SALES_OPPORTUNITY_MEMBER_INELIGIBLE", ErrorCategory::InvalidArgument));
+            return Ok(rejected(
+                "SALES_OPPORTUNITY_MEMBER_INELIGIBLE",
+                ErrorCategory::InvalidArgument,
+            ));
         };
         Some(crm_sales::OpportunityParticipant {
             email: input.email.clone(),
@@ -803,11 +818,16 @@ pub(super) async fn set_participant(
         None
     };
     if let Err(error) = deal.set_opportunity_participant(
-        input.expected_version, &input.email, participant.clone(), now_nanos(),
+        input.expected_version,
+        &input.email,
+        participant.clone(),
+        now_nanos(),
     ) {
         return Ok(rejected_sdk(error));
     }
-    let mut sql = String::from("UPDATE crm_sales_deal_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=?,last_action='sales_deals.update' WHERE tenant=? AND id=? AND version=?");
+    let mut sql = String::from(
+        "UPDATE crm_sales_deal_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=?,last_action='sales_deals.update' WHERE tenant=? AND id=? AND version=?",
+    );
     let saved = encode(&deal)?;
     let mut values = vec![
         JsValue::from_str(&saved),
@@ -853,7 +873,10 @@ pub(super) async fn update_typed(
         ));
     }
     if !admin && input.owner.is_some() {
-        return Ok(rejected("SALES_DELEGATION_OWNER_DENIED", ErrorCategory::Authorization));
+        return Ok(rejected(
+            "SALES_DELEGATION_OWNER_DENIED",
+            ErrorCategory::Authorization,
+        ));
     }
     let permission = if input.amount_minor_units.is_some()
         || input.currency.is_some()
@@ -1404,13 +1427,22 @@ async fn stage_mutation(
     // Only client-owned typed input contributes to the digest. The stage at
     // replay time cannot alter the idempotent identity of a CloseDeal request.
     let grant = match delegation(
-        db, tenant, id, actor, admin, crm_sales::OpportunityPermission::Advance,
-    ).await? {
+        db,
+        tenant,
+        id,
+        actor,
+        admin,
+        crm_sales::OpportunityPermission::Advance,
+    )
+    .await?
+    {
         Ok(grant) => grant,
         Err(error) => return Ok(Err(error)),
     };
     let digest = match &input {
-        StageMutation::Move(value) if grant.is_some() => hash("advance_delegated", id, &(actor, value))?,
+        StageMutation::Move(value) if grant.is_some() => {
+            hash("advance_delegated", id, &(actor, value))?
+        }
         StageMutation::Move(value) => hash("advance", id, value)?,
         StageMutation::Close(value) => hash("close", id, value)?,
     };

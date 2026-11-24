@@ -2954,9 +2954,15 @@ impl sale_wire::DealService for SalesV2Service {
         let role = match input.role {
             None => None,
             Some(value) if value == Wire::OPPORTUNITY_TEAM_ROLE_OBSERVER => Some(Domain::Observer),
-            Some(value) if value == Wire::OPPORTUNITY_TEAM_ROLE_CONTRIBUTOR => Some(Domain::Contributor),
+            Some(value) if value == Wire::OPPORTUNITY_TEAM_ROLE_CONTRIBUTOR => {
+                Some(Domain::Contributor)
+            }
             Some(value) if value == Wire::OPPORTUNITY_TEAM_ROLE_LEAD => Some(Domain::Lead),
-            _ => return Err(ConnectError::invalid_argument("SALES_OPPORTUNITY_ROLE_INVALID")),
+            _ => {
+                return Err(ConnectError::invalid_argument(
+                    "SALES_OPPORTUNITY_ROLE_INVALID",
+                ));
+            }
         };
         let saved = sales_deals::set_participant(
             sales_deals::ParticipantInput {
@@ -2964,18 +2970,31 @@ impl sale_wire::DealService for SalesV2Service {
                 email: input.email,
                 role,
             },
-            &key, &self.d1()?, &self.tenant, &id, &self.actor, &self.request_id,
+            &key,
+            &self.d1()?,
+            &self.tenant,
+            &id,
+            &self.actor,
+            &self.request_id,
         )
         .await
-        .map_err(|_| diagnostics::mutation_preparation_failure("SetOpportunityParticipant", &self.request_id))?
-        .map_err(|failure| diagnostics::mutation_error("SetOpportunityParticipant", &self.request_id, failure))?;
+        .map_err(|_| {
+            diagnostics::mutation_preparation_failure("SetOpportunityParticipant", &self.request_id)
+        })?
+        .map_err(|failure| {
+            diagnostics::mutation_error("SetOpportunityParticipant", &self.request_id, failure)
+        })?;
         RpcResponse::ok(sale_wire::SetOpportunityParticipantResponse {
             deal: Some(Self::convert(&saved.deal)?).into(),
             receipt: Some(diagnostics::receipt(
-                "SetOpportunityParticipant", &self.request_id,
-                saved.original_request_id.as_deref(), saved.deal.version(),
-                saved.replayed, saved.d1_statement_changes,
-            )).into(),
+                "SetOpportunityParticipant",
+                &self.request_id,
+                saved.original_request_id.as_deref(),
+                saved.deal.version(),
+                saved.replayed,
+                saved.d1_statement_changes,
+            ))
+            .into(),
             ..Default::default()
         })
     }
@@ -3405,16 +3424,27 @@ impl sale_wire::DealService for SalesV2Service {
                     .into(),
                     catalog_version: row.catalog_version.unwrap_or_default(),
                     linked_task_id: row.linked_task_id.unwrap_or_default(),
-                    opportunity_team_after: row.opportunity_team_after.as_deref().map(|raw| {
-                        let team: Vec<crm_sales::OpportunityParticipant> = serde_json::from_str(raw)
-                            .map_err(|_| ConnectError::internal("SALES_OPPORTUNITY_EVENT_INVALID"))?;
-                        crm_sales::validate_opportunity_team(&team)
-                            .map_err(|_| ConnectError::internal("SALES_OPPORTUNITY_EVENT_INVALID"))?;
-                        Ok::<_, ConnectError>(sale_wire::OpportunityTeamSnapshot {
-                            participants: team.iter().map(Self::opportunity_participant_wire).collect(),
-                            ..Default::default()
+                    opportunity_team_after: row
+                        .opportunity_team_after
+                        .as_deref()
+                        .map(|raw| {
+                            let team: Vec<crm_sales::OpportunityParticipant> =
+                                serde_json::from_str(raw).map_err(|_| {
+                                    ConnectError::internal("SALES_OPPORTUNITY_EVENT_INVALID")
+                                })?;
+                            crm_sales::validate_opportunity_team(&team).map_err(|_| {
+                                ConnectError::internal("SALES_OPPORTUNITY_EVENT_INVALID")
+                            })?;
+                            Ok::<_, ConnectError>(sale_wire::OpportunityTeamSnapshot {
+                                participants: team
+                                    .iter()
+                                    .map(Self::opportunity_participant_wire)
+                                    .collect(),
+                                ..Default::default()
+                            })
                         })
-                    }).transpose()?.into(),
+                        .transpose()?
+                        .into(),
                     commercial_close_fact: row
                         .commercial_close_fact
                         .as_deref()
@@ -3495,9 +3525,15 @@ impl sale_wire::DealService for SalesV2Service {
             Some(_) => return Err(ConnectError::invalid_argument("IDEMPOTENCY_KEY_REQUIRED")),
         };
         let grant = sales_deals::active_participant(&db, &self.tenant, &deal, &self.actor)
-            .await.map_err(|_| ConnectError::internal("SALES_DELEGATION_READ_FAILED"))?;
+            .await
+            .map_err(|_| ConnectError::internal("SALES_DELEGATION_READ_FAILED"))?;
         let open = deal.status() == DomainDealStatus::Open;
-        let permits = |permission| self.admin || grant.as_ref().is_some_and(|grant| grant.role.permits(permission));
+        let permits = |permission| {
+            self.admin
+                || grant
+                    .as_ref()
+                    .is_some_and(|grant| grant.role.permits(permission))
+        };
         RpcResponse::ok(sale_wire::GetDealResponse {
             deal: Some(Self::convert(&deal)?).into(),
             confirmed_mutation: confirmed_mutation.into(),
@@ -3510,7 +3546,8 @@ impl sale_wire::DealService for SalesV2Service {
                 reopen: !open && self.admin,
                 manage_opportunity_team: self.admin,
                 ..Default::default()
-            }).into(),
+            })
+            .into(),
             ..Default::default()
         })
     }
