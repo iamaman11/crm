@@ -419,7 +419,7 @@ pub(super) async fn execute_interaction(
                 "(tenant,rule_id,rule_version,source_event_id,interaction_id,task_id,",
                 "task_intent,run_request_key,run_request_digest,status,",
                 "requested_by,original_request_id,created_at_unix_millis)",
-                " SELECT ?,r.id,r.version,s.event_id,s.source_id,?,?,?,'pending',?,?,?",
+                " SELECT ?,r.id,r.version,s.event_id,s.source_id,?,?,?,? ,'pending',?,?,?",
                 " FROM crm_activity_automation_rules r",
                 " JOIN crm_activity_automation_source_events s ON s.tenant=r.tenant",
                 " WHERE r.tenant=? AND r.id=? AND r.version=? AND r.enabled=1",
