@@ -524,9 +524,8 @@ impl PerformanceReport {
                 .map(|(a, b)| delta(a, b))
                 .transpose()
         };
-        let count = |a: u64, b: u64| {
-            i64::try_from(i128::from(a) - i128::from(b)).map_err(|_| overflow())
-        };
+        let count =
+            |a: u64, b: u64| i64::try_from(i128::from(a) - i128::from(b)).map_err(|_| overflow());
         let x = &self.actuals;
         let y = &baseline.actuals;
         let f = &self.forecast;
