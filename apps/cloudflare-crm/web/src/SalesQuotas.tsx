@@ -43,7 +43,7 @@ export function SalesQuotaWorkspace({isAdmin,choices,ownersUnavailable,territori
   const quotas=useQuery(useCallback(allQuotas,[]));
   const catalog=useQuery(useCallback(allPipelines,[]));
   const [editing,setEditing]=useState<SalesQuota|"new">();
-  const [id,setId]=useState(newId);
+  const [id,setId]=useState<SalesQuota["quotaId"]>(newId);
   const [scope,setScope]=useState("tenant");
   const [currency,setCurrency]=useState("EUR");
   const [published,setPublished]=useState(false);
