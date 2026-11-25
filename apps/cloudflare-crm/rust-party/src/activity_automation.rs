@@ -51,8 +51,6 @@ pub(super) struct RunRow {
     pub interaction_id: String,
     pub task_id: String,
     pub task_intent: String,
-    pub run_request_key: String,
-    pub run_request_digest: String,
     pub status: String,
     pub requested_by: String,
     pub original_request_id: String,
@@ -326,7 +324,7 @@ async fn read_run(
 ) -> Result<Option<RunRow>, ConnectError> {
     bind(db,
       concat!("SELECT seq,rule_id,rule_version,source_event_id,interaction_id,task_id,",
-             "task_intent,run_request_key,run_request_digest,status,requested_by,original_request_id,task_request_id,",
+             "task_intent,status,requested_by,original_request_id,task_request_id,",
              "created_at_unix_millis,completed_at_unix_millis FROM crm_activity_automation_runs",
              " WHERE tenant=? AND rule_id=? AND source_event_id=?"),
       &[JsValue::from_str(tenant),JsValue::from_str(rule_id),JsValue::from_str(event_id)]
@@ -341,7 +339,7 @@ pub(super) async fn list_runs(
 ) -> Result<Vec<RunRow>, ConnectError> {
     bind(db,
       concat!("SELECT seq,rule_id,rule_version,source_event_id,interaction_id,task_id,",
-             "task_intent,run_request_key,run_request_digest,status,requested_by,original_request_id,task_request_id,",
+             "task_intent,status,requested_by,original_request_id,task_request_id,",
              "created_at_unix_millis,completed_at_unix_millis FROM crm_activity_automation_runs",
              " WHERE tenant=? AND (?='' OR rule_id=?) AND seq>? ORDER BY seq LIMIT ?"),
       &[JsValue::from_str(tenant),JsValue::from_str(rule_id),JsValue::from_str(rule_id),
@@ -349,6 +347,49 @@ pub(super) async fn list_runs(
     ).map_err(|_|storage())?.all().await.map_err(|_|storage())?
        .results::<RunRow>().map_err(|_|storage())
 }
+#[derive(Deserialize)]
+struct RunRequest {
+    rule_id: String,
+    source_event_id: String,
+    digest: String,
+}
+
+async fn run_request(
+    db: &D1Database,
+    tenant: &str,
+    key: &str,
+) -> Result<Option<RunRequest>, ConnectError> {
+    bind(
+        db,
+        "SELECT rule_id,source_event_id,digest FROM crm_activity_automation_run_requests WHERE tenant=? AND key=?",
+        &[JsValue::from_str(tenant), JsValue::from_str(key)],
+    )
+    .map_err(|_| storage())?
+    .first::<RunRequest>(None)
+    .await
+    .map_err(|_| storage())
+}
+
+async fn verify_run_request(
+    db: &D1Database,
+    tenant: &str,
+    key: &str,
+    rule: &str,
+    event: &str,
+    digest: &str,
+) -> Result<bool, ConnectError> {
+    match run_request(db, tenant, key).await? {
+        None => Ok(false),
+        Some(saved) => {
+            if saved.rule_id == rule && saved.source_event_id == event && saved.digest == digest {
+                Ok(true)
+            } else {
+                Err(ConnectError::aborted("IDEMPOTENCY_CONFLICT"))
+            }
+        }
+    }
+}
+
 pub(super) async fn execute_interaction(
     db: &D1Database,
     principal: &access::Actor,
@@ -375,6 +416,15 @@ pub(super) async fn execute_interaction(
             .map_err(|_| storage())?
         )
     );
+    verify_run_request(
+        db,
+        tenant,
+        key,
+        rule_id.as_str(),
+        &source.event_id,
+        &request_digest,
+    )
+    .await?;
     let mut existing = read_run(db, tenant, rule_id.as_str(), &source.event_id).await?;
     if existing.is_none() {
         let rule = get(db, tenant, rule_id.as_str())
@@ -448,6 +498,15 @@ pub(super) async fn execute_interaction(
         // tenant+rule+event UNIQUE row; no blind duplicate Task attempt.
         existing = read_run(db, tenant, rule_id.as_str(), &source.event_id).await?;
         if existing.is_none() {
+            verify_run_request(
+                db,
+                tenant,
+                key,
+                rule_id.as_str(),
+                &source.event_id,
+                &request_digest,
+            )
+            .await?;
             return Err(match write {
                 Ok(result) if result.success() => {
                     ConnectError::aborted("ACTIVITIES_AUTOMATION_RULE_STALE")
@@ -457,8 +516,46 @@ pub(super) async fn execute_interaction(
         }
     }
     let row = existing.ok_or_else(storage)?;
-    if row.run_request_key == key && row.run_request_digest != request_digest {
-        return Err(ConnectError::aborted("IDEMPOTENCY_CONFLICT"));
+    // A new key may replay the logical run, but must durably bind to
+    // this exact request before any Task execution or success response.
+    if !verify_run_request(
+        db,
+        tenant,
+        key,
+        &row.rule_id,
+        &row.source_event_id,
+        &request_digest,
+    )
+    .await?
+    {
+        let _write = bind(
+            db,
+            "INSERT INTO crm_activity_automation_run_requests(tenant,key,rule_id,source_event_id,digest) VALUES(?,?,?,?,?) ON CONFLICT(tenant,key) DO NOTHING",
+            &[
+                JsValue::from_str(tenant),
+                JsValue::from_str(key),
+                JsValue::from_str(&row.rule_id),
+                JsValue::from_str(&row.source_event_id),
+                JsValue::from_str(&request_digest),
+            ],
+        )
+        .map_err(|_| storage())?
+        .run()
+        .await;
+        if !verify_run_request(
+            db,
+            tenant,
+            key,
+            &row.rule_id,
+            &row.source_event_id,
+            &request_digest,
+        )
+        .await?
+        {
+            return Err(ConnectError::unavailable(
+                "AUTOMATION_RUN_REQUEST_UNCONFIRMED",
+            ));
+        }
     }
     if row.status == "committed" {
         return Ok(RunSaved {
@@ -584,7 +681,13 @@ pub(super) async fn confirmed(
     run: &RunRow,
     key: &str,
 ) -> Result<bool, ConnectError> {
-    if run.status != "committed" || run.run_request_key != key {
+    if run.status != "committed" {
+        return Ok(false);
+    }
+    let Some(binding) = run_request(db, tenant, key).await? else {
+        return Ok(false);
+    };
+    if binding.rule_id != run.rule_id || binding.source_event_id != run.source_event_id {
         return Ok(false);
     }
     let original = bind(
