@@ -60,7 +60,14 @@ async function subprocessEntry(){
    };
    (await import("node:module")).syncBuiltinESMExports();
  }
- globalThis.setTimeout=callback=>{queueMicrotask(callback);return 0;};
+ // The existing accelerated waits must advance the same clock used by
+ // release deadlines. Use Node's native virtual Date, not wall-clock sleeps.
+ const {mock}=await import("node:test");
+ mock.timers.enable({apis:["Date"],now:Date.now()});
+ mock.method(globalThis,"setTimeout",(callback,ms=0)=>{
+   queueMicrotask(()=>{if(ms>0)mock.timers.tick(ms);callback();});
+   return 0;
+ });
  globalThis.fetch=async(url,options={})=>{
    const path=new URL(url).pathname;
    const json=value=>new Response(JSON.stringify(value),{headers:{"content-type":"application/json"}});
@@ -146,6 +153,9 @@ async function subprocessEntry(){
      assert.equal(query.view,"events");
      assert.ok(query.limit>=1&&query.limit<=2000);
      assert.equal(query.parameters.filters[0].value,"crm-dev");
+     // At 70 virtual seconds, still before the actual 120-second deadline.
+     if(variant==="late-telemetry"&&telemetryAttempts<=35)
+       return wrap({events:{events:[],count:0}});
      const traceFor=index=>String(index+1).padStart(32,"0"),events=[];
      const add=(id,metadata,source,workers)=>events.push({
        // Match real Cloudflare pages: distinct span and request events may
@@ -256,6 +266,8 @@ async function subprocessEntry(){
    writeFileSync("posts.json",JSON.stringify(posts));
    writeFileSync("state.json",JSON.stringify({enabled,migrated,published,edgeAttempts,anonymousAttempts,auditAttempts,telemetryAttempts,maxTelemetryInFlight,postDeployReads,commands,role}));
    db?.close();
+   mock.restoreAll();
+   mock.timers.reset();
  }
 }
 function run(mode,variant="valid"){
@@ -347,6 +359,9 @@ function run(mode,variant="valid"){
        CLOUDFLARE_ACCOUNT_ID:"5bd5e1e1e813f061afc259e91334262d",CRM_D1_DATABASE_ID:database,
        CLOUDFLARE_API_TOKEN:"synthetic-token",CRM_E2E_A_CLIENT_ID:"synthetic.access",CRM_E2E_A_CLIENT_SECRET:"synthetic-secret",
        CRM_RELEASE_TEST_FIXTURE:JSON.stringify({mode,variant,sha,database,audit,requestId,rpcPath,fixtureRequests:smokeRequests,fixtureWrites:smokeWrites})}});
+   // A killed/overflowed child is a harness error, never a release refusal.
+   if(result.error)throw result.error;
+   assert.equal(result.signal,null,"Release fixture subprocess terminated by signal");
    return {status:result.status,error:result.stderr,stdout:result.stdout,posts:JSON.parse(readFileSync(join(dir,"posts.json"),"utf8")),
      state:JSON.parse(readFileSync(join(dir,"state.json"),"utf8")),deployed:existsSync(join(out,"deployed.json")),
      stopped:existsSync(join(out,"failed-release.json")),accepted:existsSync(join(out,"accepted.json")),checkpoint:existsSync(join(out,"checkpoint.json"))};
@@ -372,6 +387,13 @@ test("matching browser, D1 and version-specific Logs evidence passes the release
    "All signed browser mutations and reads share one D1 snapshot");
  assert.equal(result.state.maxTelemetryInFlight,1,
    "Cloudflare Telemetry must use one native cursor reader");
+});
+test("the real release script accepts late telemetry after the old 30-round cutoff",()=>{
+ const result=run("verify-data","late-telemetry");
+ assert.equal(result.status,0,result.error);
+ assert.equal(result.accepted,true);
+ assert.equal(result.state.telemetryAttempts,36);
+ assert.equal(result.state.maxTelemetryInFlight,1);
 });
 test("338 exact RPC readbacks retain request and span evidence without a burst",()=>{
  const result=run("verify-data","large-telemetry-scope");
@@ -466,6 +488,14 @@ for(const variant of [
  "synthetic-authorization-leak","synthetic-jwt-leak","synthetic-query-leak"])test("release rejects "+variant,()=>{
  const result=run("verify-data",variant);
  assert.notEqual(result.status,0);assert.equal(result.accepted,false);
+ // Deadline exhaustion must be an intentional release failure with its
+ // original diagnostic, not a killed child or a missing fixture output.
+ if(["missing-logs","wrong-error-code","missing-native-span","missing-d1-span","wrong-native-trace-id"].includes(variant)){
+   assert.match(result.error,["missing-logs","wrong-error-code"].includes(variant)
+     ?/Missing native Cloudflare traces/:/Published mutations missing exact Cloudflare D1 spans/);
+   assert.equal(result.state.telemetryAttempts,60);
+   assert.equal(result.state.maxTelemetryInFlight,1);
+ }
 });
 test("deploy never reopens public entry with unsafe Cloudflare tracing settings",()=>{
   for(const variant of ["trace-redaction-disabled","trace-logs-disabled",
@@ -522,7 +552,9 @@ for(const variant of ["anonymous-persistent-reset","anonymous-persistent-404","a
    assert.notEqual(result.status,0);
    assert.equal(result.deployed,false);
    assert.equal(result.state.anonymousAttempts,
-   variant==="anonymous-success"?1:variant==="anonymous-persistent-404"?40:3);
+   variant==="anonymous-success"?1:variant==="anonymous-persistent-404"?27:3);
+   if(variant==="anonymous-persistent-404")
+     assert.match(result.error,/CRM_ACCESS_ANONYMOUS_DENIAL_READBACK_DEADLINE_EXCEEDED/);
    assert.equal(result.state.commands.filter(c=>c[2]==="deploy").length,1);
  });
 test("unknown D1 migration history rejects the release before changing public entry",()=>{
