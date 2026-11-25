@@ -1,6 +1,9 @@
 // A small post-deploy Chromium smoke. Complete business/UX regression lives in
 // the existing typed-browser.mjs and the independent post-merge Gate B.
 import assert from "node:assert/strict";
+import { PartyService } from "../../../packages/client/gen/crm/parties/v3/party_pb.js";
+import { AccountService } from "../../../packages/client/gen/crm/accounts/v2/account_pb.js";
+import { fixtureRpcPath } from "../../../packages/client/test/cloudflare-rpc-fixture.ts";
 import {chromium} from "playwright";
 import type {Locator, Page, Route} from "playwright";
 import {string} from "../scripts/json-boundary.mts";
@@ -18,6 +21,11 @@ type SmokeOptions = {
   beforeViewer: () => Promise<Restore>;
   directory: string;
 };
+const createParty = PartyService.method.createParty;
+const createAccount = AccountService.method.createAccount;
+const listAccounts = AccountService.method.listAccounts;
+type SmokeMethod = typeof createParty | typeof createAccount | typeof listAccounts;
+
 export async function publishedSmoke({base,sourceSha,tenantA,adminIdentity,adminHeaders,
   tenantBHeaders,sql,beforeViewer,directory}: SmokeOptions) {
   const startedAt=Date.now(),runId=String(startedAt);
@@ -33,19 +41,19 @@ export async function publishedSmoke({base,sourceSha,tenantA,adminIdentity,admin
   context.on("response",record);
   const page=await context.newPage();
   page.on("pageerror",error=>pageErrors.push(error.message));
-  const responseFor=(targetPage: Page,method: string)=>targetPage.waitForResponse(response=>
-    new URL(response.url()).pathname.endsWith("/"+method)&&response.request().method()==="POST");
+  const responseFor=(targetPage: Page,method: SmokeMethod)=>targetPage.waitForResponse(response=>
+    new URL(response.url()).pathname===fixtureRpcPath(method)&&response.request().method()==="POST");
   const auditFor=async(requestId: string)=>{
     const result=await sql(
       "SELECT action,subject_id,actor FROM crm_audit WHERE tenant_id=? AND request_id=?",
       [tenantA,requestId]);
     return result;
   };
-  const mutation=async(button: Locator,method: string,action: string)=>{
+  const mutation=async(button: Locator,method: typeof createParty | typeof createAccount,action: string)=>{
     const pending=responseFor(page,method);
     await button.click();
     const response=await pending;
-    assert.equal(response.status(),200,method+" failed");
+    assert.equal(response.status(),200,method.name+" failed");
     const headers=await response.allHeaders();
     assert.equal(headers["x-crm-source-sha"],sourceSha);
     assert.equal(headers["x-crm-runtime"],"native-workers-rs");
@@ -53,12 +61,12 @@ export async function publishedSmoke({base,sourceSha,tenantA,adminIdentity,admin
     assert.match(requestId??"",/^[a-f0-9-]{36}$/i);
     const audit=await auditFor(requestId);
     assert.equal(audit.filter(item=>item.action===action).length,1,
-      method+" must commit one matching D1 audit row");
+      method.name+" must commit one matching D1 audit row");
     for(const item of audit)assert.equal(item.actor,adminIdentity);
     writes.push({path:new URL(response.url()).pathname,request_id:requestId,audit});
     // Party shows a saved notice. CreateAccount from Party directly replaces
     // the draft URL with the canonical Account card; that is asserted below.
-    if(method==="CreateParty")
+    if(method===createParty)
       await page.getByRole("heading",{name:/^Сохранено/}).last().waitFor();
     return requestId;
   };
@@ -97,7 +105,7 @@ export async function publishedSmoke({base,sourceSha,tenantA,adminIdentity,admin
     let stableRpcEdges=0;
     for(let attempt=1;attempt<=20&&stableRpcEdges<2;attempt++){
       const probe=await context.request.get(
-        base+"/crm.parties.v3.PartyService/CreateParty?crm_s3_test="+encodeURIComponent(privateQuery),
+        base+fixtureRpcPath(createParty)+"?crm_s3_test="+encodeURIComponent(privateQuery),
         {headers:{"cache-control":"no-cache",authorization:privateAuthorization,
           "x-crm-s3-test-probe":privateHeader,"x-crm-s3-test-jwt":privateJwt},
           maxRedirects:0});
@@ -117,7 +125,7 @@ export async function publishedSmoke({base,sourceSha,tenantA,adminIdentity,admin
     }
     assert.equal(stableRpcEdges,2,"Published signed RPC edge never converged to the exact Worker SHA");
     let privateRequests=0;
-    const writeRoute="**/crm.parties.v3.PartyService/CreateParty";
+    const writeRoute="**"+fixtureRpcPath(createParty);
     const privacyRoute=async (route: Route)=>{
       const headers=await route.request().headers();
       assert.ok((headers.cookie??"").includes("crm_s3_test_cookie="+privateCookie));
@@ -134,7 +142,7 @@ export async function publishedSmoke({base,sourceSha,tenantA,adminIdentity,admin
     await page.getByLabel("Имя или название",{exact:true}).fill(name);
     const partyRequestId=await mutation(
       page.getByRole("button",{name:"Сохранить участника",exact:true}),
-      "CreateParty","parties.create");
+      createParty,"parties.create");
     await page.unroute(writeRoute,privacyRoute);
     assert.equal(privateRequests,1,"Synthetic privacy route must run exactly once");
     await context.clearCookies({name:"crm_s3_test_cookie"});
@@ -162,7 +170,7 @@ export async function publishedSmoke({base,sourceSha,tenantA,adminIdentity,admin
     assert.equal(await page.getByLabel("Основной участник",{exact:true}).inputValue(),partyId);
     await page.getByLabel("Название клиента",{exact:true}).fill(accountName);
     await mutation(page.getByRole("button",{name:"Сохранить клиента",exact:true}),
-      "CreateAccount","accounts.create");
+      createAccount,"accounts.create");
     const accounts=await sql(
       "SELECT id FROM crm_account_records WHERE tenant=? AND json_extract(state,'$.name')=?",
       [tenantA,accountName]);
@@ -181,7 +189,7 @@ export async function publishedSmoke({base,sourceSha,tenantA,adminIdentity,admin
       await deniedPage.getByRole("button",{name:"Создать участника",exact:true}).click();
       await deniedPage.getByLabel("Имя или название",{exact:true}).fill(deniedName);
       const forbidden=deniedPage.waitForResponse(response=>
-        new URL(response.url()).pathname.endsWith("/CreateParty"));
+        new URL(response.url()).pathname===fixtureRpcPath(createParty));
       await deniedPage.getByRole("button",{name:"Сохранить участника",exact:true}).click();
       assert.equal((await forbidden).status(),403);
       await deniedPage.getByRole("heading",{name:/Недостаточно прав/}).waitFor();
@@ -196,7 +204,7 @@ export async function publishedSmoke({base,sourceSha,tenantA,adminIdentity,admin
       otherPage.on("pageerror",error=>pageErrors.push(error.message));
       await open(otherPage,"/#parties","Люди и организации");
       const [list]=await Promise.all([
-        responseFor(otherPage,"ListAccounts"),
+        responseFor(otherPage,listAccounts),
         otherPage.getByRole("navigation").getByRole("link",{name:"Клиенты",exact:true}).click()
       ]);
       assert.equal(list.status(),200,"Tenant B must load its signed account list");
@@ -215,7 +223,7 @@ export async function publishedSmoke({base,sourceSha,tenantA,adminIdentity,admin
     await flushHeaders();
     assert.deepEqual(pageErrors,[],"Browser page must have no uncaught runtime errors");
     assertSource(sourceSha);
-    assert.ok(requests.some(item=>item.status===403&&item.path.endsWith("/CreateParty")),
+    assert.ok(requests.some(item=>item.status===403&&item.path===fixtureRpcPath(createParty)),
       "Real viewer write denial must be observed");
     const evidence={result:"PASS",source_sha:sourceSha,features:["native","published-smoke"],
       browser:"Chromium",started_at:startedAt,finished_at:Date.now(),tenant:tenantA,

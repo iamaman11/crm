@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
-import type { DescMessage, DescMethodUnary, MessageInitShape } from "@bufbuild/protobuf";
+import type { DescMessage, DescMethod, DescMethodUnary, MessageInitShape } from "@bufbuild/protobuf";
 
 type FixtureRequest = {
   method: "POST";
@@ -17,6 +17,10 @@ type FixtureResponse = {
 
 export type RpcDispatch = (path: string, options: FixtureRequest) => Promise<FixtureResponse>;
 
+export function fixtureRpcPath(method: DescMethod): string {
+  return `/${method.parent.typeName}/${method.name}`;
+}
+
 async function dispatchFixtureRpc<I extends DescMessage, O extends DescMessage>(
   dispatch: RpcDispatch,
   method: DescMethodUnary<I, O>,
@@ -24,8 +28,7 @@ async function dispatchFixtureRpc<I extends DescMessage, O extends DescMessage>(
   input: MessageInitShape<NoInfer<I>>,
   extraHeaders: Readonly<Record<string, string>>,
 ) {
-  const path = `/${method.parent.typeName}/${method.name}`;
-  return dispatch(path, {
+  return dispatch(fixtureRpcPath(method), {
     method: "POST",
     headers: {
       ...extraHeaders,
