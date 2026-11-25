@@ -14,3 +14,12 @@ export async function readRpcError(response: Response, path: string, method: str
     throw new Error("Non-Connect RPC response: " + evidence);
   }
 }
+
+export function formatRpcFailure(
+  response: { status: number; headers?: Pick<Headers, "get"> },
+): string {
+  const requestId = response.headers?.get?.("x-request-id");
+  return `status=${response.status}, request_id=${
+    requestId && /^[a-f0-9-]{36}$/i.test(requestId) ? requestId : "missing"
+  }`;
+}

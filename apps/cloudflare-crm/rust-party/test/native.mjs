@@ -8,7 +8,7 @@ import {fileURLToPath} from "node:url";
 import assert from "node:assert/strict";
 import {test} from "node:test";
 import {createFixtureDeal,dealCreationInput,updateFixtureDeal,dealUpdateInput} from "../../../../packages/client/test/cloudflare-deal-fixture.ts";
-import {readRpcError} from "../../scripts/rpc-error-response.mts";
+import {formatRpcFailure,readRpcError} from "../../scripts/rpc-error-response.mts";
 import {verifyPartyNameQuality} from "./data-quality.mts";
 import {chromium} from "playwright";
 import {typedBrowser} from "./typed-browser.mjs";
@@ -250,7 +250,7 @@ try{
  assert.equal(version.headers.get("x-crm-source-sha"),sourceSha,"Worker must receive the tested checkout SHA");
  assert.equal((await version.json()).source,sourceSha);
  const compiled=await call("/api/_ci/original-domain-check",admin);
- assert.equal(compiled.status,200,JSON.stringify(compiled.body));
+ assert.equal(compiled.status,200,formatRpcFailure(compiled));
  assert.equal(compiled.body.result,"PASS");
  // The normal runtime doctor exposes the compiled inventory to admins.
  // Local workerd has no deployed version metadata: never fabricate it.
@@ -313,7 +313,7 @@ try{
  assert.deepEqual(rpc,denialProof.rpc,"isolated denial and business harnesses must expose identical compiled RPC/owner/policy inventory");
  const {unauthenticatedDenials,viewerDenials}=denialProof;
  const tenantB=jwt("native-b@example.test");
- const describeProtobuf=value=>JSON.stringify(value,
+ const describeQueryPlan=value=>JSON.stringify(value,
    (_key,item)=>typeof item==="bigint"?item.toString():item);
  const v3=async(method,token,payload,extraHeaders={})=>{
    const response=await rpcFetch(partyV3Path(method),{method:"POST",
@@ -336,7 +336,7 @@ try{
    const maxPages=256;
    for(let attempt=0;attempt<maxPages;attempt++){
      const result=await rpc(method,viewer,{...filter,page:{pageSize:1,pageToken:token}});
-     assert.equal(result.status,200,describeProtobuf(result.body));
+     assert.equal(result.status,200,formatRpcFailure(result));
      const found=result.body[field]??[];
      assert.ok(found.length<=1,"page_size=1 must bound the filtered result");
      const next=result.body.pageInfo?.nextPageToken??"";
@@ -365,7 +365,7 @@ try{
  const created=await v3("CreateParty",admin,creation,{
    "x-crm-actor":"forged@example.test","x-crm-tenant":"tenant-b",
    "cf-access-authenticated-user-email":"forged@example.test","x-request-id":"forged-request"});
- assert.equal(created.status,200,describeProtobuf(created.body));
+ assert.equal(created.status,200,formatRpcFailure(created));
  assert.equal(created.body.party?.partyId,id);
  assert.equal(created.body.party?.displayName,"Connect Native Rust");
  assert.equal(created.body.receipt?.resourceVersion,1n);
@@ -383,7 +383,7 @@ try{
  assert.equal(read.status,200);
  assert.equal(read.body.party?.displayName,"Connect Native Rust");
  const listing=await v3("ListParties",viewer,{page:{pageSize:1}});
- assert.equal(listing.status,200,describeProtobuf(listing.body));
+ assert.equal(listing.status,200,formatRpcFailure(listing));
  assert.equal(listing.body.parties.length,1);
  assert.ok(listing.body.pageInfo?.nextPageToken);
  assert.equal((await v3("ListParties",viewer,{page:{pageSize:101}})).status,400);
@@ -391,7 +391,7 @@ try{
    precondition:{expectedVersion:1n,idempotencyKey:"candidate-v3-update-001"}};
  assert.equal((await v3("UpdateParty",viewer,updatedInput)).status,403);
  const updated=await v3("UpdateParty",knownService,updatedInput);
- assert.equal(updated.status,200,describeProtobuf(updated.body));
+ assert.equal(updated.status,200,formatRpcFailure(updated));
  assert.equal(updated.body.party?.version,2n);
  assert.equal(updated.body.party?.displayName,"Updated via native v3");
  assert.equal(updated.body.receipt?.resourceVersion,2n);
@@ -462,7 +462,7 @@ try{
    const made=await v3("CreateParty",admin,{
      partyId:personId,kind:1,displayName:"Paging Person "+index,
      precondition:{idempotencyKey:"page-person-create-"+index}});
-   assert.equal(made.status,200,describeProtobuf(made.body));
+   assert.equal(made.status,200,formatRpcFailure(made));
  }
  const organizations=await collectPages(v3,"ListParties","parties",{kind:2});
  assert.deepEqual(organizations.map(p=>p.partyId),["binary-rpc-proof-01",id]);
@@ -502,7 +502,7 @@ try{
  const accountCreated=await accountV2("CreateAccount",admin,accountInput,{
     "x-crm-actor":"forged@example.test","x-crm-tenant":"tenant-b",
     "cf-access-authenticated-user-email":"forged@example.test"});
- assert.equal(accountCreated.status,200,describeProtobuf(accountCreated.body));
+ assert.equal(accountCreated.status,200,formatRpcFailure(accountCreated));
  assert.equal(accountCreated.body.account?.accountId,accountId);
  assert.equal(accountCreated.body.account?.name,"Connected Account");
  assert.equal(accountCreated.body.account?.parties?.[0]?.partyId,id);
@@ -511,7 +511,7 @@ try{
  assert.equal(accountCreated.body.receipt?.replayed,false);
  assert.equal(accountCreated.body.receipt?.requestId,accountCreated.headers.get("x-request-id"));
  const accountReplay=await accountV2("CreateAccount",knownService,accountInput);
- assert.equal(accountReplay.status,200,describeProtobuf(accountReplay.body));
+ assert.equal(accountReplay.status,200,formatRpcFailure(accountReplay));
  assert.equal(accountReplay.body.receipt?.replayed,true);
  assert.equal(accountReplay.body.receipt.originalRequestId,accountCreated.headers.get("x-request-id"));
  assert.equal((await accountV2("CreateAccount",admin,{...accountInput,
@@ -519,7 +519,7 @@ try{
  assert.equal((await accountV2("GetAccount",tenantB,{accountId})).status,404);
  assert.equal((await accountV2("GetAccount",viewer,{accountId})).body.account?.name,"Connected Account");
  const accountList=await accountV2("ListAccounts",viewer,{page:{pageSize:1}});
- assert.equal(accountList.status,200,describeProtobuf(accountList.body));
+ assert.equal(accountList.status,200,formatRpcFailure(accountList));
  assert.equal(accountList.body.accounts.length,1);
  assert.equal(accountList.body.accounts[0].accountId,accountId);
  assert.equal((await accountV2("ListAccounts",viewer,{page:{pageSize:101}})).status,400);
@@ -529,12 +529,12 @@ try{
  assert.equal((await accountV2("UpdateAccount",admin,{...accountUpdate,status:0,
    precondition:{expectedVersion:1n,idempotencyKey:"candidate-v2-account-invalid"}})).status,400);
  const accountUpdated=await accountV2("UpdateAccount",knownService,accountUpdate);
- assert.equal(accountUpdated.status,200,describeProtobuf(accountUpdated.body));
+ assert.equal(accountUpdated.status,200,formatRpcFailure(accountUpdated));
  assert.equal(accountUpdated.body.account?.status,2);
  assert.equal(accountUpdated.body.account?.version,2n);
  assert.equal(accountUpdated.body.receipt?.replayed,false);
  const accountReupdate=await accountV2("UpdateAccount",admin,accountUpdate);
- assert.equal(accountReupdate.status,200,describeProtobuf(accountReupdate.body));
+ assert.equal(accountReupdate.status,200,formatRpcFailure(accountReupdate));
  assert.equal(accountReupdate.body.receipt?.replayed,true);
  assert.equal(accountReupdate.body.receipt.originalRequestId,accountUpdated.headers.get("x-request-id"));
  assert.equal((await accountV2("UpdateAccount",admin,{...accountUpdate,
@@ -606,12 +606,12 @@ try{
    const made=await accountV2("CreateAccount",admin,{
      accountId:accountToCreate,name:"Paging Account "+index,primaryPartyId:id,
      precondition:{idempotencyKey:"page-account-create-"+index}});
-   assert.equal(made.status,200,describeProtobuf(made.body));
+   assert.equal(made.status,200,formatRpcFailure(made));
  }
  const inactiveLater=await accountV2("UpdateAccount",admin,{
    accountId:accountNextId,name:"Later Inactive Account",status:2,
    precondition:{expectedVersion:1n,idempotencyKey:"page-account-inactive"}});
- assert.equal(inactiveLater.status,200,describeProtobuf(inactiveLater.body));
+ assert.equal(inactiveLater.status,200,formatRpcFailure(inactiveLater));
  const inactiveAccounts=await collectPages(accountV2,"ListAccounts","accounts",{status:2});
  assert.deepEqual(inactiveAccounts.map(a=>a.accountId),[accountId,accountNextId]);
  assert.equal((await collectPages(accountV2,"ListAccounts","accounts",{status:1})).length,2);
@@ -657,7 +657,7 @@ try{
  ].entries()){
    const denied=await contactV2("CreateContactPoint",admin,{
      ...contactInput,value,precondition:{idempotencyKey:"contact-email-invalid-"+index}});
-   assert.equal(denied.status,400,describeProtobuf(denied.body));
+   assert.equal(denied.status,400,formatRpcFailure(denied));
  }
  for(const [index,value] of [
    "2025550102","+999123456789","+11111111111",
@@ -665,12 +665,12 @@ try{
  ].entries()){
    const denied=await contactV2("CreateContactPoint",admin,{
      ...contactInput,kind:2,value,precondition:{idempotencyKey:"contact-phone-invalid-"+index}});
-   assert.equal(denied.status,400,describeProtobuf(denied.body));
+   assert.equal(denied.status,400,formatRpcFailure(denied));
  }
  const contactCreated=await contactV2("CreateContactPoint",admin,contactInput,{
     "x-crm-actor":"forged@example.test","x-crm-tenant":"tenant-b",
     "cf-access-authenticated-user-email":"forged@example.test"});
- assert.equal(contactCreated.status,200,describeProtobuf(contactCreated.body));
+ assert.equal(contactCreated.status,200,formatRpcFailure(contactCreated));
  assert.equal(contactCreated.body.contactPoint?.contactPointId,contactId);
  assert.equal(contactCreated.body.contactPoint?.partyId,id);
  assert.equal(contactCreated.body.contactPoint?.verified,false);
@@ -683,7 +683,7 @@ try{
  assert.equal(contactCreated.body.receipt?.replayed,false);
  assert.equal(contactCreated.body.receipt?.requestId,contactCreated.headers.get("x-request-id"));
  const contactReplay=await contactV2("CreateContactPoint",knownService,contactInput);
- assert.equal(contactReplay.status,200,describeProtobuf(contactReplay.body));
+ assert.equal(contactReplay.status,200,formatRpcFailure(contactReplay));
  assert.equal(contactReplay.body.receipt?.replayed,true);
  assert.equal(contactReplay.body.receipt.originalRequestId,contactCreated.headers.get("x-request-id"));
  assert.equal((await contactV2("CreateContactPoint",admin,{...contactInput,
@@ -692,7 +692,7 @@ try{
  assert.equal((await contactV2("GetContactPoint",viewer,{contactPointId:contactId}))
    .body.contactPoint?.verified,false);
  const contactList=await contactV2("ListContactPoints",viewer,{page:{pageSize:1},partyId:id});
- assert.equal(contactList.status,200,describeProtobuf(contactList.body));
+ assert.equal(contactList.status,200,formatRpcFailure(contactList));
  assert.equal(contactList.body.contactPoints?.[0]?.contactPointId,contactId);
  assert.equal((await contactV2("ListContactPoints",viewer,{page:{pageSize:101}})).status,400);
  assert.equal((await contactV2("ListContactPoints",viewer,{partyId:"missing"}))
@@ -708,7 +708,7 @@ try{
    precondition:{expectedVersion:1n,
      idempotencyKey:"candidate-v2-contact-invalid-status"}})).status,400);
  const contactUpdated=await contactV2("UpdateContactPoint",knownService,contactUpdate);
- assert.equal(contactUpdated.status,200,describeProtobuf(contactUpdated.body));
+ assert.equal(contactUpdated.status,200,formatRpcFailure(contactUpdated));
  assert.equal(contactUpdated.body.contactPoint?.version,2n);
  assert.equal(contactUpdated.body.contactPoint?.verified,false);
  assert.equal(contactUpdated.body.contactPoint?.normalizedValue,"next@example.org");
@@ -718,7 +718,7 @@ try{
    "explicit clear timestamp patch must remove validUntil");
  assert.equal(contactUpdated.body.receipt?.resourceVersion,2n);
  const contactReupdate=await contactV2("UpdateContactPoint",admin,contactUpdate);
- assert.equal(contactReupdate.status,200,describeProtobuf(contactReupdate.body));
+ assert.equal(contactReupdate.status,200,formatRpcFailure(contactReupdate));
  assert.equal(contactReupdate.body.receipt?.replayed,true);
  assert.equal(contactReupdate.body.receipt.originalRequestId,contactUpdated.headers.get("x-request-id"));
  assert.equal((await contactV2("UpdateContactPoint",admin,{...contactUpdate,
@@ -783,12 +783,12 @@ try{
      contactPointId:pointToCreate[0],partyId:pointToCreate[1],kind:index===0?2:1,
      value:index===0?"+1 202 555 0102":"page-"+index+"@example.org",preferred:false,
      precondition:{idempotencyKey:"page-contact-create-"+index}});
-   assert.equal(made.status,200,describeProtobuf(made.body));
+   assert.equal(made.status,200,formatRpcFailure(made));
    if(index===0){
      assert.equal(made.body.contactPoint?.normalizedValue,"+12025550102");
      assert.equal(made.body.contactPoint?.verified,false);
      const read=await contactV2("GetContactPoint",viewer,{contactPointId:pointToCreate[0]});
-     assert.equal(read.status,200,describeProtobuf(read.body));
+     assert.equal(read.status,200,formatRpcFailure(read));
      assert.equal(read.body.contactPoint?.normalizedValue,"+12025550102");
    }
  }
@@ -811,7 +811,7 @@ try{
    status:1,preferred:false,
    precondition:{expectedVersion:2n,idempotencyKey:"candidate-v2-contact-keep-001"}};
  const keep=await contactV2("UpdateContactPoint",admin,keepRequest);
- assert.equal(keep.status,200,describeProtobuf(keep.body));
+ assert.equal(keep.status,200,formatRpcFailure(keep));
  assert.equal(keep.body.contactPoint?.version,3n);
  assert.equal(keep.body.contactPoint?.validFrom?.seconds,1760000000n);
  assert.equal(keep.body.contactPoint?.validUntil,undefined);
@@ -820,12 +820,12 @@ try{
    validFrom:{operation:{case:"set",value:{seconds:1770000000n,nanos:3}}},
    validUntil:{operation:{case:"set",value:{seconds:1870000000n,nanos:9}}},
    precondition:{expectedVersion:3n,idempotencyKey:"candidate-v2-contact-later-001"}});
- assert.equal(later.status,200,describeProtobuf(later.body));
+ assert.equal(later.status,200,formatRpcFailure(later));
  assert.equal(later.body.contactPoint?.version,4n);
  const beforeReplay=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
    "AND subject_id='"+contactId+"'"))[0].n;
  const restoredReceipt=await contactV2("UpdateContactPoint",admin,keepRequest);
- assert.equal(restoredReceipt.status,200,describeProtobuf(restoredReceipt.body));
+ assert.equal(restoredReceipt.status,200,formatRpcFailure(restoredReceipt));
  assert.equal(restoredReceipt.body.receipt?.replayed,true);
  assert.equal(restoredReceipt.body.receipt?.resourceVersion,3n);
  assert.equal(restoredReceipt.body.contactPoint?.version,3n);
@@ -855,7 +855,7 @@ try{
  const contactLastInactive=await contactV2("UpdateContactPoint",admin,{
    contactPointId:contactLastId,value:"page-2@example.org",preferred:false,status:2,
    precondition:{expectedVersion:1n,idempotencyKey:"contact-filter-inactive-last"}});
- assert.equal(contactLastInactive.status,200,describeProtobuf(contactLastInactive.body));
+ assert.equal(contactLastInactive.status,200,formatRpcFailure(contactLastInactive));
  const contactFiltersAudit=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"))[0].n;
  assert.deepEqual((await collectPages(contactV2,"ListContactPoints","contactPoints",{
    partyId:id,kind:1,status:1
@@ -876,7 +876,7 @@ try{
  assert.equal(otherPhone[0].normalizedValue,"+12025550102");
  for(const filter of [{kind:0},{kind:99},{status:0},{status:99}]){
    const denied=await contactV2("ListContactPoints",viewer,filter);
-   assert.equal(denied.status,400,describeProtobuf(denied.body));
+   assert.equal(denied.status,400,formatRpcFailure(denied));
  }
  assert.equal((await contactV2("ListContactPoints",tenantB,{partyId:id,kind:1,status:1}))
    .body.contactPoints.length,0);
@@ -929,18 +929,18 @@ try{
    ...midRelation,type:{...relType,directionality:0},
    precondition:{idempotencyKey:"candidate-rel-invalid-type"}})).status,400);
  const otherCreated=await relationV2("CreatePartyRelationship",admin,otherRelation);
- assert.equal(otherCreated.status,200,describeProtobuf(otherCreated.body));
+ assert.equal(otherCreated.status,200,formatRpcFailure(otherCreated));
  const midCreated=await relationV2("CreatePartyRelationship",admin,midRelation);
- assert.equal(midCreated.status,200,describeProtobuf(midCreated.body));
+ assert.equal(midCreated.status,200,formatRpcFailure(midCreated));
  assert.equal(midCreated.body.relationship?.relationshipId,rMid);
  assert.equal(midCreated.body.relationship?.type?.code,"employment");
  assert.equal(midCreated.body.relationship?.validFrom?.nanos,1000);
  assert.equal(midCreated.body.receipt?.resourceVersion,1n);
  assert.equal(midCreated.body.receipt?.requestId,midCreated.headers.get("x-request-id"));
  const lastCreated=await relationV2("CreatePartyRelationship",admin,lastRelation);
- assert.equal(lastCreated.status,200,describeProtobuf(lastCreated.body));
+ assert.equal(lastCreated.status,200,formatRpcFailure(lastCreated));
  const midReplay=await relationV2("CreatePartyRelationship",admin,midRelation);
- assert.equal(midReplay.status,200,describeProtobuf(midReplay.body));
+ assert.equal(midReplay.status,200,formatRpcFailure(midReplay));
  assert.equal(midReplay.body.receipt?.replayed,true);
  assert.equal((await relationV2("CreatePartyRelationship",admin,{
    ...midRelation,toPartyId:"binary-rpc-proof-01"})).status,409);
@@ -957,7 +957,7 @@ try{
    partyId:id,page:{pageSize:101}})).status,400);
  const afterRel=await relationV2("ListPartyRelationships",viewer,{
    partyId:id,page:{pageSize:1,pageToken:rLast}});
- assert.equal(afterRel.status,200,describeProtobuf(afterRel.body));
+ assert.equal(afterRel.status,200,formatRpcFailure(afterRel));
  assert.equal(afterRel.body.relationships.length,0);
  assert.ok(!afterRel.body.pageInfo?.nextPageToken);
  const relUpdate={relationshipId:rMid,status:2,
@@ -969,7 +969,7 @@ try{
    ...relUpdate,status:0,
    precondition:{expectedVersion:1n,idempotencyKey:"candidate-rel-invalid-status"}})).status,400);
  const updatedRel=await relationV2("UpdatePartyRelationship",knownService,relUpdate);
- assert.equal(updatedRel.status,200,describeProtobuf(updatedRel.body));
+ assert.equal(updatedRel.status,200,formatRpcFailure(updatedRel));
  assert.equal(updatedRel.body.relationship?.version,2n);
  assert.equal(updatedRel.body.relationship?.status,2);
  assert.equal(updatedRel.body.relationship?.validFrom?.seconds,1710000000n);
@@ -987,7 +987,7 @@ try{
  })).length,0);
  for(const invalidStatus of [0,99]){
    const denied=await relationV2("ListPartyRelationships",viewer,{status:invalidStatus});
-   assert.equal(denied.status,400,describeProtobuf(denied.body));
+   assert.equal(denied.status,400,formatRpcFailure(denied));
  }
  assert.equal((await relationV2("ListPartyRelationships",tenantB,{partyId:id,status:2}))
    .body.relationships.length,0);
@@ -1002,7 +1002,7 @@ try{
  const relKeep={relationshipId:rMid,status:1,
    precondition:{expectedVersion:2n,idempotencyKey:"candidate-rel-keep-02"}};
  const relKeepApplied=await relationV2("UpdatePartyRelationship",admin,relKeep);
- assert.equal(relKeepApplied.status,200,describeProtobuf(relKeepApplied.body));
+ assert.equal(relKeepApplied.status,200,formatRpcFailure(relKeepApplied));
  assert.equal(relKeepApplied.body.relationship?.version,3n);
  assert.equal(relKeepApplied.body.relationship?.validFrom?.seconds,1710000000n);
  assert.equal(relKeepApplied.body.relationship?.validUntil,undefined);
@@ -1011,12 +1011,12 @@ try{
      value:{seconds:1720000000n,nanos:987}}},
    validUntil:{operation:{case:"set",value:{seconds:1820000000n,nanos:654}}},
    precondition:{expectedVersion:3n,idempotencyKey:"candidate-rel-later-03"}});
- assert.equal(relLater.status,200,describeProtobuf(relLater.body));
+ assert.equal(relLater.status,200,formatRpcFailure(relLater));
  assert.equal(relLater.body.relationship?.version,4n);
  const relAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"+
    " AND subject_id='"+rMid+"'"))[0].n;
  const relKeepReplay=await relationV2("UpdatePartyRelationship",admin,relKeep);
- assert.equal(relKeepReplay.status,200,describeProtobuf(relKeepReplay.body));
+ assert.equal(relKeepReplay.status,200,formatRpcFailure(relKeepReplay));
  assert.equal(relKeepReplay.body.receipt?.replayed,true);
  assert.equal(relKeepReplay.body.receipt?.resourceVersion,3n);
  assert.equal(relKeepReplay.body.relationship?.validFrom?.seconds,1710000000n);
@@ -1120,7 +1120,7 @@ console.log(JSON.stringify({event:"crm.native-g3-relationship-v2",
    reminderAt:{seconds:1700000000n,nanos:0},
    precondition:{idempotencyKey:"candidate-task-past-reminder"}})).status,400);
  const taskCreated=await taskV2("CreateTask",admin,taskMidInput);
- assert.equal(taskCreated.status,200,describeProtobuf(taskCreated.body));
+ assert.equal(taskCreated.status,200,formatRpcFailure(taskCreated));
  assert.equal(taskCreated.body.task?.taskId,taskMid);
  assert.equal(taskCreated.body.task?.accountId,accountId);
  assert.equal(taskCreated.body.task?.status,1);
@@ -1139,7 +1139,7 @@ console.log(JSON.stringify({event:"crm.native-g3-relationship-v2",
  assert.equal((await taskV2("GetTask",viewer,{taskId:taskMid}))
    .body.task?.accountId,accountId);
  const taskOtherCreated=await taskV2("CreateTask",admin,taskOtherInput);
- assert.equal(taskOtherCreated.status,200,describeProtobuf(taskOtherCreated.body));
+ assert.equal(taskOtherCreated.status,200,formatRpcFailure(taskOtherCreated));
  assert.equal(taskOtherCreated.body.task?.description,"",
    "optional CreateTask.description absent is canonical empty Task.description");
  assert.equal((await taskV2("CreateTask",admin,taskLastInput)).status,200);
@@ -1198,7 +1198,7 @@ console.log(JSON.stringify({event:"crm.native-g3-relationship-v2",
    subject:patchSubject("Must not persist"),description:{operation:{case:"clear",value:true}},
    priority:1,
    dueAt:{operation:{case:"set",value:{seconds:1840000000n,nanos:0}}}});
- assert.equal(rejected.status,400,describeProtobuf(rejected.body));
+ assert.equal(rejected.status,400,formatRpcFailure(rejected));
  assert.deepEqual((await taskRow()),beforeTask,"late rejection must not persist an earlier field change");
  assert.deepEqual((await taskAudits()),beforeTaskAudit,"rejection must not create audit");
  assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_activity_task_receipts WHERE tenant='tenant-a' AND key='"+updateKey+"'"))[0].n,0);
@@ -1206,7 +1206,7 @@ console.log(JSON.stringify({event:"crm.native-g3-relationship-v2",
    description:{operation:{case:"set",value:"Edited through Connect"}},
    priority:3,dueAt:{operation:{case:"clear",value:true}}};
  const updatedTask=await taskV2("UpdateTask",knownService,updateTask);
- assert.equal(updatedTask.status,200,describeProtobuf(updatedTask.body));
+ assert.equal(updatedTask.status,200,formatRpcFailure(updatedTask));
  assert.equal(updatedTask.body.task.subject,"Edited original Task");
  assert.equal(updatedTask.body.task.description,"Edited through Connect");
  assert.equal(updatedTask.body.task.priority,3);
@@ -1230,7 +1230,7 @@ console.log(JSON.stringify({event:"crm.native-g3-relationship-v2",
    description:{operation:{case:"clear",value:true}},priority:2,
    dueAt:{operation:{case:"set",value:{seconds:1870000000n,nanos:987654321}}},
    precondition:{expectedVersion:2n,idempotencyKey:"candidate-task-update-second"}});
- assert.equal(secondTaskEdit.status,200,describeProtobuf(secondTaskEdit.body));
+ assert.equal(secondTaskEdit.status,200,formatRpcFailure(secondTaskEdit));
  assert.equal(secondTaskEdit.body.task.description,"");
  assert.equal(secondTaskEdit.body.task.dueAt.nanos,987654321);
  assert.equal(secondTaskEdit.body.task.version,3n);
@@ -1243,7 +1243,7 @@ console.log(JSON.stringify({event:"crm.native-g3-relationship-v2",
    ...taskComplete,precondition:{expectedVersion:0n,
      idempotencyKey:"candidate-task-invalid-version"}})).status,400);
  const completed=await taskV2("CompleteTask",knownService,taskComplete);
- assert.equal(completed.status,200,describeProtobuf(completed.body));
+ assert.equal(completed.status,200,formatRpcFailure(completed));
  assert.equal(completed.body.changed,true);
  assert.equal(completed.body.task?.status,2);
  assert.equal(completed.body.task?.version,2n);
@@ -1251,7 +1251,7 @@ console.log(JSON.stringify({event:"crm.native-g3-relationship-v2",
  assert.equal(completed.body.task?.reminderAt,undefined);
  assert.equal(completed.body.receipt?.resourceVersion,2n);
  const completedReplay=await taskV2("CompleteTask",admin,taskComplete);
- assert.equal(completedReplay.status,200,describeProtobuf(completedReplay.body));
+ assert.equal(completedReplay.status,200,formatRpcFailure(completedReplay));
  assert.equal(completedReplay.body.receipt?.replayed,true);
  assert.equal(completedReplay.body.task?.version,2n);
  const beforeNoop=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
@@ -1259,7 +1259,7 @@ console.log(JSON.stringify({event:"crm.native-g3-relationship-v2",
  const unchangedTask=await taskV2("CompleteTask",admin,{
    taskId:taskMid,
    precondition:{expectedVersion:2n,idempotencyKey:"candidate-task-unchanged"}});
- assert.equal(unchangedTask.status,200,describeProtobuf(unchangedTask.body));
+ assert.equal(unchangedTask.status,200,formatRpcFailure(unchangedTask));
  assert.equal(unchangedTask.body.changed,false);
  assert.equal(unchangedTask.body.receipt,undefined,
    "unchanged completion must not claim persisted D1 receipt");
@@ -1269,7 +1269,7 @@ console.log(JSON.stringify({event:"crm.native-g3-relationship-v2",
  const lastComplete=await taskV2("CompleteTask",admin,{
    taskId:taskLast,
    precondition:{expectedVersion:1n,idempotencyKey:"candidate-task-complete-last"}});
- assert.equal(lastComplete.status,200,describeProtobuf(lastComplete.body));
+ assert.equal(lastComplete.status,200,formatRpcFailure(lastComplete));
  assert.equal(lastComplete.body.changed,true);
  const completedTasks=await collectPages(taskV2,"ListTasks","tasks",
    {accountId,status:2});
@@ -1354,7 +1354,7 @@ console.log(JSON.stringify({event:"crm.native-g3-activities-tasks-v2",
  assert.deepEqual(await taskActorSnapshot(),beforeReminder,
   "Invalid/denied/stale/completed reminder must not modify D1, audit or receipts");
  const scheduled=await taskV2("ScheduleReminder",admin,scheduleTask);
- assert.equal(scheduled.status,200,describeProtobuf(scheduled.body));
+ assert.equal(scheduled.status,200,formatRpcFailure(scheduled));
  assert.equal(scheduled.body.changed,true);
  assert.equal(scheduled.body.task?.version,4n);
  assert.equal(scheduled.body.task?.reminderAt?.seconds,1860000000n);
@@ -1364,7 +1364,7 @@ console.log(JSON.stringify({event:"crm.native-g3-activities-tasks-v2",
  assert.equal((await taskAudits()).at(-1).action,"activity_tasks.reminder_scheduled");
  assert.equal((await taskAudits()).at(-1).request_id,scheduled.headers.get("x-request-id"));
  const reminderReplayed=await taskV2("ScheduleReminder",knownService,scheduleTask);
- assert.equal(reminderReplayed.status,200,describeProtobuf(reminderReplayed.body));
+ assert.equal(reminderReplayed.status,200,formatRpcFailure(reminderReplayed));
  assert.equal(reminderReplayed.body.receipt?.replayed,true);
  assert.equal(reminderReplayed.body.receipt?.resourceVersion,4n);
  assert.equal((await taskAudits()).filter(x=>x.action==="activity_tasks.reminder_scheduled").length,1);
@@ -1375,7 +1375,7 @@ console.log(JSON.stringify({event:"crm.native-g3-activities-tasks-v2",
  const unchangedReminder=await taskV2("ScheduleReminder",admin,{
   ...scheduleTask,precondition:{expectedVersion:4n,idempotencyKey:"candidate-reminder-same"}
  });
- assert.equal(unchangedReminder.status,200,describeProtobuf(unchangedReminder.body));
+ assert.equal(unchangedReminder.status,200,formatRpcFailure(unchangedReminder));
  assert.equal(unchangedReminder.body.changed,false);
  assert.equal(unchangedReminder.body.receipt,undefined);
  assert.equal(unchangedReminder.body.task?.version,4n);
@@ -1385,7 +1385,7 @@ console.log(JSON.stringify({event:"crm.native-g3-activities-tasks-v2",
   ...scheduleTask,reminderAt:{seconds:1861000000n,nanos:222333444},
   precondition:{expectedVersion:4n,idempotencyKey:"candidate-reminder-reschedule"}
  });
- assert.equal(movedReminder.status,200,describeProtobuf(movedReminder.body));
+ assert.equal(movedReminder.status,200,formatRpcFailure(movedReminder));
  assert.equal(movedReminder.body.task?.version,5n);
  assert.equal(movedReminder.body.task?.reminderAt?.seconds,1861000000n);
  assert.equal((await taskAudits()).filter(x=>x.action==="activity_tasks.reminder_scheduled").length,2);
@@ -1400,7 +1400,7 @@ console.log(JSON.stringify({event:"crm.native-g3-activities-tasks-v2",
     ...scheduleTask,reminderAt:{seconds:1862000000n,nanos:0},
     precondition:{expectedVersion:5n,idempotencyKey:"candidate-reminder-audit-rollback"}
   });
-  assert.equal(denied.status,503,describeProtobuf(denied.body));
+  assert.equal(denied.status,503,formatRpcFailure(denied));
   assert.equal(denied.body.message,"ACTIVITIES_TASK_WRITE_UNCONFIRMED");
   assert.deepEqual(await taskActorSnapshot(),beforeReminderFault,
     "Late reminder audit failure must roll back Task state and original receipt");
@@ -1423,12 +1423,12 @@ console.log(JSON.stringify({event:"crm.native-g3-activities-tasks-v2",
    const created=await taskV2("CreateTask",admin,{taskId,accountId:accountNextId,subject,priority,
      ...(due===null?{}:{dueAt:{seconds:due,nanos:0}}),
      precondition:{idempotencyKey:"candidate-overdue-create-"+taskId}});
-   assert.equal(created.status,200,describeProtobuf(created.body));
+   assert.equal(created.status,200,formatRpcFailure(created));
  }
  const [dueA,dueZ,dueFuture,dueNone,dueComplete]=dueSeeds.map(x=>x[0]);
  const completeSeed=await taskV2("CompleteTask",admin,{taskId:dueComplete,
    precondition:{expectedVersion:1n,idempotencyKey:"candidate-overdue-complete"}});
- assert.equal(completeSeed.status,200,describeProtobuf(completeSeed.body));
+ assert.equal(completeSeed.status,200,formatRpcFailure(completeSeed));
  const overdueAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"))[0].n;
  const overdueList=async(input={})=>(await collectPages(taskV2,"ListTasks","tasks",
    {overdueOnly:true,page:{pageSize:1},...input})).map(x=>x.taskId);
@@ -1473,7 +1473,7 @@ console.log(JSON.stringify({event:"crm.native-g3-activities-tasks-v2",
  await verifyPartyNameQuality(rpcFetch,sql,id,admin,viewer,tenantB);
 
  const beforeCandidates=await identityV2("FindSharedEmailCandidates",viewer,{page:{pageSize:1}});
- assert.equal(beforeCandidates.status,200,describeProtobuf(beforeCandidates.body));
+ assert.equal(beforeCandidates.status,200,formatRpcFailure(beforeCandidates));
  assert.equal(beforeCandidates.body.candidates.length,0);
  const auditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"))[0].n;
  for(const [index,partyId] of [pagingPersonId,"binary-rpc-proof-01"].entries()){
@@ -1481,7 +1481,7 @@ console.log(JSON.stringify({event:"crm.native-g3-activities-tasks-v2",
      contactPointId:"shared-email-"+index+"-"+randomUUID(),
      partyId,kind:1,value:"later-timestamps@example.org",preferred:false,
      precondition:{idempotencyKey:"shared-email-create-"+index}});
-   assert.equal(contact.status,200,describeProtobuf(contact.body));
+   assert.equal(contact.status,200,formatRpcFailure(contact));
    assert.equal(contact.body.contactPoint?.verified,false);
  }
  const auditAfter=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"))[0].n;
@@ -1506,7 +1506,7 @@ console.log(JSON.stringify({event:"crm.native-g3-activities-tasks-v2",
  assert.equal((await identityV2("CompareParties",viewer,{
    firstPartyId:id,secondPartyId:"missing-party"})).status,404);
  const compared=await identityV2("CompareParties",viewer,compare);
- assert.equal(compared.status,200,describeProtobuf(compared.body));
+ assert.equal(compared.status,200,formatRpcFailure(compared));
  assert.equal(compared.body.firstParty?.partyId,pagingPersonId);
  assert.equal(compared.body.secondParty?.partyId,id);
  assert.equal(compared.body.samePartyId,false);
@@ -1527,7 +1527,7 @@ console.log(JSON.stringify({event:"crm.native-g3-activities-tasks-v2",
    const created=await v3("CreateParty",admin,{
      partyId:p,kind:1,displayName:name,
      precondition:{idempotencyKey:"identity-l03-party-"+randomUUID()}});
-   assert.equal(created.status,200,describeProtobuf(created.body));
+   assert.equal(created.status,200,formatRpcFailure(created));
  }
  const mergeOpId="native-merge-"+randomUUID();
  const mergeKey="identity-l03-merge-"+randomUUID();
@@ -1563,7 +1563,7 @@ console.log(JSON.stringify({event:"crm.native-g3-activities-tasks-v2",
    console.error(JSON.stringify({event:"crm.l03.commit-proof-failure",status:merged.status,
      domain_error:merged.body?.message,rows:rowProof,receipts:receiptProof.length,parties:partyProof}));
  }
- assert.equal(merged.status,200,describeProtobuf(merged.body));
+ assert.equal(merged.status,200,formatRpcFailure(merged));
  assert.equal(merged.body.operation?.active,true);
  assert.equal(merged.body.operation?.version,1n);
  assert.equal(merged.body.receipt?.replayed,false);
@@ -1583,7 +1583,7 @@ console.log(JSON.stringify({event:"crm.native-g3-activities-tasks-v2",
  const got=await identityV2("GetMergeOperation",viewer,{
    operationId:mergeOpId,receiptIdempotencyKey:mergeKey
  });
- assert.equal(got.status,200,describeProtobuf(got.body));
+ assert.equal(got.status,200,formatRpcFailure(got));
  assert.equal(got.body.operation?.operationId,mergeOpId);
  assert.equal(got.body.confirmedMutation?.resourceVersion,1n);
  assert.ok(got.body.confirmedMutation?.originalRequestId);
@@ -1591,14 +1591,14 @@ console.log(JSON.stringify({event:"crm.native-g3-activities-tasks-v2",
  const history=await identityV2("ListMergeOperationsByParty",viewer,{
    partyId:mergeSourceId,page:{pageSize:10}
  });
- assert.equal(history.status,200,describeProtobuf(history.body));
+ assert.equal(history.status,200,formatRpcFailure(history));
  assert.equal(history.body.operations.length,1);
  assert.equal(history.body.operations[0].operationId,mergeOpId);
  assert.equal((await identityV2("ListMergeOperationsByParty",tenantB,{
    partyId:mergeSourceId,page:{pageSize:10}
  })).status,404);
  const resolved=await identityV2("ResolveCanonicalParty",viewer,{partyId:mergeSourceId});
- assert.equal(resolved.status,200,describeProtobuf(resolved.body));
+ assert.equal(resolved.status,200,formatRpcFailure(resolved));
  assert.equal(resolved.body.canonicalPartyId,mergeSurvivorId);
  assert.deepEqual(resolved.body.partyPath,[mergeSourceId,mergeSurvivorId]);
  assert.deepEqual(resolved.body.mergeOperationPath,[mergeOpId]);
@@ -1620,12 +1620,12 @@ console.log(JSON.stringify({event:"crm.native-g3-activities-tasks-v2",
      "tenant-a",undo.precondition.idempotencyKey))[0].n,0);
  } finally {await sql("DROP TRIGGER fixture_identity_rollback");}
  const undone=await identityV2("UnmergeParty",admin,undo);
- assert.equal(undone.status,200,describeProtobuf(undone.body));
+ assert.equal(undone.status,200,formatRpcFailure(undone));
  assert.equal(undone.body.operation?.active,false);
  assert.equal(undone.body.operation?.version,2n);
  assert.equal((await identityV2("UnmergeParty",admin,undo)).body.receipt?.replayed,true);
  const reverted=await identityV2("ResolveCanonicalParty",viewer,{partyId:mergeSourceId});
- assert.equal(reverted.status,200,describeProtobuf(reverted.body));
+ assert.equal(reverted.status,200,formatRpcFailure(reverted));
  assert.equal(reverted.body.canonicalPartyId,mergeSourceId);
  assert.deepEqual(reverted.body.partyPath,[mergeSourceId]);
  assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_identity_merge_records "+
@@ -1652,7 +1652,7 @@ assert.equal((await consentV2("EvaluateConsent",viewer,{
   ...consentScope,channel:0})).status,400);
 assert.equal((await consentV2("EvaluateConsent",tenantB,consentScope)).status,400);
 const noGrant=await consentV2("EvaluateConsent",viewer,consentScope);
-assert.equal(noGrant.status,200,describeProtobuf(noGrant.body));
+assert.equal(noGrant.status,200,formatRpcFailure(noGrant));
 assert.equal(noGrant.body.allowed,false,"no source-backed GRANT is available");
 assert.equal(noGrant.body.reason,4,"NO_APPLICABLE_GRANT");
 const denyInput={authorizationId:"consent-mid-"+randomUUID(),
@@ -1665,7 +1665,7 @@ assert.equal((await consentV2("SuppressCommunication",admin,{
   ...denyInput,channel:0,
   precondition:{idempotencyKey:"connect-consent-invalid-channel"}})).status,400);
 const suppressed=await consentV2("SuppressCommunication",admin,denyInput);
-assert.equal(suppressed.status,200,describeProtobuf(suppressed.body));
+assert.equal(suppressed.status,200,formatRpcFailure(suppressed));
 assert.equal(suppressed.body.authorization?.effect,2,"DENY only");
 assert.equal(suppressed.body.authorization?.status,1,"ACTIVE");
 assert.equal(suppressed.body.authorization?.partyId,id);
@@ -1673,12 +1673,12 @@ assert.equal(suppressed.body.receipt?.resourceVersion,1n);
 assert.equal(suppressed.body.receipt?.replayed,false);
 assert.equal(suppressed.body.receipt?.requestId,suppressed.headers.get("x-request-id"));
 const consentReplay=await consentV2("SuppressCommunication",admin,denyInput);
-assert.equal(consentReplay.status,200,describeProtobuf(consentReplay.body));
+assert.equal(consentReplay.status,200,formatRpcFailure(consentReplay));
 assert.equal(consentReplay.body.receipt?.replayed,true);
 assert.equal((await consentV2("SuppressCommunication",admin,{
   ...denyInput,purpose:"marketing.different"})).status,409);
 const consentDenied=await consentV2("EvaluateConsent",viewer,consentScope);
-assert.equal(consentDenied.status,200,describeProtobuf(consentDenied.body));
+assert.equal(consentDenied.status,200,formatRpcFailure(consentDenied));
 assert.equal(consentDenied.body.allowed,false);
 assert.equal(consentDenied.body.reason,2,"ACTIVE_DENY");
 const otherScope=await consentV2("EvaluateConsent",admin,{
@@ -1690,7 +1690,7 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='te
   "AND subject_id='"+denyInput.authorizationId+"'"))[0].n,1,
   "repeat suppression and consent evaluation must not duplicate audit");
 const originalList=await consentV2("ListConsentAuthorizations",viewer,{page:{pageSize:1}});
-assert.equal(originalList.status,200,describeProtobuf(originalList.body));
+assert.equal(originalList.status,200,formatRpcFailure(originalList));
 assert.equal(originalList.body.authorizations.length,1);
 assert.equal((await consentV2("ListConsentAuthorizations",tenantB,{page:{pageSize:1}}))
   .body.authorizations.length,0);
@@ -1704,7 +1704,7 @@ for(const [index,authorizationId,partyId] of [
   const inserted=await consentV2("SuppressCommunication",admin,{
     authorizationId,partyId,purpose:"marketing.other",channel:1,jurisdiction:"eu",
     precondition:{idempotencyKey:"connect-consent-additional-"+index}});
-  assert.equal(inserted.status,200,describeProtobuf(inserted.body));
+  assert.equal(inserted.status,200,formatRpcFailure(inserted));
 }
 const filteredConsents=await collectPages(consentV2,"ListConsentAuthorizations",
   "authorizations",{partyId:id});
@@ -1728,7 +1728,7 @@ console.log(JSON.stringify({event:"crm.native-g3-consents-v2",result:"PASS",
  const r3Create=await contactV2("CreateContactPoint",admin,{
    contactPointId:r3Contact,partyId:id,kind:1,value:"native-a@example.test",
    preferred:false,precondition:{idempotencyKey:"r3-create-"+r3Contact}});
- assert.equal(r3Create.status,200,describeProtobuf(r3Create.body));
+ assert.equal(r3Create.status,200,formatRpcFailure(r3Create));
  const r3Verify={contactPointId:r3Contact,
    precondition:{expectedVersion:1n,idempotencyKey:"r3-verify-"+r3Contact}};
  assert.equal((await contactV2("VerifyOwnEmailContactPoint",viewer,r3Verify)).status,403);
@@ -1738,7 +1738,7 @@ console.log(JSON.stringify({event:"crm.native-g3-consents-v2",result:"PASS",
    assertUnconfirmed(await contactV2("VerifyOwnEmailContactPoint",admin,r3Verify),"CONTACT_POINTS_WRITE_UNCONFIRMED");
  }finally{await sql("DROP TRIGGER fixture_fail_verify_audit");}
  const verified=await contactV2("VerifyOwnEmailContactPoint",admin,r3Verify);
- assert.equal(verified.status,200,describeProtobuf(verified.body));
+ assert.equal(verified.status,200,formatRpcFailure(verified));
  assert.equal(verified.body.contactPoint?.verified,true);
  assert.equal(verified.body.contactPoint?.version,2n);
  assert.equal((await contactV2("VerifyOwnEmailContactPoint",admin,r3Verify)).body.receipt?.replayed,true);
@@ -1753,7 +1753,7 @@ console.log(JSON.stringify({event:"crm.native-g3-consents-v2",result:"PASS",
  assert.equal((await consentV2("GrantVerifiedEmailConsent",knownService,r3Grant)).status,403);
  assert.equal((await consentV2("GrantVerifiedEmailConsent",viewer,r3Grant)).status,403);
  const granted=await consentV2("GrantVerifiedEmailConsent",admin,r3Grant);
- assert.equal(granted.status,200,describeProtobuf(granted.body));
+ assert.equal(granted.status,200,formatRpcFailure(granted));
  assert.equal(granted.body.authorization?.effect,1);
  assert.equal((await consentV2("GrantVerifiedEmailConsent",admin,r3Grant)).body.receipt?.replayed,true);
  assert.equal((await consentV2("EvaluateConsent",viewer,r3Scope)).body.allowed,true);
@@ -1761,7 +1761,7 @@ console.log(JSON.stringify({event:"crm.native-g3-consents-v2",result:"PASS",
    precondition:{expectedVersion:1n,idempotencyKey:"r3-withdraw-"+r3Id}};
  assert.equal((await consentV2("WithdrawConsentAuthorization",viewer,r3Withdraw)).status,403);
  const revoked=await consentV2("WithdrawConsentAuthorization",knownService,r3Withdraw);
- assert.equal(revoked.status,200,describeProtobuf(revoked.body));
+ assert.equal(revoked.status,200,formatRpcFailure(revoked));
  assert.equal(revoked.body.authorization?.status,2);
  assert.equal((await consentV2("WithdrawConsentAuthorization",knownService,r3Withdraw)).body.receipt?.replayed,true);
  assert.equal((await consentV2("WithdrawConsentAuthorization",admin,{
@@ -1785,7 +1785,7 @@ console.log(JSON.stringify({event:"crm.native-g3-consents-v2",result:"PASS",
  const consentAuditBefore=(await sql(
    "SELECT COUNT(*) AS n FROM crm_audit WHERE subject_id=?",r3Id))[0].n;
  const recoveredGrant=await consentV2("GetConsentAuthorization",viewer,consentReceiptInput);
- assert.equal(recoveredGrant.status,200,describeProtobuf(recoveredGrant.body));
+ assert.equal(recoveredGrant.status,200,formatRpcFailure(recoveredGrant));
  assert.equal(recoveredGrant.body.authorization?.status,2,
    "Get returns the current withdrawn authorization");
  assert.equal(recoveredGrant.body.confirmedMutation?.originalRequestId,
@@ -1862,7 +1862,7 @@ console.log(JSON.stringify({event:"crm.native-g3-consents-v2",result:"PASS",
  const changed=await contactV2("UpdateContactPoint",admin,{
    contactPointId:r3Contact,value:"other@example.org",status:1,preferred:false,
    precondition:{idempotencyKey:"r3-change-"+r3Contact,expectedVersion:2n}});
- assert.equal(changed.status,200,describeProtobuf(changed.body));
+ assert.equal(changed.status,200,formatRpcFailure(changed));
  assert.equal(changed.body.contactPoint?.verified,false);
  assert.equal((await consentV2("EvaluateConsent",viewer,r3Scope)).body.allowed,false,
    "Old grant must be ineffective after email change");
@@ -1886,13 +1886,13 @@ console.log(JSON.stringify({event:"crm.native-g3-consents-v2",result:"PASS",
  const agentCreated=await contactV2("CreateContactPoint",knownService,{
    contactPointId:agentContact,partyId:id,kind:1,value:"qa-agent@example.test",
    preferred:false,precondition:{idempotencyKey:"r3-agent-create-"+agentContact}});
- assert.equal(agentCreated.status,200,describeProtobuf(agentCreated.body));
+ assert.equal(agentCreated.status,200,formatRpcFailure(agentCreated));
  const agentVerify={contactPointId:agentContact,
    precondition:{expectedVersion:1n,idempotencyKey:"r3-agent-verify-"+agentContact}};
  assert.equal((await contactV2("VerifyOwnEmailContactPoint",viewer,agentVerify)).status,403);
  assert.equal((await contactV2("VerifyOwnEmailContactPoint",admin,agentVerify)).status,403);
  const agentVerified=await contactV2("VerifyOwnEmailContactPoint",knownService,agentVerify);
- assert.equal(agentVerified.status,200,describeProtobuf(agentVerified.body));
+ assert.equal(agentVerified.status,200,formatRpcFailure(agentVerified));
  assert.equal(agentVerified.body.contactPoint?.verified,true);
  assert.equal((await contactV2("VerifyOwnEmailContactPoint",knownService,agentVerify)).body.receipt?.replayed,true);
  assert.equal((await contactV2("VerifyOwnEmailContactPoint",knownService,{
@@ -1907,7 +1907,7 @@ console.log(JSON.stringify({event:"crm.native-g3-consents-v2",result:"PASS",
  assert.equal((await consentV2("GrantVerifiedEmailConsent",viewer,agentGrant)).status,403);
  assert.equal((await consentV2("GrantVerifiedEmailConsent",admin,agentGrant)).status,403);
  const agentGranted=await consentV2("GrantVerifiedEmailConsent",knownService,agentGrant);
- assert.equal(agentGranted.status,200,describeProtobuf(agentGranted.body));
+ assert.equal(agentGranted.status,200,formatRpcFailure(agentGranted));
  assert.equal(agentGranted.body.authorization?.effect,1);
  assert.equal((await consentV2("GrantVerifiedEmailConsent",knownService,agentGrant)).body.receipt?.replayed,true);
  assert.equal((await consentV2("EvaluateConsent",viewer,agentScope)).body.allowed,true);
@@ -1946,13 +1946,13 @@ assert.equal((await salesV2("CreatePipeline",admin,{
   precondition:{idempotencyKey:"connect-r7-pipeline-duplicate-stage"}
 })).status,400);
 const pipelineCreated=await salesV2("CreatePipeline",admin,pipelineSeed);
-assert.equal(pipelineCreated.status,200,describeProtobuf(pipelineCreated.body));
+assert.equal(pipelineCreated.status,200,formatRpcFailure(pipelineCreated));
 assert.equal(pipelineCreated.body.pipeline?.version,1n);
 assert.deepEqual(pipelineCreated.body.pipeline?.stages.map(s=>s.ordinal),[1,2,3]);
 const pipelineCreateProof=await salesV2("GetPipeline",viewer,{
   pipelineId:"pipeline.enterprise",receiptIdempotencyKey:"connect-r7-pipeline-create-1"
 });
-assert.equal(pipelineCreateProof.status,200,describeProtobuf(pipelineCreateProof.body));
+assert.equal(pipelineCreateProof.status,200,formatRpcFailure(pipelineCreateProof));
 assert.equal(pipelineCreateProof.body.confirmedMutation?.originalRequestId,
   pipelineCreated.body.receipt?.requestId);
 assert.equal(pipelineCreateProof.body.confirmedMutation?.resourceVersion,1n);
@@ -1971,7 +1971,7 @@ assert.equal((await salesV2("GetPipeline",viewer,{pipelineId:"pipeline.enterpris
 const pipelineOther=await salesV2("CreatePipeline",admin,{
   pipelineId:"pipeline.other",name:"Other",stages:[pipelineSeed.stages[0]],
   precondition:{idempotencyKey:"connect-r7-pipeline-create-2"}});
-assert.equal(pipelineOther.status,200,describeProtobuf(pipelineOther.body));
+assert.equal(pipelineOther.status,200,formatRpcFailure(pipelineOther));
 const wrongPipelineProof=await salesV2("GetPipeline",viewer,{
   pipelineId:"pipeline.other",receiptIdempotencyKey:"connect-r7-pipeline-create-1"
 });
@@ -1979,7 +1979,7 @@ assert.equal(wrongPipelineProof.status,200);
 assert.equal(wrongPipelineProof.body.confirmedMutation,undefined,
   "A receipt for another pipeline must never be disclosed as commit evidence");
 const pipelineList=await salesV2("ListPipelines",viewer,{page:{pageSize:1}});
-assert.equal(pipelineList.status,200,describeProtobuf(pipelineList.body));
+assert.equal(pipelineList.status,200,formatRpcFailure(pipelineList));
 assert.equal(pipelineList.body.pipelines.length,1);
 assert.ok(pipelineList.body.pageInfo?.nextPageToken);
 const currencyRows=pipelineList.body.currencies;
@@ -1990,14 +1990,14 @@ for(const [code,exponent] of [["JPY",0],["USD",2],["EUR",2],["KWD",3],["CLF",4]]
   assert.equal(currencyByCode.get(code),exponent);
 for(const code of ["ZZZ","XXX","XAU","BGN"])assert.equal(currencyByCode.has(code),false);
 const pipelineNext=await salesV2("ListPipelines",viewer,{page:{pageSize:1,pageToken:pipelineList.body.pageInfo.nextPageToken}});
-assert.equal(pipelineNext.status,200,describeProtobuf(pipelineNext.body));
+assert.equal(pipelineNext.status,200,formatRpcFailure(pipelineNext));
 assert.equal(pipelineNext.body.pipelines.length,1);
 assert.equal(pipelineNext.body.currencies.length,0);
 const pipelineUpdated=await salesV2("UpdatePipeline",admin,{
   pipelineId:"pipeline.enterprise",name:"Enterprise managed",
   stages:pipelineSeed.stages,archived:false,
   precondition:{expectedVersion:1n,idempotencyKey:"connect-r7-pipeline-rename-1"}});
-assert.equal(pipelineUpdated.status,200,describeProtobuf(pipelineUpdated.body));
+assert.equal(pipelineUpdated.status,200,formatRpcFailure(pipelineUpdated));
 assert.equal(pipelineUpdated.body.pipeline?.version,2n);
 const pipelineUpdateProof=await salesV2("GetPipeline",viewer,{
   pipelineId:"pipeline.enterprise",receiptIdempotencyKey:"connect-r7-pipeline-rename-1"
@@ -2043,7 +2043,7 @@ assert.equal((await salesV2("CreateSalesView",admin,{
   precondition:{idempotencyKey:"r73-view-invalid-account"}
 })).status,400);
 const viewCreated=await salesV2("CreateSalesView",admin,viewAInput);
-assert.equal(viewCreated.status,200,describeProtobuf(viewCreated.body));
+assert.equal(viewCreated.status,200,formatRpcFailure(viewCreated));
 assert.equal(viewCreated.body.view?.version,1n);
 const viewCreateProof=await salesV2("GetSalesView",viewer,{
   viewId:viewAId,receiptIdempotencyKey:"r73-view-create-1"
@@ -2068,7 +2068,7 @@ const viewBCreated=await salesV2("CreateSalesView",admin,{
   viewId:viewBId,name:"Won across pipelines",status:2,
   precondition:{idempotencyKey:"r73-view-create-2"}
 });
-assert.equal(viewBCreated.status,200,describeProtobuf(viewBCreated.body));
+assert.equal(viewBCreated.status,200,formatRpcFailure(viewBCreated));
 const wrongViewProof=await salesV2("GetSalesView",viewer,{
   viewId:viewBId,receiptIdempotencyKey:"r73-view-create-1"
 });
@@ -2076,7 +2076,7 @@ assert.equal(wrongViewProof.status,200);
 assert.equal(wrongViewProof.body.confirmedMutation,undefined,
   "A receipt for another saved view must never be disclosed");
 const firstViewsPage=await salesV2("ListSalesViews",viewer,{page:{pageSize:1}});
-assert.equal(firstViewsPage.status,200,describeProtobuf(firstViewsPage.body));
+assert.equal(firstViewsPage.status,200,formatRpcFailure(firstViewsPage));
 assert.equal(firstViewsPage.body.views.length,1);
 assert.ok(firstViewsPage.body.pageInfo?.nextPageToken);
 const secondViewsPage=await salesV2("ListSalesViews",viewer,{
@@ -2091,7 +2091,7 @@ const viewUpdate={
   status:2,precondition:{expectedVersion:1n,idempotencyKey:"r73-view-update-1"}
 };
 const updatedView=await salesV2("UpdateSalesView",admin,viewUpdate);
-assert.equal(updatedView.status,200,describeProtobuf(updatedView.body));
+assert.equal(updatedView.status,200,formatRpcFailure(updatedView));
 assert.equal(updatedView.body.view?.version,2n);
 const viewUpdateProof=await salesV2("GetSalesView",viewer,{
   viewId:viewAId,receiptIdempotencyKey:"r73-view-update-1"
@@ -2135,7 +2135,7 @@ const archivedView=await salesV2("UpdateSalesView",admin,{
   ...viewUpdate,archived:true,precondition:{
     expectedVersion:2n,idempotencyKey:"r73-view-archive"}
 });
-assert.equal(archivedView.status,200,describeProtobuf(archivedView.body));
+assert.equal(archivedView.status,200,formatRpcFailure(archivedView));
 assert.equal(archivedView.body.view?.archived,true);
 assert.deepEqual((await salesV2("ListSalesViews",viewer,{})).body.views.map(x=>x.viewId),[viewBId]);
 assert.equal((await salesV2("ListSalesViews",viewer,{includeArchived:true})).body.views.length,2);
@@ -2155,7 +2155,7 @@ const foreignSaleContact=await contactV2("CreateContactPoint",admin,{
   value:"sales-foreign@example.test",preferred:false,
   precondition:{idempotencyKey:"connect-r72-foreign-contact-create"}
 });
-assert.equal(foreignSaleContact.status,200,describeProtobuf(foreignSaleContact.body));
+assert.equal(foreignSaleContact.status,200,formatRpcFailure(foreignSaleContact));
 const denialAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
   "AND subject_id='"+dealId+"'"))[0].n;
 assert.equal((await salesV2("CreateDeal",null,saleCreate)).status,401);
@@ -2165,7 +2165,7 @@ for(const currencyCode of ["ZZZ","XXX","XAU","BGN"]){
     ...saleCreate,amount:{minorUnits:1n,currencyCode},
     precondition:{idempotencyKey:"connect-sales-unsupported-currency-"+currencyCode}
   });
-  assert.equal(rejected.status,400,describeProtobuf(rejected.body));
+  assert.equal(rejected.status,400,formatRpcFailure(rejected));
 }
 assert.equal((await salesV2("CreateDeal",admin,{
   ...saleCreate,stage:undefined,
@@ -2243,7 +2243,7 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id=?"
     roster:{memberEmails:["native-a@example.test"]},
     precondition:{idempotencyKey:creditTeamKey}
   });
-  assert.equal(creditTeam.status,200,describeProtobuf(creditTeam.body));
+  assert.equal(creditTeam.status,200,formatRpcFailure(creditTeam));
   const createQaDeal=async dealId=>salesV2("CreateDeal",admin,{
     ...saleCreate,dealId,
     owner:{owner:{case:"assigneeIdentity",value:"native-a@example.test"}},
@@ -2257,30 +2257,30 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id=?"
   const closeInput=(dealId,version,key,fields={})=>({dealId,outcome:3,reasonCode:"qa",
     ...fields,precondition:{expectedVersion:version,idempotencyKey:"opportunity-close-"+key+"-"+dealId}});
   const created=await createQaDeal(id);
-  assert.equal(created.status,200,describeProtobuf(created.body));
+  assert.equal(created.status,200,formatRpcFailure(created));
   assert.equal((await salesV2("UpdateDeal",viewer,edit(id,1n,"denied"))).status,403);
   assert.equal((await salesV2("SetOpportunityParticipant",viewer,grant(id,3,1n,"escalate"))).status,403);
   assert.equal((await salesV2("SetOpportunityParticipant",admin,grant(id,0,1n,"unknown"))).status,400);
   assert.equal((await salesV2("SetOpportunityParticipant",admin,{...grant(id,3,1n,"foreign"),email:"native-b@example.test"})).status,400);
 
   const observer=await salesV2("SetOpportunityParticipant",admin,grant(id,1,1n,"observer"));
-  assert.equal(observer.status,200,describeProtobuf(observer.body));
+  assert.equal(observer.status,200,formatRpcFailure(observer));
   assert.equal(observer.body.deal.opportunityTeam[0].role,1);
   assert.equal((await salesV2("SetOpportunityParticipant",admin,grant(id,1,1n,"observer"))).body.receipt.replayed,true);
   assert.equal((await salesV2("SetOpportunityParticipant",admin,grant(id,3,1n,"stale"))).status,409);
   const assertProjection=async(actor,expected)=>{
     const details=await salesV2("GetDeal",actor,{dealId:id});
-    assert.equal(details.status,200,describeProtobuf(details.body));
+    assert.equal(details.status,200,formatRpcFailure(details));
     assert.deepEqual(details.body.capabilities,expected);
     const list=await salesV2("ListDeals",actor,{search:id,page:{pageSize:25}});
-    assert.equal(list.status,200,describeProtobuf(list.body));
+    assert.equal(list.status,200,formatRpcFailure(list));
     assert.deepEqual(list.body.deals,[details.body.deal]);
     assert.deepEqual(list.body.dealCapabilities.map(x=>x.dealId),[id]);
     assert.deepEqual(list.body.dealCapabilities[0].capabilities,expected);
     const stage=await salesV2("ListStageDeals",actor,{
       pipelineId:details.body.deal.stage.pipelineId,stageId:details.body.deal.stage.stageId,page:{pageSize:100}
     });
-    assert.equal(stage.status,200,describeProtobuf(stage.body));
+    assert.equal(stage.status,200,formatRpcFailure(stage));
     assert.deepEqual(stage.body.dealCapabilities.map(x=>x.dealId),stage.body.deals.map(x=>x.dealId));
     assert.deepEqual(stage.body.dealCapabilities.find(x=>x.dealId===id)?.capabilities,expected);
   };
@@ -2292,7 +2292,7 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id=?"
   assert.equal((await salesV2("UpdateDeal",viewer,edit(id,2n,"observer"))).status,403);
 
   const contributor=await salesV2("SetOpportunityParticipant",admin,grant(id,2,2n,"contributor"));
-  assert.equal(contributor.status,200,describeProtobuf(contributor.body));
+  assert.equal(contributor.status,200,formatRpcFailure(contributor));
   const contributorRead=(await salesV2("GetDeal",viewer,{dealId:id})).body;
   await assertProjection(viewer,contributorRead.capabilities);
   assert.equal(contributorRead.capabilities.edit,true);
@@ -2305,13 +2305,13 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id=?"
   assert.equal((await salesV2("UpdateDeal",viewer,edit(id,3n,"owner",{owner:{owner:{case:"assigneeIdentity",value:email}}}))).status,403);
   const command=edit(id,3n,"allowed");
   const edited=await salesV2("UpdateDeal",viewer,command);
-  assert.equal(edited.status,200,describeProtobuf(edited.body));
+  assert.equal(edited.status,200,formatRpcFailure(edited));
   assert.equal(edited.body.deal.version,4n);
   assert.equal((await salesV2("UpdateDeal",viewer,command)).body.receipt.replayed,true);
   assert.equal((await salesV2("UpdateDeal",viewer,{...command,dealId:"another-deal"})).status,403);
 
   const lead=await salesV2("SetOpportunityParticipant",admin,grant(id,3,4n,"lead"));
-  assert.equal(lead.status,200,describeProtobuf(lead.body));
+  assert.equal(lead.status,200,formatRpcFailure(lead));
   const leadRead=(await salesV2("GetDeal",viewer,{dealId:id})).body;
   await assertProjection(viewer,leadRead.capabilities);
   assert.equal(leadRead.capabilities.advance,true);
@@ -2322,21 +2322,21 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id=?"
   assert.equal(adminRead.capabilities.close,true);
   assert.equal(adminRead.capabilities.manageCloseCredit,true);
   const commercial=await salesV2("UpdateDeal",viewer,edit(id,5n,"commercial",{probabilityBasisPoints:3300}));
-  assert.equal(commercial.status,200,describeProtobuf(commercial.body));
+  assert.equal(commercial.status,200,formatRpcFailure(commercial));
   assert.equal(commercial.body.deal.probabilityBasisPoints,3300);
 
   const automaticSelection={};
   const automaticPreview=await salesV2("PreviewDealCloseCredit",viewer,{
     dealId:id,expectedVersion:6n,selection:automaticSelection
   });
-  assert.equal(automaticPreview.status,200,describeProtobuf(automaticPreview.body));
+  assert.equal(automaticPreview.status,200,formatRpcFailure(automaticPreview));
   assert.ok(automaticPreview.body.eligibleTeams.some(team=>team.id===creditTeamId));
   assert.equal(automaticPreview.body.creditedTeam?.id,creditTeamId);
   const manualSelection={leaveTeamUnallocated:true};
   const manualPreview=await salesV2("PreviewDealCloseCredit",viewer,{
     dealId:id,expectedVersion:6n,selection:manualSelection
   });
-  assert.equal(manualPreview.status,200,describeProtobuf(manualPreview.body));
+  assert.equal(manualPreview.status,200,formatRpcFailure(manualPreview));
   assert.equal(manualPreview.body.creditedTeam,undefined);
   assert.equal((await salesV2("CloseDeal",viewer,closeInput(id,6n,"manual-denied",{
     creditSelection:manualSelection
@@ -2347,7 +2347,7 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id=?"
     expectedCreditDecision:automaticPreview.body.expectedDecision
   });
   const leadClose=await salesV2("CloseDeal",viewer,leadCloseInput);
-  assert.equal(leadClose.status,200,describeProtobuf(leadClose.body));
+  assert.equal(leadClose.status,200,formatRpcFailure(leadClose));
   assert.equal(leadClose.body.deal.version,7n);
   assert.equal(leadClose.body.deal.status,3);
   assert.equal(leadClose.body.deal.commercialCloseFact?.creditedTeam?.id,creditTeamId);
@@ -2363,24 +2363,24 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id=?"
     dealId:id,reasonCode:"qa.reopen",
     precondition:{expectedVersion:7n,idempotencyKey:"opportunity-reopen-"+id}
   });
-  assert.equal(reopened.status,200,describeProtobuf(reopened.body));
+  assert.equal(reopened.status,200,formatRpcFailure(reopened));
   assert.equal(reopened.body.deal.version,8n);
   assert.equal(reopened.body.deal.status,1);
 
   const adminManualPreview=await salesV2("PreviewDealCloseCredit",admin,{
     dealId:id,expectedVersion:8n,selection:manualSelection
   });
-  assert.equal(adminManualPreview.status,200,describeProtobuf(adminManualPreview.body));
+  assert.equal(adminManualPreview.status,200,formatRpcFailure(adminManualPreview));
   assert.equal(adminManualPreview.body.creditedTeam,undefined);
   const adminManualClose=await salesV2("CloseDeal",admin,closeInput(id,8n,"admin-manual",{
     creditSelection:manualSelection,
     expectedCreditDecision:adminManualPreview.body.expectedDecision
   }));
-  assert.equal(adminManualClose.status,200,describeProtobuf(adminManualClose.body));
+  assert.equal(adminManualClose.status,200,formatRpcFailure(adminManualClose));
   assert.equal(adminManualClose.body.deal.version,9n);
   assert.equal(adminManualClose.body.deal.commercialCloseFact?.creditedTeam,undefined);
   const revoke=await salesV2("SetOpportunityParticipant",admin,grant(id,undefined,9n,"revoke"));
-  assert.equal(revoke.status,200,describeProtobuf(revoke.body));
+  assert.equal(revoke.status,200,formatRpcFailure(revoke));
   assert.equal(revoke.body.deal.opportunityTeam.length,0);
   await assertProjection(viewer,(await salesV2("GetDeal",viewer,{dealId:id})).body.capabilities);
   assert.equal((await salesV2("CloseDeal",viewer,leadCloseInput)).status,403);
@@ -2398,15 +2398,15 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id=?"
   // An ungranted Deal and a revoked grant cannot use the SelfWrite transport.
   const ungrantedId="opportunity-ungranted-"+randomUUID();
   const ungranted=await createQaDeal(ungrantedId);
-  assert.equal(ungranted.status,200,describeProtobuf(ungranted.body));
+  assert.equal(ungranted.status,200,formatRpcFailure(ungranted));
   assert.equal((await salesV2("CloseDeal",viewer,closeInput(ungrantedId,1n,"ungranted"))).status,403);
   const revokedId="opportunity-revoked-"+randomUUID();
   const revoked=await createQaDeal(revokedId);
-  assert.equal(revoked.status,200,describeProtobuf(revoked.body));
+  assert.equal(revoked.status,200,formatRpcFailure(revoked));
   const revokedGrant=await salesV2("SetOpportunityParticipant",admin,grant(revokedId,3,1n,"revoked-grant"));
-  assert.equal(revokedGrant.status,200,describeProtobuf(revokedGrant.body));
+  assert.equal(revokedGrant.status,200,formatRpcFailure(revokedGrant));
   const revokedRemoval=await salesV2("SetOpportunityParticipant",admin,grant(revokedId,undefined,2n,"revoked-removal"));
-  assert.equal(revokedRemoval.status,200,describeProtobuf(revokedRemoval.body));
+  assert.equal(revokedRemoval.status,200,formatRpcFailure(revokedRemoval));
   const revokedCloseKey="opportunity-close-revoked-"+revokedId;
   assert.equal((await salesV2("CloseDeal",viewer,closeInput(revokedId,3n,"revoked"))).status,403);
   assert.equal((await sql("SELECT COUNT(*) n FROM crm_sales_deal_receipts WHERE tenant=? AND key=?","tenant-a",revokedCloseKey))[0].n,0);
@@ -2415,9 +2415,9 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id=?"
   // Enrollment version is pinned in the grant; reactivation cannot restore it.
   const versionId="opportunity-member-version-"+randomUUID();
   const versionDeal=await createQaDeal(versionId);
-  assert.equal(versionDeal.status,200,describeProtobuf(versionDeal.body));
+  assert.equal(versionDeal.status,200,formatRpcFailure(versionDeal));
   const versionGrant=await salesV2("SetOpportunityParticipant",admin,grant(versionId,3,1n,"version-grant"));
-  assert.equal(versionGrant.status,200,describeProtobuf(versionGrant.body));
+  assert.equal(versionGrant.status,200,formatRpcFailure(versionGrant));
   const memberRow=(await sql("SELECT version FROM crm_users WHERE tenant_id=? AND email=?","tenant-a",email))[0];
   const originalMemberVersion=Number(memberRow.version);
   assert.ok(Number.isSafeInteger(originalMemberVersion)&&originalMemberVersion>0);
@@ -2427,16 +2427,16 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id=?"
   assert.equal(staleMemberRead.capabilities.close,false);
   assert.equal((await salesV2("CloseDeal",viewer,closeInput(versionId,2n,"stale-member"))).status,403);
   const staleGrantRemoval=await salesV2("SetOpportunityParticipant",admin,grant(versionId,undefined,2n,"stale-member-revoke"));
-  assert.equal(staleGrantRemoval.status,200,describeProtobuf(staleGrantRemoval.body));
+  assert.equal(staleGrantRemoval.status,200,formatRpcFailure(staleGrantRemoval));
   await sql("UPDATE crm_users SET version=?,active=1 WHERE tenant_id=? AND email=?",originalMemberVersion,"tenant-a",email);
 
   // A concurrent CloseDeal and grant revocation contend on the same original
   // Deal version and the same version-pinned D1 predicate. Exactly one wins.
   const raceId="opportunity-close-revoke-race-"+randomUUID();
   const raceDeal=await createQaDeal(raceId);
-  assert.equal(raceDeal.status,200,describeProtobuf(raceDeal.body));
+  assert.equal(raceDeal.status,200,formatRpcFailure(raceDeal));
   const raceGrant=await salesV2("SetOpportunityParticipant",admin,grant(raceId,3,1n,"race-grant"));
-  assert.equal(raceGrant.status,200,describeProtobuf(raceGrant.body));
+  assert.equal(raceGrant.status,200,formatRpcFailure(raceGrant));
   const raceCloseKey="opportunity-close-race-"+raceId;
   const [raceClose,raceRevoke]=await Promise.all([
     salesV2("CloseDeal",viewer,closeInput(raceId,2n,"race")),
@@ -2515,7 +2515,7 @@ assert.equal((await salesV2("AdvanceStage",admin,{
 const taskCountBefore=(await sql("SELECT COUNT(*) AS n FROM crm_activity_task_records "+
   "WHERE tenant='tenant-a'"))[0].n;
 const advancedSale=await salesV2("AdvanceStage",admin,advanceSale);
-assert.equal(advancedSale.status,200,describeProtobuf(advancedSale.body));
+assert.equal(advancedSale.status,200,formatRpcFailure(advancedSale));
 assert.equal(advancedSale.body.deal?.stage?.stageId,"qualified");
 assert.equal(advancedSale.body.deal?.version,3n);
 assert.equal(advancedSale.body.receipt?.resourceVersion,3n);
@@ -2541,10 +2541,10 @@ const overdueLinkedTask=await taskV2("UpdateTask",admin,{
   dueAt:{operation:{case:"set",value:{seconds:1577836800n,nanos:0}}},
   precondition:{expectedVersion:1n,idempotencyKey:"r73b-linked-task-overdue"}
 });
-assert.equal(overdueLinkedTask.status,200,describeProtobuf(overdueLinkedTask.body));
+assert.equal(overdueLinkedTask.status,200,formatRpcFailure(overdueLinkedTask));
 const operationalRead=await salesV2("GetPipelineMetrics",viewer,{
   pipelineId:"pipeline.enterprise",status:1,accountId});
-assert.equal(operationalRead.status,200,describeProtobuf(operationalRead.body));
+assert.equal(operationalRead.status,200,formatRpcFailure(operationalRead));
 const qualifiedOp=operationalRead.body.operational.find(x=>x.stageId==="qualified");
 assert.ok(qualifiedOp,"the moved OPEN Deal belongs to qualified");
 assert.equal(qualifiedOp.overdueLinkedTaskCount,1n);
@@ -2563,7 +2563,7 @@ assert.equal((await salesV2("GetDeal",viewer,{dealId})).body.deal?.version,3n,
 const closeSale={dealId,outcome:2,reasonCode:"contract-signed",
   precondition:{expectedVersion:3n,idempotencyKey:"connect-sales-close-main"}};
 const closedSale=await salesV2("CloseDeal",admin,closeSale);
-assert.equal(closedSale.status,200,describeProtobuf(closedSale.body));
+assert.equal(closedSale.status,200,formatRpcFailure(closedSale));
 assert.equal(closedSale.body.deal?.status,2);
 assert.equal(closedSale.body.deal?.stage?.stageId,"qualified",
   "closing must preserve the real current stage");
@@ -2588,7 +2588,7 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_sales_link_delivery_recor
   "WHERE tenant='tenant-a' AND deal_id='"+dealId+"'"))[0].n,2,
   "two original one-batch Sales->Activities delivery receipts");
 const dealHistory=await salesV2("ListDealEvents",viewer,{dealId,page:{pageSize:25}});
-assert.equal(dealHistory.status,200,describeProtobuf(dealHistory.body));
+assert.equal(dealHistory.status,200,formatRpcFailure(dealHistory));
 assert.deepEqual(dealHistory.body.events.map(e=>e.dealVersion),[4n,3n,2n,1n]);
 assert.deepEqual(dealHistory.body.events.map(e=>e.kind),[4,3,2,1],
   "Append-only lifecycle history must be ordered and typed");
@@ -2617,7 +2617,7 @@ for(const [index,nextId,pipe] of [
     stage:{pipelineId:pipe,stageId:"lead",ordinal:1},
     probabilityBasisPoints:1000,
     precondition:{idempotencyKey:index===0?"r471-ci-ack-lost":"connect-sales-paging-"+index}});
-  assert.equal(created.status,200,describeProtobuf(created.body));
+  assert.equal(created.status,200,formatRpcFailure(created));
   if(index===0){
     assert.equal(created.body.receipt.replayed,true);
     assert.equal(created.body.receipt.originalRequestId,created.headers.get("x-request-id"));
@@ -2676,11 +2676,11 @@ for(let index=0;index<26;index++){
     probabilityBasisPoints:1000,
     precondition:{idempotencyKey:"r7-stage-pagination-"+index}
   });
-  assert.equal(created.status,200,describeProtobuf(created.body));
+  assert.equal(created.status,200,formatRpcFailure(created));
 }
 const overflow=await salesV2("ListStageDeals",viewer,{
   pipelineId:"pipeline.other",stageId:"lead",page:{pageSize:25}});
-assert.equal(overflow.status,200,describeProtobuf(overflow.body));
+assert.equal(overflow.status,200,formatRpcFailure(overflow));
 assert.equal(overflow.body.totalCount,27n,"board count must include all 27, not the page");
 assert.equal(overflow.body.deals.length,25);
 const ownerAccountName=(await accountV2("GetAccount",viewer,{accountId})).body.account.name;
@@ -2705,14 +2705,14 @@ assert.deepEqual(overflowLast.body.accountNames,overflow.body.accountNames);
 assert.deepEqual(overflowLast.body.currencyTotals,overflow.body.currencyTotals);
 const stageCount=await salesV2("ListStageDeals",viewer,{
   pipelineId:"pipeline.enterprise",stageId:"lead",page:{pageSize:1}});
-assert.equal(stageCount.status,200,describeProtobuf(stageCount.body));
+assert.equal(stageCount.status,200,formatRpcFailure(stageCount));
 assert.equal(stageCount.body.totalCount,1n);
 assert.equal(stageCount.body.deals.length,1);
 assert.equal(stageCount.body.deals[0]?.dealId,dealLast);
 assert.deepEqual(stageCount.body.currencyTotals,[]);
 const qualifiedTotals=await salesV2("ListStageDeals",viewer,{
   pipelineId:"pipeline.enterprise",stageId:"qualified",page:{pageSize:1}});
-assert.equal(qualifiedTotals.status,200,describeProtobuf(qualifiedTotals.body));
+assert.equal(qualifiedTotals.status,200,formatRpcFailure(qualifiedTotals));
 assert.deepEqual(qualifiedTotals.body.currencyTotals.map(t=>[
   t.currencyCode,t.totalMinorUnits,t.amountDealCount
 ]),[["PLN","98765",1n]],
@@ -2742,11 +2742,11 @@ for(const [index,[currencyCode,minorUnits]] of currencyCases.entries()){
       index===1?{expectedCloseDate:{year:2030,month:1,day:1}}:{}),
     precondition:{idempotencyKey:"r7-stage-totals-"+index}
   });
-  assert.equal(made.status,200,describeProtobuf(made.body));
+  assert.equal(made.status,200,formatRpcFailure(made));
 }
 const totalView=await salesV2("ListStageDeals",viewer,{
   pipelineId:"pipeline.other",stageId:"lead",page:{pageSize:1}});
-assert.equal(totalView.status,200,describeProtobuf(totalView.body));
+assert.equal(totalView.status,200,formatRpcFailure(totalView));
 assert.equal(totalView.body.totalCount,32n);
 assert.equal(totalView.body.deals.length,1);
 assert.ok(totalView.body.pageInfo?.nextPageToken);
@@ -2758,7 +2758,7 @@ assert.deepEqual(totalView.body.currencyTotals.map(t=>[
 ], "full-stage exact totals must not overflow int64 or mix currencies");
 const initialMetric=await salesV2("GetPipelineMetrics",viewer,{
   pipelineId:"pipeline.other"});
-assert.equal(initialMetric.status,200,describeProtobuf(initialMetric.body));
+assert.equal(initialMetric.status,200,formatRpcFailure(initialMetric));
 assert.equal(initialMetric.body.totalDealCount,32n);
 assert.deepEqual(initialMetric.body.statuses.map(x=>[x.stageId,x.status,x.dealCount]),
   [["lead",1,32n]],"metrics must count all Deals beyond one 25-row page");
@@ -2790,7 +2790,7 @@ assert.equal(metricsTenantDenied.status,404,"other tenant cannot read foreign Pi
 const portfolioAudit=(await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=?","tenant-a"))[0].n;
 const portfolioRequest={pipelineId:"pipeline.other"};
 const portfolio=(await salesV2("GetSalesPortfolio",viewer,portfolioRequest));
-assert.equal(portfolio.status,200,describeProtobuf(portfolio.body));
+assert.equal(portfolio.status,200,formatRpcFailure(portfolio));
 assert.equal(portfolio.body.counts.pipelineCount,1n);
 assert.equal(portfolio.body.counts.totalDealCount,32n);
 assert.equal(portfolio.body.counts.openCount,32n);
@@ -2812,7 +2812,7 @@ assert.equal((await salesV2("GetSalesPortfolio",tenantB,portfolioRequest)).statu
 assert.equal((await salesV2("GetSalesPortfolio",viewer,{...portfolioRequest,comparePrevious:true})).status,400);
 const comparison=await salesV2("GetSalesPortfolio",viewer,{...portfolioRequest,comparePrevious:true,
   analysisPeriod:{startDate:{year:2026,month:3,day:1},endDate:{year:2026,month:3,day:2}}});
-assert.equal(comparison.status,200,describeProtobuf(comparison.body));
+assert.equal(comparison.status,200,formatRpcFailure(comparison));
 assert.deepEqual(comparison.body.previousPeriod.startDate,{...comparison.body.previousPeriod.startDate,year:2026,month:2,day:27});
 assert.deepEqual(comparison.body.previousPeriod.endDate,{...comparison.body.previousPeriod.endDate,year:2026,month:2,day:28});
 assert.equal(comparison.body.previousClosedOutcomes.denominator,0n);
@@ -2852,7 +2852,7 @@ const updatedCurrency=await salesV2("UpdateDeal",admin,{
   amount:{operation:{case:"set",value:{minorUnits:2n,currencyCode:"USD"}}},
   precondition:{expectedVersion:1n,idempotencyKey:"r7-stage-totals-update"}
 });
-assert.equal(updatedCurrency.status,200,describeProtobuf(updatedCurrency.body));
+assert.equal(updatedCurrency.status,200,formatRpcFailure(updatedCurrency));
 assert.equal((await salesV2("UpdateDeal",admin,{
   dealId:"r7-totals-01",
   amount:{operation:{case:"set",value:{minorUnits:3n,currencyCode:"USD"}}},
@@ -2921,7 +2921,7 @@ console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:
     const first=await salesV2("ListStageDeals",viewer,{
       pipelineId:"pipeline.other",stageId:"lead",page:{pageSize:25}});
     const latencyMs=Math.round(performance.now()-began);
-    assert.equal(first.status,200,describeProtobuf(first.body));
+    assert.equal(first.status,200,formatRpcFailure(first));
     assert.equal(first.body.totalCount,BigInt(n+32));
     assert.equal(first.body.deals.length,25);
     assert.ok(first.body.pageInfo?.nextPageToken);
@@ -2946,7 +2946,7 @@ console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:
     const metricStart=performance.now();
     const metrics=await salesV2("GetPipelineMetrics",viewer,filter);
     const metricMs=Math.round(performance.now()-metricStart);
-    assert.equal(metrics.status,200,describeProtobuf(metrics.body));
+    assert.equal(metrics.status,200,formatRpcFailure(metrics));
     const facts=await sql("SELECT json_extract(state,'$.amount.currency') AS currency,"+
       "json_extract(state,'$.amount.minor_units') AS units,"+
       "json_extract(state,'$.probability_basis_points') AS bps FROM crm_sales_deal_records "+
@@ -2975,18 +2975,18 @@ console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:
       nested_filters:true,exact_i128:true}));
     if(n===1000){
       const portfolio=await salesV2("GetSalesPortfolio",viewer,{pipelineId:"pipeline.other"});
-      assert.equal(portfolio.status,200,describeProtobuf(portfolio.body));
+      assert.equal(portfolio.status,200,formatRpcFailure(portfolio));
       const historyYear=new Date().getUTCFullYear();
       const historyScope={pipelineId:"pipeline.other",timeZone:"UTC",pageSize:17,
         period:{startDate:{year:historyYear-1,month:1,day:1},endDate:{year:historyYear,month:12,day:31}}};
       const history=await salesV2("GetSalesHistory",viewer,historyScope);
-      assert.equal(history.status,200,describeProtobuf(history.body));
+      assert.equal(history.status,200,formatRpcFailure(history));
       assert.equal(history.body.current.totalDealCount,1032n);
       assert.equal(history.body.current.deals.length,17);
       assert.equal(history.body.current.stateAtCutoff.totalCount+history.body.current.unknownHistoryCount,1032n);
       const historyNext=await salesV2("GetSalesHistory",viewer,{...historyScope,
         snapshot:history.body.snapshot,detail:{afterDealId:history.body.current.nextDealId}});
-      assert.equal(historyNext.status,200,describeProtobuf(historyNext.body));
+      assert.equal(historyNext.status,200,formatRpcFailure(historyNext));
       assert.equal(historyNext.body.detail.deals.length,17);
       assert.ok(historyNext.body.detail.deals[0].dealId>history.body.current.nextDealId);
       console.log(JSON.stringify({event:"crm.native-history-scale",result:"PASS",
@@ -3030,14 +3030,14 @@ console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:
         if(snapshot.status!==200)
           console.error(JSON.stringify({event:"crm.native-r73d-concurrent-failure",
             attempt,status:snapshot.status,request_id:snapshot.headers.get("x-request-id")}));
-        assert.equal(snapshot.status,200,describeProtobuf(snapshot.body));
+        assert.equal(snapshot.status,200,formatRpcFailure(snapshot));
         assert.equal(snapshot.body.totalDealCount,1032n);
         assert.deepEqual(snapshot.body.currencies,baseline,
           "a concurrent atomic balance swap must not create a mixed money snapshot");
         assert.deepEqual(snapshot.body.forecastCurrencies,forecastBaseline,
           "forecast must share the same consistent snapshot");
         const whole=await salesV2("GetSalesPortfolio",viewer,{pipelineId:"pipeline.other"});
-        assert.equal(whole.status,200,describeProtobuf(whole.body));
+        assert.equal(whole.status,200,formatRpcFailure(whole));
         assert.deepEqual(whole.body.forecastCurrencies.map(x=>[
           x.currencyCode,x.totalMinorUnits,x.weightedMinorUnitsTimesBasisPoints,x.amountDealCount
         ]),forecastBaseline.map(x=>[
@@ -3045,7 +3045,7 @@ console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:
         ]));
       }
       const after=await salesV2("GetPipelineMetrics",viewer,filter);
-      assert.equal(after.status,200,describeProtobuf(after.body));
+      assert.equal(after.status,200,formatRpcFailure(after));
       assert.deepEqual(after.body.currencies,baseline);
       console.log(JSON.stringify({event:"crm.native-r73d-concurrent-metrics",result:"PASS",
         committed_atomic_swaps:12,concurrent_reads:12,final_read:true,exact_totals:true,d1_binding:true}));
@@ -3103,8 +3103,8 @@ console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:
         await invalid("$.amount.minor_units",JSON.stringify(String(largeUnits)),invalidId);
         const large=await salesV2("GetPipelineMetrics",viewer,filter);
         const largeBoard=await salesV2("ListStageDeals",viewer,{...filter,stageId:"lead",page:{pageSize:1}});
-        assert.equal(large.status,200,describeProtobuf(large.body));
-        assert.equal(largeBoard.status,200,describeProtobuf(largeBoard.body));
+        assert.equal(large.status,200,formatRpcFailure(large));
+        assert.equal(largeBoard.status,200,formatRpcFailure(largeBoard));
         const oldPln=baseline.find(x=>x.currencyCode==="PLN");
         const newPln=large.body.currencies.find(x=>x.currencyCode==="PLN");
         const delta=largeUnits-2345n;
@@ -3127,9 +3127,9 @@ console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:
         salesV2("GetPipelineMetrics",viewer,filter),
         salesV2("ListStageDeals",viewer,{...filter,stageId:"lead",page:{pageSize:1}}),
         salesV2("UpdateDeal",admin,payload)]);
-      assert.equal(capture.status,200,describeProtobuf(capture.body));
-      assert.equal(boardCapture.status,200,describeProtobuf(boardCapture.body));
-      assert.equal(changed.status,200,describeProtobuf(changed.body));
+      assert.equal(capture.status,200,formatRpcFailure(capture));
+      assert.equal(boardCapture.status,200,formatRpcFailure(boardCapture));
+      assert.equal(changed.status,200,formatRpcFailure(changed));
       const committed=await salesV2("GetPipelineMetrics",viewer,filter);
       assert.equal(committed.status,200);
       const beforePln=baseline.find(x=>x.currencyCode==="PLN");
@@ -3146,7 +3146,7 @@ console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:
       const revert=await salesV2("UpdateDeal",admin,{...payload,
         amount:{operation:{case:"set",value:{minorUnits:2345n,currencyCode:"PLN"}}},
         precondition:{expectedVersion:changed.body.deal.version,idempotencyKey:"r7-scale-key-rpc-revert"}});
-      assert.equal(revert.status,200,describeProtobuf(revert.body));
+      assert.equal(revert.status,200,formatRpcFailure(revert));
       const final=await salesV2("GetPipelineMetrics",viewer,filter);
       assert.equal(final.status,200);
       assert.deepEqual(final.body.currencies,baseline);
@@ -3191,9 +3191,9 @@ console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:
     const portfolioSql=portfolioQuery.replace("{METRIC_CLOCK}",clock).replace("{METRIC_FIELDS}",fields).replace("{condition}",portfolioCondition);
     const portfolioPlan=await sql("EXPLAIN QUERY PLAN "+portfolioSql,
       "tenant-a","pipeline.other","pipeline.other","tenant-a",0);
-    assert.ok(portfolioPlan.some(row=>row.detail.includes("crm_sales_pipeline_records")),describeProtobuf(portfolioPlan));
-    assert.ok(portfolioPlan.some(row=>row.detail.includes("crm_sales_deal_events")),describeProtobuf(portfolioPlan));
-    assert.ok(portfolioPlan.some(row=>row.detail.includes("idx_crm_sales_link_deal")),describeProtobuf(portfolioPlan));
+    assert.ok(portfolioPlan.some(row=>row.detail.includes("crm_sales_pipeline_records")),describeQueryPlan(portfolioPlan));
+    assert.ok(portfolioPlan.some(row=>row.detail.includes("crm_sales_deal_events")),describeQueryPlan(portfolioPlan));
+    assert.ok(portfolioPlan.some(row=>row.detail.includes("idx_crm_sales_link_deal")),describeQueryPlan(portfolioPlan));
     // The new forecast capture has a different keyset access pattern. Verify
     // both exact query variants without weakening the original plan assertions.
     const captureRust=readFileSync(join(cwd,"src","sales_performance.rs"),"utf8");
@@ -3207,8 +3207,8 @@ console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:
         capturePage.replace("{pipeline_filter}",filter);
       const capturePlan=await sql("EXPLAIN QUERY PLAN "+captureSql,...params);
       assert.ok(capturePlan.some(row=>row.detail.includes("SEARCH d USING INDEX "+index)&&row.detail.includes("id>?")),
-        describeProtobuf(capturePlan));
-      assert.ok(!capturePlan.some(row=>row.detail.includes("TEMP B-TREE FOR ORDER BY")),describeProtobuf(capturePlan));
+        describeQueryPlan(capturePlan));
+      assert.ok(!capturePlan.some(row=>row.detail.includes("TEMP B-TREE FOR ORDER BY")),describeQueryPlan(capturePlan));
     }
     await benchmark(100);
     await benchmark(1000);
@@ -3284,7 +3284,7 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='te
   const appliedTask=linked.find(row=>row.disposition==="applied")?.task_id;
   assert.ok(appliedTask,"linked Sales→Task must retain the Task ID");
   const linkedTaskRead=await taskV2("GetTask",viewer,{taskId:appliedTask});
-  assert.equal(linkedTaskRead.status,200,describeProtobuf(linkedTaskRead.body));
+  assert.equal(linkedTaskRead.status,200,formatRpcFailure(linkedTaskRead));
   assert.equal(linkedTaskRead.body.task?.relatedDealId,dealId);
   assert.equal(linkedTaskRead.body.task?.accountId,accountId);
   assert.equal((await taskV2("GetTask",viewer,{taskId:taskMid})).body.task?.relatedDealId,"",
@@ -3337,12 +3337,12 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='te
     "(SELECT COUNT(*) FROM crm_audit) AS audits"),manualBefore,
     "Rejected Deal links must never write task, receipt or audit");
   const manualCreated=await taskV2("CreateTask",admin,manualDealInput);
-  assert.equal(manualCreated.status,200,describeProtobuf(manualCreated.body));
+  assert.equal(manualCreated.status,200,formatRpcFailure(manualCreated));
   assert.equal(manualCreated.body.task?.relatedDealId,dealId);
   assert.equal(manualCreated.body.task?.accountId,accountId);
   assert.equal(manualCreated.body.receipt?.replayed,false);
   const manualReplay=await taskV2("CreateTask",knownService,manualDealInput);
-  assert.equal(manualReplay.status,200,describeProtobuf(manualReplay.body));
+  assert.equal(manualReplay.status,200,formatRpcFailure(manualReplay));
   assert.equal(manualReplay.body.receipt?.replayed,true);
   assert.equal((await taskV2("CreateTask",admin,{...manualDealInput,dealId:dealLast})).status,409);
   assert.equal((await taskV2("GetTask",viewer,{taskId:manualDealTaskId})).body.task?.relatedDealId,dealId);
@@ -3417,7 +3417,7 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='te
       "Late D1 failure must roll back catalog, both Deals, receipts and audit");
   }finally{await sql("DROP TRIGGER fixture_deny_rank_rebase");}
   const reordered=await salesV2("UpdatePipeline",admin,reorder);
-  assert.equal(reordered.status,200,describeProtobuf(reordered.body));
+  assert.equal(reordered.status,200,formatRpcFailure(reordered));
   assert.equal(reordered.body.pipeline?.version,3n);
   assert.deepEqual(reordered.body.pipeline?.stages.map(s=>s.stageId),["qualified","lead","won"]);
   assert.deepEqual(reordered.body.pipeline?.stages.map(s=>s.ordinal),[1,2,3]);
@@ -3458,7 +3458,7 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='te
   assert.equal((await sql("SELECT version FROM crm_sales_deal_records WHERE tenant=? AND id=?",
     "tenant-a",freshInput.dealId))[0].version,1);
   const fresh=await salesV2("CreateDeal",admin,freshInput);
-  assert.equal(fresh.status,200,describeProtobuf(fresh.body));
+  assert.equal(fresh.status,200,formatRpcFailure(fresh));
   assert.equal(fresh.body.receipt.replayed,true);
   assert.equal(fresh.body.receipt.originalRequestId,unreadableCommit.headers.get("x-request-id"));
   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id=? AND subject_id=?",
@@ -3473,7 +3473,7 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='te
     dealId:winnerId,name:{operation:{case:"set",value:"CAS winner"}},
     precondition:{expectedVersion:1n,idempotencyKey:"r471-cas-winner"}
   });
-  assert.equal(winner.status,200,describeProtobuf(winner.body));
+  assert.equal(winner.status,200,formatRpcFailure(winner));
   assert.equal(winner.body.deal.version,2n);
   const casWinnerReceiptsBefore=await sql("SELECT COUNT(*) AS n FROM crm_sales_deal_receipts");
   const casWinnerAuditsBefore=await sql("SELECT COUNT(*) AS n FROM crm_audit");
@@ -3502,7 +3502,7 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='te
     ...reopenSale,precondition:{expectedVersion:3n,idempotencyKey:"r72-reopen-stale"}
   })).status,409);
   const reopenedSale=await salesV2("ReopenDeal",admin,reopenSale);
-  assert.equal(reopenedSale.status,200,describeProtobuf(reopenedSale.body));
+  assert.equal(reopenedSale.status,200,formatRpcFailure(reopenedSale));
   assert.equal(reopenedSale.body.deal?.status,1);
   assert.equal(reopenedSale.body.deal?.version,5n);
   assert.equal(reopenedSale.body.deal?.closedAt,undefined);
@@ -3586,7 +3586,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    "x-crm-actor":"forged@example.test","x-crm-tenant":"tenant-b",
    "cf-access-authenticated-user-email":"forged@example.test",
    "x-request-id":"forged-privacy-request"});
- assert.equal(draft.status,200,describeProtobuf(draft.body));
+ assert.equal(draft.status,200,formatRpcFailure(draft));
  assert.equal(draft.body.privacyCase?.caseId,caseId);
  assert.equal(draft.body.privacyCase?.status,1);
  assert.equal(draft.body.privacyCase?.version,1n);
@@ -3605,7 +3605,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  assert.equal((await privacy("SubmitPrivacyCase",admin,{...submit,
    precondition:{expectedVersion:9n,idempotencyKey:"privacy-submit-stale"}})).body.code,"aborted");
  const submitted=await privacy("SubmitPrivacyCase",knownService,submit);
- assert.equal(submitted.status,200,describeProtobuf(submitted.body));
+ assert.equal(submitted.status,200,formatRpcFailure(submitted));
  assert.equal(submitted.body.privacyCase?.status,2);
  assert.equal(submitted.body.receipt?.resourceVersion,2n);
  assert.equal((await privacy("SubmitPrivacyCase",admin,submit)).body.receipt?.replayed,true);
@@ -3614,7 +3614,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  const cancel={caseId,precondition:{expectedVersion:2n,idempotencyKey:"privacy-cancel-main"}};
  assert.equal((await privacy("CancelPrivacyCase",tenantB,cancel)).body.code,"not_found");
  const cancelled=await privacy("CancelPrivacyCase",admin,cancel);
- assert.equal(cancelled.status,200,describeProtobuf(cancelled.body));
+ assert.equal(cancelled.status,200,formatRpcFailure(cancelled));
  assert.equal(cancelled.body.privacyCase?.status,15);
  assert.equal(cancelled.body.receipt?.resourceVersion,3n);
  assert.equal((await privacy("CancelPrivacyCase",admin,cancel)).body.receipt?.replayed,true);
@@ -3691,7 +3691,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  for(const suffix of ["aaa","zzz"]){
    const result=await privacy("CreatePrivacyCase",admin,{caseId:"privacy-"+suffix,kind:4,
      precondition:{idempotencyKey:"privacy-page-"+suffix}});
-   assert.equal(result.status,200,describeProtobuf(result.body));
+   assert.equal(result.status,200,formatRpcFailure(result));
  }
  assert.equal((await privacy("ListPrivacyCases",viewer,{page:{pageSize:101}})).body.code,"invalid_argument");
  const allCases=await collectPages(privacy,"ListPrivacyCases","cases");
@@ -3713,7 +3713,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    contactPointId:r4Contact,partyId:pagingPersonId,kind:1,
    value:"native-a@example.test",preferred:false,
    precondition:{idempotencyKey:"r4-privacy-contact-create-"+r4Contact}});
- assert.equal(r4Created.status,200,describeProtobuf(r4Created.body));
+ assert.equal(r4Created.status,200,formatRpcFailure(r4Created));
  assert.equal((await contactV2("VerifyOwnEmailContactPoint",admin,{
    contactPointId:r4Contact,
    precondition:{expectedVersion:1n,idempotencyKey:"r4-privacy-contact-verify-"+r4Contact}
@@ -3722,11 +3722,11 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  const ownCreate=await privacy("CreatePrivacyCase",admin,{
    caseId:ownCaseId,kind:2,
    precondition:{idempotencyKey:"r4-privacy-create-"+ownCaseId}});
- assert.equal(ownCreate.status,200,describeProtobuf(ownCreate.body));
+ assert.equal(ownCreate.status,200,formatRpcFailure(ownCreate));
  const ownSubmit=await privacy("SubmitPrivacyCase",admin,{
    caseId:ownCaseId,
    precondition:{expectedVersion:1n,idempotencyKey:"r4-privacy-submit-"+ownCaseId}});
- assert.equal(ownSubmit.status,200,describeProtobuf(ownSubmit.body));
+ assert.equal(ownSubmit.status,200,formatRpcFailure(ownSubmit));
  const ownProof={
    caseId:ownCaseId,partyId:pagingPersonId,contactPointId:r4Contact,
    precondition:{expectedVersion:2n,idempotencyKey:"r4-privacy-verify-"+ownCaseId}
@@ -3758,7 +3758,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  const ownVerified=await privacy("VerifyOwnPrivacyCaseSubject",admin,ownProof,{
    "x-crm-tenant":"tenant-b","x-crm-actor":"forged@example.test",
    "cf-access-authenticated-user-email":"forged@example.test"});
- assert.equal(ownVerified.status,200,describeProtobuf(ownVerified.body));
+ assert.equal(ownVerified.status,200,formatRpcFailure(ownVerified));
  assert.equal(ownVerified.body.privacyCase?.status,3);
  assert.equal(ownVerified.body.privacyCase?.subjectVerified,true);
  assert.equal(ownVerified.body.privacyCase?.version,3n);
@@ -3785,7 +3785,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  const preview=await privacy("PreviewOwnPrivacyScope",admin,{caseId:ownCaseId},{
    "x-crm-actor":"forged@example.test","x-crm-tenant":"tenant-b",
    "cf-access-authenticated-user-email":"forged@example.test"});
- assert.equal(preview.status,200,describeProtobuf(preview.body));
+ assert.equal(preview.status,200,formatRpcFailure(preview));
  assert.equal(preview.body.complete,false,"Never claim a nine-owner discovery snapshot");
  assert.equal(preview.body.caseId,ownCaseId);
  assert.equal(preview.body.caseVersion,3n);
@@ -3813,7 +3813,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    caseId:ownCaseId,
    precondition:{expectedVersion:3n,idempotencyKey:"r4-privacy-cancel-after-verify"}
  });
- assert.equal(r4Cancelled.status,200,describeProtobuf(r4Cancelled.body));
+ assert.equal(r4Cancelled.status,200,formatRpcFailure(r4Cancelled));
  assert.equal(r4Cancelled.body.privacyCase?.status,15);
  assert.equal((await privacy("PreviewOwnPrivacyScope",admin,{caseId:ownCaseId}))
    .body.code,"failed_precondition","Cancelled case cannot drive export preview");
@@ -3882,14 +3882,14 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    {precondition:{idempotencyKey:"enrichment-invalid-version",expectedVersion:1n}}
  ]){
    const result=await enrichment("PublishProviderProfile",admin,{...profileInput,...bad});
-   assert.equal(result.body.code,"invalid_argument",describeProtobuf(result.body));
+   assert.equal(result.body.code,"invalid_argument",formatRpcFailure(result));
  }
  const profileResult=await enrichment("PublishProviderProfile",admin,profileInput,{
    "x-crm-actor":"forged@example.test","x-crm-tenant":"tenant-b",
    "cf-access-authenticated-user-email":"forged@example.test",
    "x-request-id":"forged-enrichment-request"
  });
- assert.equal(profileResult.status,200,describeProtobuf(profileResult.body));
+ assert.equal(profileResult.status,200,formatRpcFailure(profileResult));
  const profileId=profileResult.body.profile.profileVersionId;
  assert.ok(profileId);
  assert.equal(profileResult.body.profile.effectiveAt.nanos,123000000);
@@ -3903,7 +3903,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  const enrichmentAuditBeforeProfileReceiptReads=(await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n;
  const profileReceiptRead=await enrichment("GetProviderProfile",viewer,{
    profileVersionId:"",receiptIdempotencyKey:profileInput.precondition.idempotencyKey});
- assert.equal(profileReceiptRead.status,200,describeProtobuf(profileReceiptRead.body));
+ assert.equal(profileReceiptRead.status,200,formatRpcFailure(profileReceiptRead));
  assert.equal(profileReceiptRead.body.profile.profileVersionId,profileId);
  assert.equal(profileReceiptRead.body.confirmedMutation?.originalRequestId,profileResult.headers.get("x-request-id"));
  assert.equal(profileReceiptRead.body.confirmedMutation?.resourceVersion,1n);
@@ -3925,7 +3925,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  assert.equal((await enrichment("PublishMapping",tenantB,mappingInput)).body.code,"not_found");
  assert.equal((await enrichment("PublishMapping",admin,{...mappingInput,maximumSuggestionsPerResponse:0})).body.code,"invalid_argument");
  const mappingResult=await enrichment("PublishMapping",knownService,mappingInput);
- assert.equal(mappingResult.status,200,describeProtobuf(mappingResult.body));
+ assert.equal(mappingResult.status,200,formatRpcFailure(mappingResult));
  const mappingId=mappingResult.body.mapping.mappingVersionId;
  assert.equal(mappingResult.body.mapping.providerProfileVersionId,profileId);
  assert.equal(mappingResult.body.receipt.replayed,false);
@@ -3938,7 +3938,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  const enrichmentAuditBeforeMappingReceiptReads=(await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n;
  const mappingReceiptRead=await enrichment("GetMapping",viewer,{
    mappingVersionId:"",receiptIdempotencyKey:mappingInput.precondition.idempotencyKey});
- assert.equal(mappingReceiptRead.status,200,describeProtobuf(mappingReceiptRead.body));
+ assert.equal(mappingReceiptRead.status,200,formatRpcFailure(mappingReceiptRead));
  assert.equal(mappingReceiptRead.body.mapping.mappingVersionId,mappingId);
  assert.equal(mappingReceiptRead.body.confirmedMutation?.originalRequestId,mappingResult.headers.get("x-request-id"));
  assert.equal(mappingReceiptRead.body.confirmedMutation?.resourceVersion,1n);
@@ -4037,11 +4037,11 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    const published=await enrichment("PublishProviderProfile",admin,{
      ...profileInput,retentionDays:30+index,
      precondition:{idempotencyKey:"enrichment-profile-page-"+index}});
-   assert.equal(published.status,200,describeProtobuf(published.body));
+   assert.equal(published.status,200,formatRpcFailure(published));
    const mapped=await enrichment("PublishMapping",admin,{
      ...mappingInput,providerProfileVersionId:published.body.profile.profileVersionId,
      precondition:{idempotencyKey:"enrichment-mapping-page-"+index}});
-   assert.equal(mapped.status,200,describeProtobuf(mapped.body));
+   assert.equal(mapped.status,200,formatRpcFailure(mapped));
  }
  const profiles=await collectPages(enrichment,"ListProviderProfiles","profiles");
  const mappings=await collectPages(enrichment,"ListMappings","mappings");
@@ -4051,7 +4051,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  for(const [method,field] of [["ListProviderProfiles","profiles"],["ListMappings","mappings"]]){
    assert.equal((await enrichment(method,viewer,{page:{pageSize:101}})).body.code,"invalid_argument");
    const isolated=await enrichment(method,tenantB,{page:{pageSize:1}});
-   assert.equal(isolated.status,200,describeProtobuf(isolated.body));
+   assert.equal(isolated.status,200,formatRpcFailure(isolated));
    assert.equal(isolated.body[field].length,method==="ListProviderProfiles"?1:0,
      "Tenant B sees only its own deliberate profile fixture, never A's mappings");
    if(method==="ListProviderProfiles"){
@@ -4078,7 +4078,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  assert.equal((await overviewCall("GetAccountOverview",viewer,{accountId:"bad/id"})).body.code,"invalid_argument");
  assert.equal((await overviewCall("GetAccountOverview",viewer,{accountId:"missing-account"})).body.code,"not_found");
  const overviewResult=await overviewCall("GetAccountOverview",viewer,{accountId});
- assert.equal(overviewResult.status,200,describeProtobuf(overviewResult.body));
+ assert.equal(overviewResult.status,200,formatRpcFailure(overviewResult));
  const card=overviewResult.body.overview;
  assert.equal(card.account.accountId,accountId);
  assert.equal(card.primaryParty.partyId,id);
@@ -4103,13 +4103,13 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    dealId+"' AND task_id IS NOT NULL ORDER BY task_id LIMIT 1"))[0]?.task_id;
  assert.ok(linkedTaskId,"Sales fixture must create a linked Task");
  const linkedTask=await taskV2("GetTask",viewer,{taskId:linkedTaskId});
- assert.equal(linkedTask.status,200,describeProtobuf(linkedTask.body));
+ assert.equal(linkedTask.status,200,formatRpcFailure(linkedTask));
  assert.equal(linkedTask.body.task.accountId,accountId);
  assert.ok(card.tasks.some(task=>task.taskId===linkedTaskId));
  assert.equal((await taskV2("GetTask",tenantB,{taskId:linkedTaskId})).status,404);
  const completeLinked=await taskV2("CompleteTask",admin,{taskId:linkedTaskId,
    precondition:{idempotencyKey:"overview-linked-task-complete",expectedVersion:linkedTask.body.task.version}});
- assert.equal(completeLinked.status,200,describeProtobuf(completeLinked.body));
+ assert.equal(completeLinked.status,200,formatRpcFailure(completeLinked));
  assert.equal(completeLinked.body.task.accountId,accountId);
  assert.equal(completeLinked.body.task.status,2);
  // Exercise the composition bound with real original ContactPoint mutations.
@@ -4118,7 +4118,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      contactPointId:"overview-boundary-"+String(index).padStart(3,"0"),partyId:id,kind:1,
      value:"overview-"+index+"@example.org",
      precondition:{idempotencyKey:"overview-contact-"+String(index).padStart(3,"0")}});
-   assert.equal(created.status,200,describeProtobuf(created.body));
+   assert.equal(created.status,200,formatRpcFailure(created));
  }
  const boundedAudit=(await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n;
  const boundedCard=(await overviewCall("GetAccountOverview",viewer,{accountId})).body.overview;
@@ -4136,14 +4136,14 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    'party_id,kind,display_name,resource_version\r\nexternal-one,person,CSV One,1\r\nexternal-two,organization,CSV Two,1\r\n');
  const importAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n;
  const importPreview=await csv("PreviewPartyImport",admin,{csv:csvBytes});
- assert.equal(importPreview.status,200,describeProtobuf(importPreview.body));
+ assert.equal(importPreview.status,200,formatRpcFailure(importPreview));
  assert.equal(importPreview.body.count,2);
  assert.equal(importPreview.body.previouslyImported,0);
  assert.equal(importPreview.body.csvSha256Hex,createHash("sha256").update(csvBytes).digest("hex"));
  assert.equal(new Set(importPreview.body.targetPartyIds).size,2);
  assert.ok(importPreview.body.targetPartyIds.every(id=>!id.startsWith("external-")));
  const otherPreview=await csv("PreviewPartyImport",tenantB,{csv:csvBytes});
- assert.equal(otherPreview.status,200,describeProtobuf(otherPreview.body));
+ assert.equal(otherPreview.status,200,formatRpcFailure(otherPreview));
  assert.ok(otherPreview.body.targetPartyIds.every(id=>!importPreview.body.targetPartyIds.includes(id)));
  const applyInput={csv:csvBytes,expectedSha256Hex:importPreview.body.csvSha256Hex,
    precondition:{idempotencyKey:"csv-import-operation-main"}};
@@ -4152,7 +4152,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    precondition:{idempotencyKey:"csv-import-invalid-version",expectedVersion:1n}})).body.code,"invalid_argument");
  assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n,importAuditBefore,"previews and invalid input are read-only");
  const applied=await csv("ApplyPartyImport",admin,applyInput);
- assert.equal(applied.status,200,describeProtobuf(applied.body));
+ assert.equal(applied.status,200,formatRpcFailure(applied));
  assert.equal(applied.body.createdCount,2);assert.equal(applied.body.replayedCount,0);
  assert.equal(applied.body.receipt.replayed,false);
  assert.equal(applied.body.receipt.requestId,applied.headers.get("x-request-id"));
@@ -4164,7 +4164,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  const csvReceiptAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n;
  const csvReceiptInput={csv:new Uint8Array(),receiptIdempotencyKey:applyInput.precondition.idempotencyKey};
  const csvReceiptRead=await csv("PreviewPartyImport",admin,csvReceiptInput);
- assert.equal(csvReceiptRead.status,200,describeProtobuf(csvReceiptRead.body));
+ assert.equal(csvReceiptRead.status,200,formatRpcFailure(csvReceiptRead));
  assert.equal(csvReceiptRead.body.csvSha256Hex,applyInput.expectedSha256Hex);
  assert.equal(csvReceiptRead.body.count,2);
  assert.equal(csvReceiptRead.body.previouslyImported,2);
@@ -4226,7 +4226,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    const invalid=new TextEncoder().encode(
      "party_id,kind,display_name,resource_version\r\n"+rows+"\r\n");
    const response=await csv("PreviewPartyImport",admin,{csv:invalid});
-   assert.equal(response.status,200,describeProtobuf(response.body));
+   assert.equal(response.status,200,formatRpcFailure(response));
    assert.deepEqual(response.body.targetPartyIds,[]);
    assert.deepEqual(response.body.rowIssues.map(x=>[x.rowPosition,x.field,x.code]),
      expectedIssues);
@@ -4247,7 +4247,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  const invalidPartyBefore=(await sql("SELECT COUNT(*) AS n FROM crm_party_records"))[0].n;
  const invalidReceiptBefore=(await sql("SELECT COUNT(*) AS n FROM crm_party_import_receipts"))[0].n;
  const invalidPreview=await csv("PreviewPartyImport",admin,{csv:invalidRowsCsv});
- assert.equal(invalidPreview.status,200,describeProtobuf(invalidPreview.body));
+ assert.equal(invalidPreview.status,200,formatRpcFailure(invalidPreview));
  assert.equal(invalidPreview.body.count,4);
  assert.equal(invalidPreview.body.csvSha256Hex,createHash("sha256").update(invalidRowsCsv).digest("hex"));
  assert.deepEqual(invalidPreview.body.targetPartyIds,[],"No ID from invalid preview is actionable");
@@ -4275,7 +4275,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  const conflictBytes=new TextEncoder().encode(
    "party_id,kind,display_name,resource_version\r\nconflict-one,person,First,1\r\nconflict-two,person,Second,1\r\n");
  const conflictPreview=await csv("PreviewPartyImport",admin,{csv:conflictBytes});
- assert.equal(conflictPreview.status,200,describeProtobuf(conflictPreview.body));
+ assert.equal(conflictPreview.status,200,formatRpcFailure(conflictPreview));
  const [firstTarget,secondTarget]=conflictPreview.body.targetPartyIds;
  assert.equal((await v3("CreateParty",admin,{partyId:secondTarget,kind:1,displayName:"Existing target",
    precondition:{idempotencyKey:"csv-target-conflict-create"}})).status,200);
@@ -4309,7 +4309,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    assert.deepEqual((await partySnapshot()),beforeRollback,"Late batch failure must remove every state, receipt and audit");
  }finally{await sql("DROP TRIGGER fixture_fail_import_audit");}
  const retryImport=await csv("ApplyPartyImport",knownService,rollbackInput);
- assert.equal(retryImport.status,200,describeProtobuf(retryImport.body));
+ assert.equal(retryImport.status,200,formatRpcFailure(retryImport));
  assert.equal(retryImport.body.createdCount,2,"Failed batch must not reserve its idempotency key");
  for(const target of rollbackPreview.body.targetPartyIds){
    assert.deepEqual((await sql("SELECT actor,request_id FROM crm_audit WHERE subject_id='"+target+"'")),[
@@ -4321,7 +4321,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  const simpleCsv=new TextEncoder().encode(
    'kind,display_name\r\nperson,"Simple, CSV Person"\r\norganization,"Simple ""Quoted"" Org"\r\n');
  const simplePreview=await csv("PreviewPartyImport",admin,{csv:simpleCsv});
- assert.equal(simplePreview.status,200,describeProtobuf(simplePreview.body));
+ assert.equal(simplePreview.status,200,formatRpcFailure(simplePreview));
  assert.equal(simplePreview.body.count,2);
  assert.equal(simplePreview.body.previouslyImported,0);
  assert.equal(simplePreview.body.rowIssues.length,0);
@@ -4334,7 +4334,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  const brokenSimple=new TextEncoder().encode(
    "kind,display_name\r\nperson,Valid Name\r\norganization,\r\n");
  const invalidSimple=await csv("PreviewPartyImport",admin,{csv:brokenSimple});
- assert.equal(invalidSimple.status,200,describeProtobuf(invalidSimple.body));
+ assert.equal(invalidSimple.status,200,formatRpcFailure(invalidSimple));
  assert.deepEqual(invalidSimple.body.targetPartyIds,[]);
  assert.deepEqual(invalidSimple.body.rowIssues.map(x=>[x.rowPosition,x.field,x.code]),[
    [2,"display_name","IMPORT_PARTY_INVALID"]]);
@@ -4349,7 +4349,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  const simpleApply={csv:simpleCsv,expectedSha256Hex:simplePreview.body.csvSha256Hex,
    precondition:{idempotencyKey:"csv-simple-import-original-owner"}};
  const simpleSaved=await csv("ApplyPartyImport",admin,simpleApply);
- assert.equal(simpleSaved.status,200,describeProtobuf(simpleSaved.body));
+ assert.equal(simpleSaved.status,200,formatRpcFailure(simpleSaved));
  assert.equal(simpleSaved.body.createdCount,2);
  assert.equal((await csv("ApplyPartyImport",knownService,simpleApply)).body.replayedCount,2);
  assert.equal((await csv("PreviewPartyImport",admin,{csv:simpleCsv})).body.previouslyImported,2);
@@ -4368,7 +4368,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  assert.equal((await csv("PreviewPartyExport",admin,{kind:999})).body.code,"invalid_argument");
  const exportBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n;
  const exported=await csv("PreviewPartyExport",admin,{});
- assert.equal(exported.status,200,describeProtobuf(exported.body));
+ assert.equal(exported.status,200,formatRpcFailure(exported));
  assert.equal(exported.body.maximumTenantParties,100);
  assert.deepEqual(exported.body.fields,["party_id","kind","display_name","resource_version"]);
  const downloaded=exported.body.csv;
@@ -4382,7 +4382,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  assert.equal((await rpcFetch("/api/customer-data-operations/parties.csv",{
    headers:{"cf-access-jwt-assertion":admin}})).status,404);
  const filteredExport=await csv("PreviewPartyExport",admin,{kind:1});
- assert.equal(filteredExport.status,200,describeProtobuf(filteredExport.body));
+ assert.equal(filteredExport.status,200,formatRpcFailure(filteredExport));
  assert.ok(filteredExport.body.count<exported.body.count);
  assert.equal(createHash("sha256").update(filteredExport.body.csv).digest("hex"),filteredExport.body.csvSha256Hex);
  assert.equal((await csv("PreviewPartyExport",tenantB,{})).body.count,0);
@@ -4524,7 +4524,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    ...laterInput,kind:0,
    precondition:{idempotencyKey:"sk05-unknown-kind-"+eventLater}})).status,400);
  const recordedLater=await interactionV2("CreateInteraction",admin,laterInput);
- assert.equal(recordedLater.status,200,describeProtobuf(recordedLater.body));
+ assert.equal(recordedLater.status,200,formatRpcFailure(recordedLater));
  assert.equal(recordedLater.body.interaction?.author,"native-a@example.test");
  assert.equal(recordedLater.body.interaction?.dealId,dealId);
  assert.equal(recordedLater.body.interaction?.accountId,accountId);
@@ -4534,13 +4534,13 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  const recordedEarlier=await interactionV2("CreateInteraction",admin,earlierInput);
  const recordedNote=await interactionV2("CreateInteraction",admin,noteInput);
  for(const result of [recordedEarlier,recordedNote]){
-   assert.equal(result.status,200,describeProtobuf(result.body));
+   assert.equal(result.status,200,formatRpcFailure(result));
    assert.equal(result.body.receipt?.resourceVersion,1n);
  }
  assert.equal(recordedNote.body.interaction?.kind,3);
  assert.equal(recordedNote.body.interaction?.dealId,"");
  const replayed=await interactionV2("CreateInteraction",admin,laterInput);
- assert.equal(replayed.status,200,describeProtobuf(replayed.body));
+ assert.equal(replayed.status,200,formatRpcFailure(replayed));
  assert.equal(replayed.body.receipt?.replayed,true);
  assert.equal(replayed.body.receipt?.originalRequestId,recordedLater.receipt?.requestId
    ??recordedLater.headers.get("x-request-id"));
@@ -4674,7 +4674,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    ...noteInput,interactionId:longestInteractionId,
    precondition:{idempotencyKey:longKey}
  });
- assert.equal(longestResult.status,200,describeProtobuf(longestResult.body));
+ assert.equal(longestResult.status,200,formatRpcFailure(longestResult));
  const longSource=(await sql(
    "SELECT event_id,origin_intent_digest FROM crm_activity_automation_source_events WHERE tenant=? AND source_id=?",
    "tenant-a",longestInteractionId));
@@ -4725,12 +4725,12 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      ...(due===null?{}:{dueAt:{seconds:due,nanos:0}}),
      precondition:{idempotencyKey:"sk06-task-create-"+taskId}
    });
-   assert.equal(made.status,200,describeProtobuf(made.body));
+   assert.equal(made.status,200,formatRpcFailure(made));
  }
  const [sk06Early,sk06SameA,sk06SameC,sk06Undated,sk06Done]=sk06Seeds.map(x=>x[0]);
  const sk06Completed=await taskV2("CompleteTask",admin,{taskId:sk06Done,
    precondition:{expectedVersion:1n,idempotencyKey:"sk06-task-complete-"+sk06Done}});
- assert.equal(sk06Completed.status,200,describeProtobuf(sk06Completed.body));
+ assert.equal(sk06Completed.status,200,formatRpcFailure(sk06Completed));
  const sk06ReadAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"))[0].n;
  const sk06DueFilter={status:1,sortByDue:true,search:"SK06 Workday ",
    dueFrom:{seconds:1800100000n,nanos:0},
@@ -4769,7 +4769,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  const sk06RecentInput={...interactionInput(sk06OtherInteraction,1,1790000000),
    accountId:accountNextId};
  const sk06Created=await interactionV2("CreateInteraction",admin,sk06RecentInput);
- assert.equal(sk06Created.status,200,describeProtobuf(sk06Created.body));
+ assert.equal(sk06Created.status,200,formatRpcFailure(sk06Created));
  const sk06RecentAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"))[0].n;
  const sk06Recent=await interactionV2("ListInteractions",viewer,{
    recentAcrossAccounts:true,page:{pageSize:2}
@@ -4822,7 +4822,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  // TaskOwner reassignment. No identity headers or service->human impersonation.
  const beforeMemberRead=(await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id='tenant-a'"))[0].n;
  const myMember=await memberV2("GetMyMembership",admin,{});
- assert.equal(myMember.status,200,describeProtobuf(myMember.body));
+ assert.equal(myMember.status,200,formatRpcFailure(myMember));
  assert.equal(myMember.body.member?.email,"native-a@example.test");
  assert.equal(myMember.body.member?.role,2);
  assert.equal((await memberV2("GetMyMembership",viewer,{})).body.member?.role,1);
@@ -4852,7 +4852,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  const staffInput={email:assignee,role:1,
    precondition:{idempotencyKey:"sk07-member-create-assignee"}};
  const staffCreated=await memberV2("ProvisionMember",admin,staffInput);
- assert.equal(staffCreated.status,200,describeProtobuf(staffCreated.body));
+ assert.equal(staffCreated.status,200,formatRpcFailure(staffCreated));
  assert.equal(staffCreated.body.member?.email,assignee);
  assert.equal(staffCreated.body.member?.active,true);
  assert.equal(staffCreated.body.member?.version,1n);
@@ -4878,7 +4878,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  const changeMember={email:assignee,role:2,
    precondition:{idempotencyKey:"sk07-member-promote",expectedVersion:1n}};
  const promoted=await memberV2("UpdateMember",admin,changeMember);
- assert.equal(promoted.status,200,describeProtobuf(promoted.body));
+ assert.equal(promoted.status,200,formatRpcFailure(promoted));
  assert.equal(promoted.body.member?.version,2n);
  assert.equal(promoted.body.member?.role,2);
  assert.equal((await memberV2("UpdateMember",admin,changeMember)).body.receipt?.replayed,true);
@@ -4901,7 +4901,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    priority:2,assigneeEmail:assignee,
    precondition:{idempotencyKey:"sk07-task-create-"+delegatedTask}};
  const delegated=await taskV2("CreateTask",admin,delegatedCreate);
- assert.equal(delegated.status,200,describeProtobuf(delegated.body));
+ assert.equal(delegated.status,200,formatRpcFailure(delegated));
  assert.equal(delegated.body.task?.assigneeIdentity,assignee);
  const delegatedList=await taskV2("ListTasks",viewer,{
    assigneeEmail:assignee,page:{pageSize:100}
@@ -4934,7 +4934,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  const delegationChange={taskId:delegatedTask,assigneeEmail:"native-viewer@example.test",
    precondition:{idempotencyKey:"sk07-task-reassign",expectedVersion:1n}};
  const reassign=await taskV2("UpdateTask",admin,delegationChange);
- assert.equal(reassign.status,200,describeProtobuf(reassign.body));
+ assert.equal(reassign.status,200,formatRpcFailure(reassign));
  assert.equal(reassign.body.task?.assigneeIdentity,"native-viewer@example.test");
  assert.equal(reassign.body.task?.version,2n);
  assert.equal((await taskV2("UpdateTask",admin,delegationChange)).body.receipt?.replayed,true);
@@ -4955,7 +4955,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  const personalReminder={taskId:delegatedTask,reminderAt:{seconds:1860000000n,nanos:0},
    precondition:{expectedVersion:2n,idempotencyKey:"sk07-own-reminder"}};
  const reminderOwn=await taskV2("ScheduleReminder",viewer,personalReminder);
- assert.equal(reminderOwn.status,200,describeProtobuf(reminderOwn.body));
+ assert.equal(reminderOwn.status,200,formatRpcFailure(reminderOwn));
  assert.equal(reminderOwn.body.task?.version,3n);
  assert.equal((await taskV2("ScheduleReminder",viewer,personalReminder)).body.receipt?.replayed,true);
  const personalComplete={taskId:delegatedTask,
@@ -4965,7 +4965,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    ...delegationChange,precondition:{expectedVersion:3n,idempotencyKey:"sk07-no-self-delegate"}
  })).status,403);
  const ownDone=await taskV2("CompleteTask",viewer,personalComplete);
- assert.equal(ownDone.status,200,describeProtobuf(ownDone.body));
+ assert.equal(ownDone.status,200,formatRpcFailure(ownDone));
  assert.equal(ownDone.body.task?.status,2);
  assert.equal(ownDone.body.task?.version,4n);
  assert.equal((await taskV2("CompleteTask",viewer,personalComplete)).body.receipt?.replayed,true);
@@ -4980,7 +4980,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    taskId:raceUpdateId,accountId,subject:"SK07 race reassignment base",priority:2,
    precondition:{idempotencyKey:"sk07-race-base-"+raceUpdateId}
  });
- assert.equal(raceBase.status,200,describeProtobuf(raceBase.body));
+ assert.equal(raceBase.status,200,formatRpcFailure(raceBase));
  const raceCreate={...delegatedCreate,taskId:raceCreateId,
    precondition:{idempotencyKey:"sk07-race-assign-"+raceCreateId}};
  const raceUpdate={taskId:raceUpdateId,assigneeEmail:assignee,
@@ -4991,7 +4991,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    memberV2("UpdateMember",admin,{email:assignee,active:false,
      precondition:{idempotencyKey:"sk07-member-deactivate",expectedVersion:2n}})
  ]);
- assert.equal(deactivate.status,200,describeProtobuf(deactivate.body));
+ assert.equal(deactivate.status,200,formatRpcFailure(deactivate));
  const revokedAt=(await sql("SELECT rowid AS seq FROM crm_audit WHERE tenant_id=? AND request_id=?",
    "tenant-a",deactivate.body.receipt.requestId))[0].seq;
  for(const [response,taskId,action,method,payload] of [
@@ -5005,7 +5005,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      assert.ok(audit[0].seq<revokedAt,"assignment committed after member was revoked");
      assert.equal((await taskV2(method,admin,payload)).body.receipt?.replayed,true);
    }else{
-     assert.ok([400,409].includes(response.status),describeProtobuf(response.body));
+     assert.ok([400,409].includes(response.status),formatRpcFailure(response));
      assert.equal(audit.length,0,"rejected concurrent assignment wrote audit");
    }
  }
@@ -5037,7 +5037,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    precondition:{idempotencyKey:"sk07-team-create-"+teamId}};
  assert.equal((await memberV2("CreateTeam",viewer,teamInput)).status,403);
  const teamCreated=await memberV2("CreateTeam",admin,teamInput);
- assert.equal(teamCreated.status,200,describeProtobuf(teamCreated.body));
+ assert.equal(teamCreated.status,200,formatRpcFailure(teamCreated));
  assert.equal((await memberV2("CreateTeam",admin,teamInput)).body.receipt?.replayed,true);
  const teamRead=await memberV2("GetTeam",viewer,{teamId,receiptIdempotencyKey:teamInput.precondition.idempotencyKey});
  assert.equal(teamRead.body.confirmedMutation?.resourceVersion,1n);
@@ -5048,7 +5048,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  const poolCreate={taskId:poolId,accountId,subject:"Native team pool",priority:2,owner:poolOwner,
    precondition:{idempotencyKey:"sk07-pool-create-"+poolId}};
  const pool=await taskV2("CreateTask",admin,poolCreate);
- assert.equal(pool.status,200,describeProtobuf(pool.body));
+ assert.equal(pool.status,200,formatRpcFailure(pool));
  assert.equal(pool.body.task?.ownerTeamId,teamId);
  assert.deepEqual(pool.body.task?.owner?.owner,poolOwner.owner);
  // A pre-existing v2 request maps to precisely the same original digest.
@@ -5110,8 +5110,8 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    const [claim,removed]=await Promise.all([
      taskV2("ClaimTask",viewer,attempt),memberV2("UpdateTeam",admin,remove)
    ]);
-   assert.equal(removed.status,200,describeProtobuf(removed.body));
-   assert.ok([200,403,409].includes(claim.status),describeProtobuf(claim.body));
+   assert.equal(removed.status,200,formatRpcFailure(removed));
+   assert.ok([200,403,409].includes(claim.status),formatRpcFailure(claim));
    const current=await taskV2("GetTask",admin,{taskId});
    assert.equal(current.status,200);
    if(claim.status===200){
@@ -5146,7 +5146,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      assert.equal((await taskV2("CompleteTask",admin,{taskId:raceTask,precondition:{expectedVersion:2n,idempotencyKey:"complete-"+raceTask}})).status,200);
      assert.equal((await memberV2("UpdateTeam",admin,archive)).status,200);
    }else{
-     assert.ok([400,409].includes(assigned.status),describeProtobuf(assigned.body));
+     assert.ok([400,409].includes(assigned.status),formatRpcFailure(assigned));
      assert.equal((await taskV2("GetTask",admin,{taskId:raceTask})).status,404);
    }
    const team=await memberV2("GetTeam",viewer,{teamId:raceTeam});
@@ -5218,10 +5218,10 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  const canonicalNfcName="Café Йошкар-Ола";
  const nfcParty=await v3("CreateParty",admin,{partyId:nfcPartyId,kind:2,displayName:originalNfcName,
    precondition:{idempotencyKey:"nfc-party-create"}});
- assert.equal(nfcParty.status,200,describeProtobuf(nfcParty.body));
+ assert.equal(nfcParty.status,200,formatRpcFailure(nfcParty));
  const nfcAccount=await accountV2("CreateAccount",admin,{accountId:nfcAccountId,name:canonicalNfcName,
    primaryPartyId:nfcPartyId,precondition:{idempotencyKey:"nfc-account-create"}});
- assert.equal(nfcAccount.status,200,describeProtobuf(nfcAccount.body));
+ assert.equal(nfcAccount.status,200,formatRpcFailure(nfcAccount));
  for(const needle of [originalNfcName,canonicalNfcName]){
    const parties=await collectPages(v3,"ListParties","parties",{search:needle});
    assert.equal(parties.find(row=>row.partyId===nfcPartyId)?.displayName,originalNfcName);
@@ -5236,20 +5236,20 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  const nfcUpdateCanonical="Renamed Café";
  const updatedNfcParty=await v3("UpdateParty",admin,{partyId:nfcPartyId,displayName:nfcUpdateName,
    precondition:{idempotencyKey:"nfc-party-update",expectedVersion:1n}});
- assert.equal(updatedNfcParty.status,200,describeProtobuf(updatedNfcParty.body));
+ assert.equal(updatedNfcParty.status,200,formatRpcFailure(updatedNfcParty));
  const updatedNfcAccount=await accountV2("UpdateAccount",admin,{accountId:nfcAccountId,name:nfcUpdateName,status:1,
    precondition:{idempotencyKey:"nfc-account-update",expectedVersion:1n}});
- assert.equal(updatedNfcAccount.status,200,describeProtobuf(updatedNfcAccount.body));
+ assert.equal(updatedNfcAccount.status,200,formatRpcFailure(updatedNfcAccount));
  assert.equal((await collectPages(v3,"ListParties","parties",{search:canonicalNfcName})).length,0);
  assert.equal((await collectPages(accountV2,"ListAccounts","accounts",{search:canonicalNfcName})).length,0);
  assert.equal((await collectPages(v3,"ListParties","parties",{search:nfcUpdateCanonical}))[0]?.displayName,nfcUpdateName);
  assert.equal((await collectPages(accountV2,"ListAccounts","accounts",{search:nfcUpdateCanonical}))[0]?.name,nfcUpdateName);
  const nfcCsvBytes=new TextEncoder().encode("party_id,kind,display_name,resource_version\r\nnfc-import,person,Imported Cafe\u0301,1\r\n");
  const nfcPreview=await csv("PreviewPartyImport",admin,{csv:nfcCsvBytes});
- assert.equal(nfcPreview.status,200,describeProtobuf(nfcPreview.body));
+ assert.equal(nfcPreview.status,200,formatRpcFailure(nfcPreview));
  const nfcApplied=await csv("ApplyPartyImport",admin,{csv:nfcCsvBytes,
    expectedSha256Hex:nfcPreview.body.csvSha256Hex,precondition:{idempotencyKey:"nfc-import-operation"}});
- assert.equal(nfcApplied.status,200,describeProtobuf(nfcApplied.body));
+ assert.equal(nfcApplied.status,200,formatRpcFailure(nfcApplied));
  const importedNfc=await collectPages(v3,"ListParties","parties",{search:"Imported Café"});
  assert.equal(importedNfc.length,1);
  assert.equal(importedNfc[0].partyId,nfcPreview.body.targetPartyIds[0]);
@@ -5437,7 +5437,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    const pipeline=await salesV2("CreatePipeline",admin,{
      pipelineId,name:"Forecast native",stages,precondition:pre("pipeline")
    });
-   assert.equal(pipeline.status,200,describeProtobuf(pipeline.body));
+   assert.equal(pipeline.status,200,formatRpcFailure(pipeline));
    const ids=[randomUUID(),randomUUID(),randomUUID()];
    const create=(id,category,units,currency,probability)=>({
      dealId:id,name:"Forecast "+id,accountId,stage:{pipelineId,stageId:"lead",ordinal:1},
@@ -5451,7 +5451,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      ...create(ids[1],2,2500n,"USD",0),expectedCloseDate:{year:2027,month:3,day:1}
    });
    const third=await salesV2("CreateDeal",admin,create(ids[2],4,985n,"EUR",5000));
-   for(const result of [first,second,third])assert.equal(result.status,200,describeProtobuf(result.body));
+   for(const result of [first,second,third])assert.equal(result.status,200,formatRpcFailure(result));
    assert.equal(first.body.deal.probabilityBasisPoints,1000);
    assert.equal(first.body.deal.probabilitySource,2);
    assert.equal(first.body.deal.forecastCategory,3);
@@ -5469,23 +5469,23 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    const badSource=await salesV2("UpdateDeal",admin,{
      dealId:ids[0],useStageProbability:true,probabilityBasisPoints:5,precondition:pre("invalid-source",1n)
    });
-   assert.ok([400,422].includes(badSource.status),describeProtobuf(badSource.body));
+   assert.ok([400,422].includes(badSource.status),formatRpcFailure(badSource));
    const move=async(id,targetStage,version,suffix)=>salesV2("AdvanceStage",admin,{
      dealId:id,targetStage:{pipelineId,stageId:targetStage,ordinal:2},targetStatus:1,precondition:pre(suffix,version)
    });
    const moved=await move(ids[0],"qualified",1n,"stage-move");
-   assert.equal(moved.status,200,describeProtobuf(moved.body));
+   assert.equal(moved.status,200,formatRpcFailure(moved));
    assert.equal(moved.body.deal.probabilityBasisPoints,4500);
    assert.equal(moved.body.deal.probabilitySource,2);
    const movedManual=await move(ids[1],"qualified",1n,"manual-move");
-   assert.equal(movedManual.status,200,describeProtobuf(movedManual.body));
+   assert.equal(movedManual.status,200,formatRpcFailure(movedManual));
    assert.equal(movedManual.body.deal.probabilityBasisPoints,0);
    assert.equal(movedManual.body.deal.probabilitySource,1);
    const reset=await salesV2("UpdateDeal",admin,{
      dealId:ids[1],useStageProbability:true,forecastCategory:3,
      precondition:pre("reset",movedManual.body.deal.version)
    });
-   assert.equal(reset.status,200,describeProtobuf(reset.body));
+   assert.equal(reset.status,200,formatRpcFailure(reset));
    assert.equal(reset.body.deal.probabilityBasisPoints,4500);
    assert.equal(reset.body.deal.probabilitySource,2);
    assert.equal(reset.body.deal.forecastCategory,3);
@@ -5497,7 +5497,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      pipelineId,accountId,...(status===undefined?{}:{status})
    });
    const summary=await metric();
-   assert.equal(summary.status,200,describeProtobuf(summary.body));
+   assert.equal(summary.status,200,formatRpcFailure(summary));
    assert.deepEqual(summary.body.forecastCategories.map(x=>[x.category,x.dealCount,x.stageDefaultCount,x.manualCount]),
      [[3,2n,2n,0n],[4,1n,0n,1n]]);
    assert.deepEqual(summary.body.forecastCurrencies.map(x=>[x.category,x.currencyCode,x.totalMinorUnits,x.weightedMinorUnitsTimesBasisPoints,x.amountDealCount]),
@@ -5507,7 +5507,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    });
    const day={year:2027,month:2,day:28};
    const window=await windowMetric({startDate:day,endDate:day});
-   assert.equal(window.status,200,describeProtobuf(window.body));
+   assert.equal(window.status,200,formatRpcFailure(window));
    assert.equal(window.body.totalDealCount,3n,"window must not filter board inventory");
    assert.deepEqual(window.body.forecastCurrencies.map(x=>[x.category,x.currencyCode,x.totalMinorUnits,x.weightedMinorUnitsTimesBasisPoints]),
      [[3,"EUR","10001","45004500"]]);
@@ -5521,7 +5521,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    const closed=await salesV2("CloseDeal",admin,{
      dealId:ids[0],outcome:2,reasonCode:"forecast-accepted",precondition:pre("close",moved.body.deal.version)
    });
-   assert.equal(closed.status,200,describeProtobuf(closed.body));
+   assert.equal(closed.status,200,formatRpcFailure(closed));
    assert.equal((await metric(2)).body.forecastCategories.length,0);
    const openSummary=await metric();
    assert.equal(openSummary.body.closedOutcomes.wonCount,1n);
@@ -5539,18 +5539,18 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    const lost=await salesV2("CloseDeal",admin,{
      dealId:ids[2],outcome:3,reasonCode:"forecast-lost",precondition:pre("close-lost",third.body.deal.version)
    });
-   assert.equal(lost.status,200,describeProtobuf(lost.body));
+   assert.equal(lost.status,200,formatRpcFailure(lost));
    const bothClosed=(await metric()).body.closedOutcomes;
    assert.deepEqual([bothClosed.wonCount,bothClosed.lostCount,bothClosed.denominator,bothClosed.winRateBasisPoints],
      [1n,1n,2n,5000]);
    const lostReopened=await salesV2("ReopenDeal",admin,{
      dealId:ids[2],reasonCode:"forecast-lost-reopened",precondition:pre("reopen-lost",lost.body.deal.version)
    });
-   assert.equal(lostReopened.status,200,describeProtobuf(lostReopened.body));
+   assert.equal(lostReopened.status,200,formatRpcFailure(lostReopened));
    const reopened=await salesV2("ReopenDeal",admin,{
      dealId:ids[0],reasonCode:"forecast-reopened",precondition:pre("reopen",closed.body.deal.version)
    });
-   assert.equal(reopened.status,200,describeProtobuf(reopened.body));
+   assert.equal(reopened.status,200,formatRpcFailure(reopened));
    assert.equal(reopened.body.deal.forecastCategory,3);
    assert.equal(reopened.body.deal.probabilityBasisPoints,4500);
    assert.equal((await metric()).body.closedOutcomes.denominator,0n);
@@ -5563,7 +5563,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
        {...stage,probabilityBasisPoints:6000}:stage),archived:false,
      precondition:pre("catalog-edit",pipeline.body.pipeline.version)
    });
-   assert.equal(updatedCatalog.status,200,describeProtobuf(updatedCatalog.body));
+   assert.equal(updatedCatalog.status,200,formatRpcFailure(updatedCatalog));
    const retained=await salesV2("GetDeal",viewer,{dealId:ids[0]});
    assert.equal(retained.status,200);
    assert.equal(retained.body.deal.probabilityBasisPoints,4500);
@@ -5571,7 +5571,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      dealId:ids[0],useStageProbability:true,
      precondition:pre("refresh-default",retained.body.deal.version)
    });
-   assert.equal(refresh.status,200,describeProtobuf(refresh.body));
+   assert.equal(refresh.status,200,formatRpcFailure(refresh));
    assert.equal(refresh.body.deal.probabilityBasisPoints,6000);
    assert.equal(refresh.body.deal.probabilitySource,2);
    assert.equal((await metric()).body.forecastCurrencies.find(x=>x.category===3&&x.currencyCode==="EUR").weightedMinorUnitsTimesBasisPoints,"60006000");
@@ -5600,7 +5600,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  for(const entry of s5aReceipts) {
    const input={[entry.idField]:entry.id,receiptIdempotencyKey:entry.key};
    const read=await entry.call(entry.method,viewer,input);
-   assert.equal(read.status,200,entry.owner+" "+describeProtobuf(read.body));
+   assert.equal(read.status,200,entry.owner+" "+formatRpcFailure(read));
    assert.equal(read.body.confirmedMutation?.originalRequestId,entry.original,
      "original signed D1 receipt provenance must survive subsequent owner updates");
    assert.equal(read.body.confirmedMutation?.resourceVersion,1n,
@@ -5650,7 +5650,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  try {
    const denied=await v3("GetParty",viewer,{
      partyId:id,receiptIdempotencyKey:creation.precondition.idempotencyKey});
-   assert.equal(denied.status,503,describeProtobuf(denied.body));
+   assert.equal(denied.status,503,formatRpcFailure(denied));
    assert.equal((await v3("GetParty",viewer,{partyId:id})).status,200);
  } finally {
    await sql("ALTER TABLE fixture_unavailable_party_receipts RENAME TO crm_party_receipts");
@@ -5714,7 +5714,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  await sql("ALTER TABLE crm_sales_pipeline_records RENAME TO fixture_unavailable_deal_catalog");
  try {
    const preparationFailed=await salesV2("CreateDeal",admin,preparationInput);
-   assert.equal(preparationFailed.status,503,describeProtobuf(preparationFailed.body));
+   assert.equal(preparationFailed.status,503,formatRpcFailure(preparationFailed));
    const detail=decodeDomainErrorDetail(preparationFailed.body.details.find(d=>d.type==="crm.core.v2.DomainErrorDetail"));
    assert.equal(detail.domainCode,"SALES_WRITE_PREPARATION_FAILED");
    assert.equal(detail.commitOutcome,1);
@@ -5764,7 +5764,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    [contactV2,"CreateContactPoint",contactRetryInput,contactRetryInput.contactPointId],
  ]){
    const replies=await Promise.all([call(method,admin,input),call(method,admin,input)]);
-   for(const reply of replies)assert.equal(reply.status,200,describeProtobuf(reply.body));
+   for(const reply of replies)assert.equal(reply.status,200,formatRpcFailure(reply));
    const receipts=replies.map(reply=>reply.body.receipt);
    assert.equal(receipts.filter(receipt=>!receipt.replayed).length,1);
    const original=receipts.find(receipt=>!receipt.replayed).requestId;
@@ -5783,14 +5783,14 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      teamId:salesTeam,name:"Sales owner QA "+salesTeam,roster:{memberEmails:["native-viewer@example.test"]},
      precondition:{idempotencyKey:"team-"+salesTeam}
    });
-   assert.equal(salesTeamCreated.status,200,describeProtobuf(salesTeamCreated.body));
+   assert.equal(salesTeamCreated.status,200,formatRpcFailure(salesTeamCreated));
    const ownerFilter={owner:{case:"teamId",value:salesTeam}};
    const actorOwner={owner:{case:"assigneeIdentity",value:"native-viewer@example.test"}};
    const pId="sk07-sales-owner-"+randomUUID();
    const pMade=await salesV2("CreatePipeline",admin,{pipelineId:pId,name:"Owner filter QA "+pId,
      stages:[{stageId:"lead",name:"Lead",probabilityBasisPoints:5000}],
      precondition:{idempotencyKey:"pipeline-"+pId}});
-   assert.equal(pMade.status,200,describeProtobuf(pMade.body));
+   assert.equal(pMade.status,200,formatRpcFailure(pMade));
    const input=(id,owner,currency,units)=>({dealId:id,name:"Sales owner QA "+id,accountId,
      stage:{pipelineId:pId,stageId:"lead",ordinal:1},owner,amount:{currencyCode:currency,minorUnits:units},
      precondition:{idempotencyKey:"owner-create-"+id}});
@@ -5798,7 +5798,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    const inputs=[input(ids[0],ownerFilter,"EUR",10001n),input(ids[1],ownerFilter,"USD",20000n),input(ids[2],actorOwner,"EUR",40000n)];
    for(const request of inputs){
      const result=await salesV2("CreateDeal",admin,request);
-     assert.equal(result.status,200,describeProtobuf(result.body));
+     assert.equal(result.status,200,formatRpcFailure(result));
      assert.equal(result.body.deal?.owner?.owner.case,request.owner.owner.case);
      assert.equal(result.body.deal?.owner?.owner.value,request.owner.owner.value);
    }
@@ -5807,7 +5807,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    assert.equal((await salesV2("CreateDeal",admin,missing)).status,400);
    assert.equal((await salesV2("CreateDeal",viewer,{...inputs[0],dealId:"sk07-owner-denied-"+randomUUID()})).status,403);
    const list=await salesV2("ListDeals",viewer,{ownerFilter,pipelineId:pId,page:{pageSize:1}});
-   assert.equal(list.status,200,describeProtobuf(list.body));
+   assert.equal(list.status,200,formatRpcFailure(list));
    assert.equal(list.body.deals[0]?.dealId,ids[0]);
    const next=await salesV2("ListDeals",viewer,{ownerFilter,pipelineId:pId,page:{pageSize:1,pageToken:list.body.pageInfo.nextPageToken}});
    assert.equal(next.body.deals[0]?.dealId,ids[1]);
@@ -5816,14 +5816,14 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    assert.equal(board.body.totalCount,2n);
    assert.deepEqual(board.body.currencyTotals.map(x=>[x.currencyCode,x.totalMinorUnits]),[["EUR","10001"],["USD","20000"]]);
    const metrics=await salesV2("GetPipelineMetrics",viewer,{pipelineId:pId,ownerFilter});
-   assert.equal(metrics.status,200,describeProtobuf(metrics.body));
+   assert.equal(metrics.status,200,formatRpcFailure(metrics));
    assert.equal(metrics.body.totalDealCount,2n);
    assert.deepEqual(metrics.body.forecastCurrencies.map(x=>[x.currencyCode,x.totalMinorUnits,x.weightedMinorUnitsTimesBasisPoints]),
      [["EUR","10001","50005000"],["USD","20000","100000000"]]);
    const viewId="sk07-owner-view-"+randomUUID();
    const viewCreated=await salesV2("CreateSalesView",admin,{viewId,name:"Team owner view",pipelineId:pId,ownerFilter,
      precondition:{idempotencyKey:"view-"+viewId}});
-   assert.equal(viewCreated.status,200,describeProtobuf(viewCreated.body));
+   assert.equal(viewCreated.status,200,formatRpcFailure(viewCreated));
    const viewRead=await salesV2("GetSalesView",viewer,{viewId});
    assert.equal(viewRead.body.view?.ownerFilter?.owner.value,salesTeam);
    const noChange={teamId:salesTeam,active:true,precondition:{expectedVersion:1n,idempotencyKey:"noop-"+salesTeam}};
@@ -5834,7 +5834,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      const change={dealId:id,owner:actorOwner,precondition:{expectedVersion:1n,idempotencyKey:"owner-update-"+id}};
      assert.equal((await salesV2("UpdateDeal",viewer,change)).status,403);
      const result=await salesV2("UpdateDeal",admin,change);
-     assert.equal(result.status,200,describeProtobuf(result.body));
+     assert.equal(result.status,200,formatRpcFailure(result));
      assert.equal(result.body.deal?.owner?.owner.value,"native-viewer@example.test");
      assert.equal((await salesV2("UpdateDeal",admin,change)).body.receipt?.replayed,true);
      assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=?","tenant-a",id))[0].n,2);
@@ -5862,7 +5862,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    assert.equal((await salesV2("CreateDeal",admin,input(lastDeal,lastOwner,"EUR",12500n))).status,200);
    const claim={taskId:lastTask,precondition:{expectedVersion:1n,idempotencyKey:"claim-"+suffix}};
    const [claimed,revoked]=await Promise.all([taskV2("ClaimTask",lastJwt,claim),memberV2("UpdateMember",admin,deactivate)]);
-   assert.equal(claimed.status,200,describeProtobuf(claimed.body));
+   assert.equal(claimed.status,200,formatRpcFailure(claimed));
    assert.equal(revoked.status,409,"open Deal still requires an eligible human");
    assert.equal((await taskV2("CompleteTask",admin,{taskId:lastTask,
      precondition:{expectedVersion:2n,idempotencyKey:"complete-"+suffix}})).status,200);
@@ -5881,7 +5881,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    assert.equal((await salesV2("ReopenDeal",viewer,{...reopen,owner:actorOwner})).status,403);
    assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=?","tenant-a",lastDeal))[0].n,before);
    const reopened=await salesV2("ReopenDeal",admin,{...reopen,owner:actorOwner});
-   assert.equal(reopened.status,200,describeProtobuf(reopened.body));
+   assert.equal(reopened.status,200,formatRpcFailure(reopened));
    assert.equal(reopened.body.deal?.version,3n);
    assert.equal(reopened.body.deal?.owner?.owner.value,actorOwner.owner.value);
    assert.equal((await salesV2("ReopenDeal",admin,{...reopen,owner:actorOwner})).body.receipt?.replayed,true);
@@ -5927,7 +5927,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    const configuration={name:"Coverage root "+suffix,defaultOwner:primary};
    const rootCreate={territoryId:root,configuration,precondition:pre("root")};
    const created=await salesV2("CreateTerritory",admin,rootCreate);
-   assert.equal(created.status,200,describeProtobuf(created.body));
+   assert.equal(created.status,200,formatRpcFailure(created));
    assert.equal(created.body.territory?.version,1n);
    assert.equal((await salesV2("CreateTerritory",admin,rootCreate)).body.receipt?.replayed,true);
    const childConfig={name:"Coverage child "+suffix,parentId:root,defaultOwner:primary};
@@ -5947,7 +5947,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    const assignmentInput={accountId,configuration:assignmentConfig,precondition:pre("assignment")};
    assert.equal((await salesV2("GetSalesAccountAssignment",viewer,{accountId})).body.assignment,undefined);
    const assignment=await salesV2("CreateSalesAccountAssignment",admin,assignmentInput);
-   assert.equal(assignment.status,200,describeProtobuf(assignment.body));
+   assert.equal(assignment.status,200,formatRpcFailure(assignment));
    assert.equal(assignment.body.assignment?.version,1n);
    assert.equal((await salesV2("CreateSalesAccountAssignment",admin,assignmentInput)).body.receipt?.replayed,true);
    const aRead=await salesV2("GetSalesAccountAssignment",viewer,{accountId,receiptIdempotencyKey:assignmentInput.precondition.idempotencyKey});
@@ -5973,7 +5973,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    }finally{await sql("DROP TRIGGER fixture_fail_coverage_audit");}
    const archived=await salesV2("UpdateSalesAccountAssignment",admin,{accountId,
      configuration:{...assignmentConfig,archived:true},precondition:pre("archive-assignment",1n)});
-   assert.equal(archived.status,200,describeProtobuf(archived.body));
+   assert.equal(archived.status,200,formatRpcFailure(archived));
    assert.equal(archived.body.assignment?.version,2n);
    assert.equal((await salesV2("UpdateSalesAccountAssignment",admin,{accountId,
      configuration:assignmentConfig,precondition:pre("stale",1n)})).status,409);
@@ -6022,7 +6022,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    const pre=(label,version)=>({idempotencyKey:"routing-"+label+"-"+suffix,...(version===undefined?{}:{expectedVersion:version})});
    const call=async(method,identity,input,status=200)=>{
      const response=await salesV2(method,identity,input);
-     assert.equal(response.status,status,method+": "+describeProtobuf(response.body));
+     assert.equal(response.status,status,method+": "+formatRpcFailure(response));
      return response.body;
    };
    const revision=async tenant=>BigInt((await sql("SELECT CAST(COALESCE((SELECT revision FROM crm_sales_forecast_revisions WHERE tenant=?),0) AS TEXT) AS revision",tenant))[0].revision);
@@ -6567,12 +6567,12 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
        salesV2("UpdateDeal",admin,{dealId:fixtureId(openScale),probabilityBasisPoints:1000,
          precondition:pre("open-scale-race",1n)})
      ]);
-     assert.equal(mutation.status,200,describeProtobuf(mutation.body));
+     assert.equal(mutation.status,200,formatRpcFailure(mutation));
      assert.equal(mutation.body.deal.version,2n);
      assert.equal(mutation.body.deal.probabilityBasisPoints,1000);
      assert.equal(await revision("tenant-a"),raceFence+2n);
      const newWeight=weightedAmount-1001n*4000n;
-     assert.ok([200,409].includes(race.status),describeProtobuf(race.body));
+     assert.ok([200,409].includes(race.status),formatRpcFailure(race));
      if(race.status===200)assert.ok([String(weightedAmount),String(newWeight)].includes(race.body.report.forecast.weightedMinorUnitsTimesBasisPoints),"mixed capture");
      else assert.match(race.body.message,/SALES_FORECAST_SNAPSHOT_CHANGED/);
      assert.equal((await call("PreviewSalesPerformanceReport",viewer,captureInput)).report.forecast.weightedMinorUnitsTimesBasisPoints,String(newWeight));
@@ -6594,10 +6594,10 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      console.log(JSON.stringify({event:"crm.native-history-industrial-scale",result:"PASS",
        deals:String(expectedHistory),page_size:5,exact_membership:true,fenced_detail:true}));
      const oversized=await salesV2("PreviewSalesPerformanceReport",viewer,captureInput);
-     assert.equal(oversized.status,429,describeProtobuf(oversized.body));
+     assert.equal(oversized.status,429,formatRpcFailure(oversized));
      assert.match(oversized.body.message,/SALES_FORECAST_CAPTURE_CAPACITY/);
      const refused=await salesV2("SaveSalesPerformanceReport",admin,{...reportIntent,reportId:capacityReportId,precondition:pre("capacity-report")});
-     assert.equal(refused.status,429,describeProtobuf(refused.body));
+     assert.equal(refused.status,429,formatRpcFailure(refused));
      assert.equal((await sql("SELECT COUNT(*) n FROM crm_sales_performance_reports WHERE tenant=? AND id=?","tenant-a",capacityReportId))[0].n,0);
      assert.equal((await sql("SELECT COUNT(*) n FROM crm_sales_performance_forecast_sources WHERE tenant=? AND report_id=?","tenant-a",capacityReportId))[0].n,0);
      assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=?","tenant-a",capacityReportId))[0].n,0);
@@ -6665,22 +6665,22 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    assert.equal((await memberV2("ProvisionMember",admin,{email,role:1,precondition:pre("member")})).status,200);
    const pipeline=await salesV2("CreatePipeline",admin,{pipelineId:pid,name:"Opportunity QA",
      stages:[{stageId:"lead",name:"Lead",probabilityBasisPoints:1000},{stageId:"qualified",name:"Qualified",probabilityBasisPoints:5000}],precondition:pre("pipeline")});
-   assert.equal(pipeline.status,200,describeProtobuf(pipeline.body));
+   assert.equal(pipeline.status,200,formatRpcFailure(pipeline));
    const deal=await salesV2("CreateDeal",admin,{dealId:id,name:"Opportunity QA",accountId,
      stage:{pipelineId:pid,stageId:"lead"},precondition:pre("deal")});
-   assert.equal(deal.status,200,describeProtobuf(deal.body));
+   assert.equal(deal.status,200,formatRpcFailure(deal));
    const grant=(role,version,key)=>({dealId:id,email,...(role===undefined?{}:{role}),precondition:pre(key,version)});
    const update=(version,key)=>({dealId:id,name:{operation:{case:"set",value:"Opportunity "+key}},precondition:pre(key,version)});
    const lead=await salesV2("SetOpportunityParticipant",admin,grant(3,1n,"lead"));
-   assert.equal(lead.status,200,describeProtobuf(lead.body));
+   assert.equal(lead.status,200,formatRpcFailure(lead));
    assert.equal(lead.body.deal.opportunityTeam[0].memberVersion,1n);
    const advance={dealId:id,targetStage:{pipelineId:pid,stageId:"qualified"},targetStatus:1,precondition:pre("move",2n)};
    const moved=await salesV2("AdvanceStage",token,advance);
-   assert.equal(moved.status,200,describeProtobuf(moved.body));
+   assert.equal(moved.status,200,formatRpcFailure(moved));
    assert.equal(moved.body.deal.stage.stageId,"qualified");
    assert.equal(moved.body.deal.version,3n);
    const moveReplay=await salesV2("AdvanceStage",token,advance);
-   assert.equal(moveReplay.status,200,describeProtobuf(moveReplay.body));
+   assert.equal(moveReplay.status,200,formatRpcFailure(moveReplay));
    assert.equal(moveReplay.body.receipt.replayed,true);
    assert.equal((await sql("SELECT COUNT(*) n FROM crm_sales_link_delivery_records WHERE tenant=? AND deal_id=?","tenant-a",id))[0].n,1);
    assert.equal((await memberV2("UpdateMember",admin,{email,active:false,precondition:pre("deactivate",1n)})).status,200);
@@ -6689,7 +6689,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    assert.equal((await salesV2("GetDeal",token,{dealId:id})).body.capabilities.edit,false);
    assert.equal((await salesV2("UpdateDeal",token,update(3n,"stale-grant"))).status,403);
    const renewed=await salesV2("SetOpportunityParticipant",admin,grant(3,3n,"renew"));
-   assert.equal(renewed.status,200,describeProtobuf(renewed.body));
+   assert.equal(renewed.status,200,formatRpcFailure(renewed));
    assert.equal(renewed.body.deal.opportunityTeam[0].memberVersion,3n);
    const [revoke,write]=await Promise.all([
      salesV2("SetOpportunityParticipant",admin,grant(undefined,4n,"revoke")),
@@ -6699,7 +6699,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    assert.ok([403,409].includes((revoke.status===200?write:revoke).status));
    if(write.status===200){
      const removed=await salesV2("SetOpportunityParticipant",admin,grant(undefined,5n,"revoke-after-race"));
-     assert.equal(removed.status,200,describeProtobuf(removed.body));
+     assert.equal(removed.status,200,formatRpcFailure(removed));
    }
    const final=(await salesV2("GetDeal",token,{dealId:id})).body;
    assert.equal(final.deal.opportunityTeam.length,0);
@@ -6719,13 +6719,13 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    const pre=(key,version)=>({idempotencyKey:"coord-"+key+"-"+suffix,...(version===undefined?{}:{expectedVersion:version})});
    for(const [key,email] of [["lead",leadEmail],["target",targetEmail],["outside",otherEmail]])assert.equal((await memberV2("ProvisionMember",admin,{email,role:1,precondition:pre(key)})).status,200);
    const team=await memberV2("CreateTeam",admin,{teamId:tid,name:"Coordinator "+suffix,roster:{memberEmails:[leadEmail,targetEmail]},precondition:pre("team")});
-   assert.equal(team.status,200,describeProtobuf(team.body));
+   assert.equal(team.status,200,formatRpcFailure(team));
    assert.equal((await memberV2("CreateTeam",admin,{teamId:otherTeam,name:"Outside "+suffix,roster:{memberEmails:[otherEmail]},precondition:pre("otherteam")})).status,200);
    const grant={teamId:tid,queueCoordinator:{email:leadEmail,enabled:true},precondition:pre("grant",1n)};
    assert.equal((await memberV2("UpdateTeam",lead,grant)).status,403);
    assert.equal((await memberV2("UpdateTeam",admin,{...grant,queueCoordinator:{email:otherEmail,enabled:true},precondition:pre("foreign",1n)})).status,400);
    const granted=await memberV2("UpdateTeam",admin,grant);
-   assert.equal(granted.status,200,describeProtobuf(granted.body));
+   assert.equal(granted.status,200,formatRpcFailure(granted));
    assert.equal(granted.body.team.queueCoordinators[0].memberVersion,1n);
    const taskId="coord-task-"+suffix,dealId="coord-deal-"+suffix,taskRace="coord-race-"+suffix;
    const owner={owner:{case:"teamId",value:tid}},foreignOwner={owner:{case:"teamId",value:otherTeam}};
@@ -6757,11 +6757,11 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    assert.deepEqual(await effects(),beforeDenied);
    const command=taskMove(taskId,"move");
    const moved=await taskV2("UpdateTask",lead,command);
-   assert.equal(moved.status,200,describeProtobuf(moved.body));
+   assert.equal(moved.status,200,formatRpcFailure(moved));
    assert.equal(moved.body.task.owner.owner.value,targetEmail);
    assert.equal((await taskV2("UpdateTask",lead,command)).body.receipt.replayed,true);
    const movedDeal=await salesV2("UpdateDeal",lead,dealMove);
-   assert.equal(movedDeal.status,200,describeProtobuf(movedDeal.body));
+   assert.equal(movedDeal.status,200,formatRpcFailure(movedDeal));
    assert.equal(movedDeal.body.deal.owner.owner.value,targetEmail);
    assert.equal((await salesV2("UpdateDeal",lead,dealMove)).body.receipt.replayed,true);
    assert.equal((await salesV2("GetDeal",lead,{dealId})).body.teamDistribution,undefined);
@@ -6776,7 +6776,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    assert.equal((await taskV2("GetTask",lead,{taskId:taskRace})).body.teamDistribution,undefined);
    assert.equal((await taskV2("UpdateTask",lead,taskMove(taskRace,"stale-enrollment"))).status,403);
    const renewed=await memberV2("UpdateTeam",admin,{...grant,precondition:pre("renew",2n)});
-   assert.equal(renewed.status,200,describeProtobuf(renewed.body));
+   assert.equal(renewed.status,200,formatRpcFailure(renewed));
    assert.equal((await currentGrant()).memberVersion,3n);
    assert.equal((await currentGrant()).effective,true);
    const roster=async(emails,key,version)=>memberV2("UpdateTeam",admin,{teamId:tid,roster:{memberEmails:emails},precondition:pre(key,version)});
@@ -6792,8 +6792,8 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    scope=(await taskV2("GetTask",lead,{taskId:taskRace})).body.teamDistribution.scope;
    const revoke={teamId:tid,queueCoordinator:{email:leadEmail,enabled:false},precondition:pre("revoke",8n)};
    const [removed,race]=await Promise.all([memberV2("UpdateTeam",admin,revoke),taskV2("UpdateTask",lead,taskMove(taskRace,"race"))]);
-   assert.equal(removed.status,200,describeProtobuf(removed.body));
-   assert.ok([200,403,409].includes(race.status),describeProtobuf(race.body));
+   assert.equal(removed.status,200,formatRpcFailure(removed));
+   assert.ok([200,403,409].includes(race.status),formatRpcFailure(race));
    assert.equal((await taskV2("UpdateTask",lead,command)).status,403);
    assert.equal((await salesV2("UpdateDeal",lead,dealMove)).status,403);
    assert.equal((await memberV2("GetTeam",viewer,{teamId:tid})).body.team.queueCoordinators.length,0);
@@ -6829,7 +6829,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      ...put,trigger:2,precondition:rkey("unsupported")
    })).status,400);
    const created=await automationV2("PutAutomationRule",admin,put);
-   assert.equal(created.status,200,describeProtobuf(created.body));
+   assert.equal(created.status,200,formatRpcFailure(created));
    assert.equal(created.body.rule.version,1n);
    assert.equal((await automationV2("PutAutomationRule",admin,put)).body.receipt.replayed,true);
    assert.equal((await automationV2("PutAutomationRule",admin,{
@@ -6863,7 +6863,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    const startCount=(await sql("SELECT COUNT(*) n FROM crm_activity_task_records WHERE tenant=? AND id LIKE 'automation-%'",
      "tenant-a"))[0].n;
    const executed=await automationV2("RunInteractionAutomation",admin,firstRun);
-   assert.equal(executed.status,200,describeProtobuf(executed.body));
+   assert.equal(executed.status,200,formatRpcFailure(executed));
    assert.equal(executed.body.receipt.resourceVersion,1n);
    assert.equal(executed.body.run.status,2);
    assert.equal(executed.body.run.disposition,1);
@@ -6877,7 +6877,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    assert.equal(task.status,1);
    assert.ok(task.dueAt.seconds>0n);
    const replay=await automationV2("RunInteractionAutomation",admin,firstRun);
-   assert.equal(replay.status,200,describeProtobuf(replay.body));
+   assert.equal(replay.status,200,formatRpcFailure(replay));
    assert.equal(replay.body.receipt.replayed,true);
    assert.equal(replay.body.run.taskId,taskId);
    assert.equal((await sql(
@@ -6911,7 +6911,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    })).status,200);
    const alias=runInput(sourceId,"run-alias");
    const aliasReplay=await automationV2("RunInteractionAutomation",admin,alias);
-   assert.equal(aliasReplay.status,200,describeProtobuf(aliasReplay.body));
+   assert.equal(aliasReplay.status,200,formatRpcFailure(aliasReplay));
    assert.equal(aliasReplay.body.receipt.replayed,true);
    assert.equal(aliasReplay.body.run.taskId,taskId);
    assert.equal((await automationV2("GetAutomationRun",viewer,{
@@ -6949,7 +6949,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      ...runInput(second,"wrong-pinned-version"),expectedRuleVersion:2n
    })).status,400);
    const recovered=await automationV2("RunInteractionAutomation",admin,secondInput);
-   assert.equal(recovered.status,200,describeProtobuf(recovered.body));
+   assert.equal(recovered.status,200,formatRpcFailure(recovered));
    assert.equal(recovered.body.run.status,2);
    assert.equal((await automationV2("RunInteractionAutomation",admin,secondInput))
      .body.receipt.replayed,true);
@@ -6991,7 +6991,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      ...cancelInput,precondition:exhaustedInput.precondition
    })).status,409);
    const cancelled=await automationV2("CancelAutomationRun",admin,cancelInput);
-   assert.equal(cancelled.status,200,describeProtobuf(cancelled.body));
+   assert.equal(cancelled.status,200,formatRpcFailure(cancelled));
    assert.equal(cancelled.body.run.status,3);
    assert.equal(cancelled.body.run.disposition,9);
    assert.equal(cancelled.body.run.canCancel,false);
@@ -7079,7 +7079,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    const disabled=await automationV2("PutAutomationRule",admin,{
      ...put,enabled:false,precondition:rkey("disable",1n)
    });
-   assert.equal(disabled.status,200,describeProtobuf(disabled.body));
+   assert.equal(disabled.status,200,formatRpcFailure(disabled));
    assert.equal(disabled.body.rule.version,2n);
    const terminal=await automationV2("GetAutomationRun",viewer,{ruleId,interactionId:blocked});
    assert.equal(terminal.body.run.disposition,4);
@@ -7089,7 +7089,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    assert.equal(reconcileAfterDisable.body.run.disposition,5);
    assert.equal((await automationV2("RunInteractionAutomation",viewer,reconcileInput)).status,403);
    const reconciled=await automationV2("RunInteractionAutomation",admin,reconcileInput);
-   assert.equal(reconciled.status,200,describeProtobuf(reconciled.body));
+   assert.equal(reconciled.status,200,formatRpcFailure(reconciled));
    assert.equal(reconciled.body.run.disposition,1);
    assert.equal(reconciled.body.receipt.replayed,true);
    assert.equal((await automationV2("GetAutomationRun",viewer,{

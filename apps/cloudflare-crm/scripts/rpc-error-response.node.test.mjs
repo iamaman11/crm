@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { readRpcError } from "./rpc-error-response.mts";
+import { formatRpcFailure, readRpcError } from "./rpc-error-response.mts";
 
 test("non-Connect RPC failures report request metadata without response data", async t => {
   const log = t.mock.method(console, "error", () => {});
@@ -28,4 +28,17 @@ test("non-Connect RPC failures report request metadata without response data", a
     content_type: "text/plain",
     request_id: "request-123",
   });
+});
+
+test("RPC assertions expose only status and a valid correlation ID", () => {
+  const marker = "private-crm-fixture-marker";
+  const requestId = "561679ff-b6e2-4c5b-bdf4-428278f2e547";
+  const response = {
+    status: 403,
+    headers: new Headers({"x-request-id": requestId}),
+    body: {message: marker},
+  };
+  assert.equal(formatRpcFailure(response), `status=403, request_id=${requestId}`);
+  response.headers.set("x-request-id", marker);
+  assert.equal(formatRpcFailure(response), "status=403, request_id=missing");
 });
