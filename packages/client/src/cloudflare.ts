@@ -114,10 +114,14 @@ export function decodeCrmError(error: unknown): CrmFailure {
   };
   // Only locally translated domain and field details reach the UI.
   const domainExplanations: Readonly<Record<string, string>> = {
+    SALES_DEAL_NAME_INVALID: "Введите название сделки.",
     SALES_DEAL_VERSION_CONFLICT: explanations[Code.Aborted]!,
     SALES_PIPELINE_VERSION_CONFLICT: explanations[Code.Aborted]!,
   };
-  const fieldNames: Readonly<Record<string, string>> = {"amount.currency_code":"Валюта"};
+  const fieldNames: Readonly<Record<string, string>> = {
+    "deal.name":"Название сделки",
+    "amount.currency_code":"Валюта",
+  };
   const domainCode = correlated && Object.hasOwn(domainExplanations, detail.domainCode) ? detail.domainCode : undefined;
   const fieldViolations = correlated ? detail.fieldViolations.flatMap(field =>
     Object.hasOwn(fieldNames, field.fieldPath)

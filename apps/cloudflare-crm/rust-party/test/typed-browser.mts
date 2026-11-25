@@ -965,7 +965,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const invalidCreate=page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(DealService.method.createDeal))&&r.request().method()==="POST");
    await page.getByRole("button",{name:"Сохранить сделку",exact:true}).click();
    assert.equal((await invalidCreate).status(),400);
-   await expect(page.getByRole("dialog").getByText(/^deal\.name:/)).toBeVisible();
+   await expect(page.getByRole("dialog").getByText("Название сделки: Проверьте значение.",{exact:true})).toBeVisible();
    await page.getByLabel("Название сделки",{exact:true}).fill("Browser Deal "+runId);
    await mutation(page.getByRole("button",{name:"Сохранить сделку",exact:true}),DealService.method.createDeal);
    const dealId=await firstId("crm_sales_deal_records","name","Browser Deal "+runId);

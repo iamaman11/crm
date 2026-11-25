@@ -95,6 +95,18 @@ describe("S1 generated mutation outcomes and correlation",()=>{
    expect(failure.text).toContain(id);
    expect(failure.text).not.toContain("secret");
  });
+ it("localizes the typed Deal name violation without exposing server text",()=>{
+   const detail=create(DomainErrorDetailSchema,{
+     domainCode:"SALES_DEAL_NAME_INVALID",requestId:"attempt-id",
+     commitOutcome:MutationCommitOutcome.REJECTED,
+     fieldViolations:[{fieldPath:"deal.name",description:"secret"}]});
+   const failure=decodeCrmError(new ConnectError("secret",Code.InvalidArgument,meta,
+     [{desc:DomainErrorDetailSchema,value:detail}]));
+   expect(failure).toMatchObject({outcome:"rejected",domainCode:"SALES_DEAL_NAME_INVALID",
+     fieldViolations:[{fieldPath:"Название сделки",description:"Проверьте значение."}]});
+   expect(failure.text).toContain("Введите название сделки.");
+   expect(JSON.stringify(failure)).not.toContain("secret");
+ });
  it("does not expose untrusted messages or field details",()=>{
    const detail=create(DomainErrorDetailSchema,{domainCode:"PRIVATE_VALUE",requestId:"attempt-id",
      commitOutcome:MutationCommitOutcome.REJECTED,
