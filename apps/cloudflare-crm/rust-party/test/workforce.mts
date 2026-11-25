@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { MemberService } from "../../../../packages/client/gen/crm/access/v2/member_pb.js";
 import { TaskService } from "../../../../packages/client/gen/crm/activities/v2/task_pb.js";
+import { DomainErrorDetailSchema, MutationCommitOutcome } from "../../../../packages/client/gen/crm/core/v2/operation_pb.js";
 import { binaryMemberV2, binaryTaskV2, decodeMemberV2, decodeTaskV2 } from "../../../../packages/client/test/cloudflare-binary-rpc-fixture.ts";
-import { fixtureRpc, fixtureRpcError, fixtureRpcPath } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
+import { decodeFixtureDetail, fixtureRpc, fixtureRpcError, fixtureRpcPath } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
 import type { RpcDispatch } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
-import { record } from "../../scripts/json-boundary.mts";
+import { record, records } from "../../scripts/json-boundary.mts";
 import { formatRpcFailure } from "../../scripts/rpc-error-response.mts";
 
 type WorkforceFixture = {
@@ -54,8 +55,13 @@ export async function verifyWorkforce({dispatch,sql,jwt,accountId,admin,viewer,t
  assert.equal((await fixtureRpc(dispatch,member.provisionMember,tenantB,{
    ...staffCreate,precondition:{idempotencyKey:"sk07-member-tenant-b"}
  })).status,200,"tenant B may independently invite an email ONLY if globally unused");
- const staffWrongTenant=(await fixtureRpc(dispatch,member.provisionMember,admin,staffCreate));
+ const staffWrongTenant=await fixtureRpcError(dispatch,member.provisionMember,admin,staffCreate);
  assert.equal(staffWrongTenant.status,409,"an email enrolled by tenant B cannot be reparented");
+ assert.equal(staffWrongTenant.body.code,"aborted");
+ const staffConflict=decodeFixtureDetail(DomainErrorDetailSchema,records(record(staffWrongTenant.body).details));
+ assert.equal(staffConflict.domainCode,"ACCESS_MEMBER_ALREADY_EXISTS");
+ assert.equal(staffConflict.commitOutcome,MutationCommitOutcome.REJECTED);
+ assert.equal(staffConflict.requestId,staffWrongTenant.headers.get("x-request-id"));
  // A second independent human is provisioned inside tenant A, not minted as JWT.
  const assignee="native-assignee@example.test";
  const staffInput={email:assignee,role:1,
