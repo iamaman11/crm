@@ -1,5 +1,5 @@
 import {useCallback,useState} from "react";
-import {Button,Card,RecordPanel,FormGrid,PageHeader,SelectField,TextField} from "@ultimate-crm/ui";
+import {Button,Card,FeedbackPanel,RecordPanel,FormGrid,PageHeader,SelectField,TextField} from "@ultimate-crm/ui";
 import type {PartyRelationship} from "@ultimate-crm/client/cloudflare";
 import {api,field,newId,timestamp,dateText} from "./api";
 import {RelationshipDirectionality,RelationshipStatus} from "@ultimate-crm/client/cloudflare";
@@ -31,14 +31,15 @@ export function RelationshipScreen({initialPartyId="",focusedRelationshipId=""}:
     const relationship=(await api.relationships.getPartyRelationship({
       relationshipId:focusedRelationshipId
     },{signal})).relationship;
-    // Both ends of a directional/reciprocal relation are legitimate Party roots.
-    if(!relationship||initialPartyId&&relationship.fromPartyId!==initialPartyId&&
-      relationship.toPartyId!==initialPartyId)
-      throw Error("Связь не относится к выбранному участнику");
     return relationship;
   },[focusedRelationshipId,initialPartyId]));
   const refresh=async()=>{await Promise.all([query.reload(),focused.reload()]);};
-  const visible=focusedRelationshipId?(focused.data?[focused.data]:[]):query.data?.relationships??[];
+  // Either endpoint is a valid Party root, but unrelated routes stay empty.
+  const scopedRelationship=focused.data&&(!initialPartyId||
+    focused.data.fromPartyId===initialPartyId||focused.data.toPartyId===initialPartyId)
+    ?focused.data:undefined;
+  const scopeMismatch=!!focusedRelationshipId&&!focused.busy&&!focused.error&&!scopedRelationship;
+  const visible=focusedRelationshipId?(scopedRelationship?[scopedRelationship]:[]):query.data?.relationships??[];
   const mutation=useMutation({
     storageKey:"crm.relationship.pending.v1",
     lookup:async({resourceId,key},signal)=>(await api.relationships.getPartyRelationship({
@@ -62,6 +63,7 @@ export function RelationshipScreen({initialPartyId="",focusedRelationshipId=""}:
     </SelectField>
     </>}
     <QueryNotice query={focusedRelationshipId?focused:query}/>
+    {scopeMismatch&&<FeedbackPanel tone="danger" title="Связь не относится к выбранному участнику"/>}
     {visible.map(r=><Card key={r.relationshipId} title={r.type?.code??"Связь"}>
       <p>{r.type?.fromRole}: <PartyName partyId={r.fromPartyId}/> → {r.type?.toRole}: <PartyName partyId={r.toPartyId}/></p>
       <p>{r.status===RelationshipStatus.ACTIVE?"Активна":r.status===RelationshipStatus.INACTIVE?"Неактивна":"Неизвестный статус"} · с {dateText(r.validFrom)} до {dateText(r.validUntil)}</p>

@@ -714,13 +714,21 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    checkpoint("M1-06 Account360 direct Contact/Relationship Get, exact named links, reload and Back");
    // A real contact for another Party (or a real relation between other
    // Parties) must never be rendered as belonging to the scoped Party.
+   const wrongPartyContactRead=page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(ContactPointService.method.getContactPoint))&&
+     r.request().method()==="POST");
    await navigate("contacts?partyId="+otherPartyId+"&contactPointId="+browserSalesContactId,
      "Карточка контакта");
+   assert.equal((await wrongPartyContactRead).status(),200,
+     "same-tenant Contact Get succeeds but the unrelated Party must not render it");
    await page.getByRole("heading",{name:/Контакт не принадлежит выбранному участнику/}).waitFor();
    await expect(page.getByRole("heading",{name:"browser-"+runId+"@example.org",exact:true}))
      .toHaveCount(0);
+   const wrongPartyRelationshipRead=page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(PartyRelationshipService.method.getPartyRelationship))&&
+     r.request().method()==="POST");
    await navigate("relationships?partyId="+accountId+"&relationshipId="+linkedRelationshipId,
      "Карточка связи");
+   assert.equal((await wrongPartyRelationshipRead).status(),200,
+     "same-tenant Relationship Get succeeds but the unrelated Party must not render it");
    await page.getByRole("heading",{name:/Связь не относится к выбранному участнику/}).waitFor();
    await expect(page.getByRole("heading",{name:"browser_relation_"+runId,exact:true}))
      .toHaveCount(0);

@@ -1,5 +1,5 @@
 import {useCallback,useState} from "react";
-import {Button,Card,RecordPanel,FormGrid,PageHeader,SelectField,TextField} from "@ultimate-crm/ui";
+import {Button,Card,FeedbackPanel,RecordPanel,FormGrid,PageHeader,SelectField,TextField} from "@ultimate-crm/ui";
 import type {ContactPoint} from "@ultimate-crm/client/cloudflare";
 import {api,field,newId,timestamp,dateText} from "./api";
 import {ContactPointKind,ContactPointStatus} from "@ultimate-crm/client/cloudflare";
@@ -34,13 +34,15 @@ export function ContactScreen({initialPartyId="",focusedContactPointId=""}:{
     const contact=(await api.contactPoints.getContactPoint({
       contactPointId:focusedContactPointId
     },{signal})).contactPoint;
-    // A valid record for an unrelated Party is not in this scoped context.
-    if(!contact||initialPartyId&&contact.partyId!==initialPartyId)
-      throw Error("Контакт не принадлежит выбранному участнику");
     return contact;
   },[focusedContactPointId,initialPartyId]));
   const refresh=async()=>{await Promise.all([query.reload(),focused.reload()]);};
-  const visible=focusedContactPointId?(focused.data?[focused.data]:[]):query.data?.contactPoints??[];
+  // Do not expose a successful Get under an unrelated Party route.
+  // Scope validation is presentation state, not a generic Connect failure.
+  const scopedContact=focused.data&&(!initialPartyId||focused.data.partyId===initialPartyId)
+    ?focused.data:undefined;
+  const scopeMismatch=!!focusedContactPointId&&!focused.busy&&!focused.error&&!scopedContact;
+  const visible=focusedContactPointId?(scopedContact?[scopedContact]:[]):query.data?.contactPoints??[];
   const mutation=useMutation({
     storageKey:"crm.contact.pending.v1",
     lookup:async({resourceId,key},signal)=>(await api.contactPoints.getContactPoint({
@@ -72,6 +74,7 @@ export function ContactScreen({initialPartyId="",focusedContactPointId=""}:{
     </SelectField>
     </>}
     <QueryNotice query={focusedContactPointId?focused:query}/>
+    {scopeMismatch&&<FeedbackPanel tone="danger" title="Контакт не принадлежит выбранному участнику"/>}
     {visible.map(p=><Card key={p.contactPointId} title={p.displayValue}>
       <p>{contactKindLabel(p.kind)} · Участник: <PartyName partyId={p.partyId}/> · {p.status===ContactPointStatus.ACTIVE?"Активен":p.status===ContactPointStatus.INACTIVE?"Неактивен":"Неизвестный статус"}{p.preferred?" · предпочтительный":""}</p>
       <p>{p.verified?"Подтверждён доверенными данными":"Не подтверждён"} · {p.normalizedValue}</p>
