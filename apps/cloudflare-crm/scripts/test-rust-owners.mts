@@ -1,6 +1,7 @@
 // Cargo owns dependency identity and feature resolution; this check consumes
 // its native JSON output and the existing canonical module report.
 import assert from "node:assert/strict";
+import {record, records, string, strings} from "./json-boundary.mts";
 import {execFileSync} from "node:child_process";
 import {readFileSync, writeFileSync} from "node:fs";
 import {dirname, resolve} from "node:path";
@@ -9,25 +10,6 @@ import {fileURLToPath} from "node:url";
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const worker = resolve(root, "apps/cloudflare-crm/rust-party");
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-function record(value: unknown): Record<string, unknown> {
-  assert(isRecord(value), "Expected JSON object");
-  return value;
-}
-function records(value: unknown): Record<string, unknown>[] {
-  assert(Array.isArray(value), "Expected JSON array");
-  return value.map(record);
-}
-function string(value: unknown): string {
-  assert(typeof value === "string", "Expected JSON string");
-  return value;
-}
-function strings(value: unknown): string[] {
-  assert(Array.isArray(value), "Expected JSON string array");
-  return value.map(string);
-}
 function indexed(rows: Record<string, unknown>[]): Map<string, Record<string, unknown>> {
   const result = new Map<string, Record<string, unknown>>();
   for (const row of rows) {
@@ -140,7 +122,9 @@ function main(): void {
   const report: unknown = JSON.parse(readFileSync(reportPath, "utf8"));
   // Preserve both existing metadata invocations and use the production result
   // for owner planning too, rather than independently parsing Cargo.toml.
-  const production = metadata("native");
+  const metadataPath = process.env.CRM_PRODUCTION_METADATA_FILE;
+  const production: unknown = metadataPath === undefined ? metadata("native") :
+    JSON.parse(readFileSync(metadataPath, "utf8"));
   const owners = ownerPlan(report, production, root, worker);
   cargo(["test", "--locked", "--workspace", "--all-targets"]);
   cargo(["test", "--locked", "-p", "crm-proto-contracts", "--no-default-features",

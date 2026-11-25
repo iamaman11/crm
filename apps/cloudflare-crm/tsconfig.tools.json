@@ -10,7 +10,8 @@
       "node"
     ],
     "noEmit": true,
-    "erasableSyntaxOnly": true
+    "erasableSyntaxOnly": true,
+    "allowImportingTsExtensions": true
   },
   "include": [
     "scripts/**/*.mts",

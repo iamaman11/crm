@@ -1,5 +1,6 @@
 // Native command entry point: only shared artifact lifetime and unique fail-closed checks.
 import {execFileSync} from "node:child_process";
+import {isRecord} from "./json-boundary.mts";
 import {globSync, mkdtempSync, rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
@@ -8,10 +9,6 @@ import {performance} from "node:perf_hooks";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const node = process.execPath;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function checkTsconfig(project: string): void {
   const output = execFileSync("pnpm", ["exec", "tsc", "--project", project, "--showConfig"],
@@ -62,9 +59,9 @@ function checkWeb(): void {
           elapsed_ms: Math.round(performance.now() - started)}));
       }
     }
-    // Transitional local fallback; CI provides the canonical report once.
+    // CI provides the validated report once; local development uses the same native producer.
     if (process.env.CRM_MODULE_COVERAGE_REPORT === undefined) {
-      run("python", "scripts/crm-module-coverage.py", "--output", report);
+      run(node, "apps/cloudflare-crm/scripts/module-coverage.mts", report);
     }
     run("pnpm", "web:contract:lint");
     run("pnpm", "exec", "buf", "build", "proto", "-o", image);

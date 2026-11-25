@@ -66,7 +66,8 @@ jobs:
           TIMEFORMAT='crm.governance unit-tests elapsed_seconds=%3R'
           time python -m unittest tests.test_affected_scope tests.test_crm_module_coverage tests.test_module_manifest_validation
           TIMEFORMAT='crm.governance packet-check elapsed_seconds=%3R'
-          time python scripts/repo.py packet-check --base origin/dev --before "$PUSH_BEFORE"
+          time python scripts/repo.py packet-check --base origin/dev --before "$PUSH_BEFORE" --json > /tmp/crm-legacy-packet.json
+          cat /tmp/crm-legacy-packet.json
           TIMEFORMAT='crm.governance module-coverage elapsed_seconds=%3R'
           time python scripts/crm-module-coverage.py --output /tmp/crm-module-coverage.json
           echo "CRM_MODULE_COVERAGE_REPORT=/tmp/crm-module-coverage.json" >> "$GITHUB_ENV"
@@ -178,29 +179,24 @@ jobs:
           npm install --global pnpm@12.21.0
           pnpm --version | grep -Fx '12.21.0'
           pnpm install --frozen-lockfile
-      # Temporary #486 prerequisite. Generate candidate dependency resolution
-      # using the pinned pnpm in a disposable worktree, never the build tree.
-      - name: Generate native governance dependency lock candidate
+      # Temporary #486 migration parity. The old checks still run, and the
+      # native report replaces their output only after exact equality.
+      - name: Prove native manifest and packet governance parity
+        env:
+          PUSH_BEFORE: ${{ github.event.before }}
         shell: bash
         run: |
           set -euo pipefail
-          scratch="$(mktemp -d)"
-          trap 'git worktree remove --force "$scratch/repo" 2>/dev/null || true; rm -rf "$scratch"' EXIT
-          git worktree add --detach "$scratch/repo" "$GITHUB_SHA"
-          (
-            cd "$scratch/repo"
-            pnpm --version | grep -Fx '12.21.0'
-            pnpm add --workspace-root --save-dev --save-exact --lockfile-only --ignore-scripts yaml@2.9.0 ajv@8.20.0 ajv-formats@3.0.1
-            pnpm install --lockfile-only --frozen-lockfile --ignore-scripts
-            git diff --check
-            test "$(git diff --name-only)" = "$(printf 'package.json\npnpm-lock.yaml')"
-            test -z "$(git ls-files --others --exclude-standard)"
-            echo 'CRM_GOVERNANCE_LOCK_PATCH_BEGIN'
-            git -c color.ui=never diff --no-ext-diff --binary -- package.json pnpm-lock.yaml
-            echo 'CRM_GOVERNANCE_LOCK_PATCH_END'
-            sha256sum package.json pnpm-lock.yaml
-          )
-          git diff --exit-code -- package.json pnpm-lock.yaml pnpm-workspace.yaml
+          pnpm web:typecheck:tools
+          python - <<'PY' > /tmp/crm-legacy-manifest-digests.json
+          import json
+          from pathlib import Path
+          from scripts.validate_module_manifests import canonical_digest, strict_yaml_load
+          paths = sorted(Path("modules").glob("*/module.yaml"))
+          print(json.dumps({p.as_posix(): canonical_digest(strict_yaml_load(p.read_text(encoding="utf8"), str(p))) for p in paths}))
+          PY
+          node apps/cloudflare-crm/scripts/governance-parity.mts "$PUSH_BEFORE" /tmp/crm-legacy-packet.json /tmp/crm-module-coverage.json /tmp/crm-legacy-manifest-digests.json /tmp/crm-production-metadata.json
+          echo "CRM_PRODUCTION_METADATA_FILE=/tmp/crm-production-metadata.json" >> "$GITHUB_ENV"
       # Report actual compiler-cache hits/misses, rather than assuming cache speedup.
       # The Mozilla action also emits end-of-job statistics for the complete job.
       # Clippy checks WASM compilation, so a separate cargo check repeats the work.
