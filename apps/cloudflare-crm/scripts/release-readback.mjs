@@ -221,48 +221,4 @@ export function verifyTracePrivacySettings(observability) {
 
 // One bounded native Cloudflare readback for exact request correlation, D1
 // spans and privacy. Every snapshot is checked, including late-arriving spans.
-// The existing phase deadline is authoritative; no earlier round-count cutoff.
-export async function waitForNativeTelemetry({
-  requests,mutationIds,probes,liveVersion,readSnapshot,
-  pause=ms=>new Promise(resolve=>setTimeout(resolve,ms)),
-  log=entry=>console.log(JSON.stringify(entry)),now=Date.now,deadlineMs=120000
-}){
-  const pending=new Map(requests),requestTraces=new Map(),dbTraces=new Set();
-  const started=now(),deadline=started+deadlineMs;
-  let round=0,missing=[...mutationIds];
-  log({event:"crm.telemetry-readback-scope",requests:pending.size,
-    page_limit:2000,deadline_ms:deadlineMs});
-  while((pending.size||missing.length)&&now()<deadline){
-    const events=await readSnapshot(deadline);
-    const serialized=JSON.stringify(events);
-    for(const probe of probes)
-      assert.ok(!serialized.includes(probe.value),"Synthetic value leaked to native Cloudflare telemetry");
-    assert.ok(!events.some(event=>event.$metadata?.type==="cf-worker-event"),
-      "Unsafe automatic invocation log in CRM telemetry");
-    for(const event of events){
-      const spanTrace=event.source?.traceId??event.$metadata?.traceId;
-      if(typeof spanTrace==="string"&&event.$metadata?.type==="span"&&event.source?.db)
-        dbTraces.add(spanTrace);
-      const entry=pending.get(event.source?.request_id);
-      if(!entry||event.source?.event!=="crm.native.request"||
-        event.source?.operation!==entry.path||event.source?.status!==entry.status||
-        (event.source?.error_code??null)!==(entry.error_code??null)||
-        event.$workers?.scriptVersion?.id!==liveVersion)continue;
-      const traceId=event.$metadata?.traceId;
-      assert.match(traceId??"",/^[a-f0-9]{32}$/i);
-      requestTraces.set(entry.request_id,traceId);
-      pending.delete(entry.request_id);
-    }
-    missing=missing.filter(id=>!dbTraces.has(requestTraces.get(id)));
-    log({event:"crm.telemetry-readback-progress",round:++round,
-      accepted:requestTraces.size,still_missing:pending.size,
-      d1_mutation_spans:mutationIds.size-missing.length,still_missing_d1:missing.length,
-      elapsed_ms:now()-started});
-    if((pending.size||missing.length)&&now()<deadline)
-      await pause(Math.min(2000,deadline-now()));
-  }
-  assert.equal(pending.size,0,"Missing native Cloudflare traces: "+
-    [...pending.values()].map(item=>item.path).join(","));
-  assert.equal(missing.length,0,"Published mutations missing exact Cloudflare D1 spans");
-  return {verifiedD1:mutationIds.size};
-}
+export { waitForNativeTelemetry } from "./native-telemetry.mts";

@@ -7,11 +7,11 @@ import {dirname,join} from "node:path";
 import {fileURLToPath} from "node:url";
 import assert from "node:assert/strict";
 import {test} from "node:test";
-import {createFixtureDeal,dealCreationInput} from "../../../../packages/client/test/cloudflare-deal-fixture.ts";
+import {createFixtureDeal,dealCreationInput,updateFixtureDeal,dealUpdateInput} from "../../../../packages/client/test/cloudflare-deal-fixture.ts";
 import {readRpcError} from "../../scripts/rpc-error-response.mts";
 import {chromium} from "playwright";
 import {typedBrowser} from "./typed-browser.mjs";
-import {installUiDiagnostics,assertUiPanel} from "./ui-diagnostics.mjs";
+import {installUiDiagnostics,assertUiPanel} from "./ui-diagnostics.mts";
 import {binaryPartyV3,decodePartyV3,partyV3Path,
   binaryAccountV2,decodeAccountV2,accountV2Path,
   binaryContactV2,decodeContactV2,contactV2Path,
@@ -23,7 +23,7 @@ import {binaryPartyV3,decodePartyV3,partyV3Path,
   binaryQualityV2,decodeQualityV2,qualityV2Path,
   binaryIdentityV2,decodeIdentityV2,identityV2Path,
   binaryConsentV2,decodeConsentV2,consentV2Path,
-  binarySalesV2,decodeSalesV2,salesV2Path,describeSalesV2Method,
+  binarySalesV2,decodeSalesV2,salesV2Path,
   binaryPrivacyV2,decodePrivacyV2,privacyV2Path,
   binaryEnrichmentV2,decodeEnrichmentV2,enrichmentV2Path,
   binaryCsvV2,decodeCsvV2,csvV2Path,
@@ -2232,7 +2232,7 @@ assert.equal(invalidNameDetail.domainCode,"SALES_DEAL_NAME_INVALID");
 assert.equal(invalidNameDetail.commitOutcome,1);
 assert.equal(invalidNameDetail.requestId,invalidDealName.headers.get("x-request-id"));
 assert.equal(invalidNameDetail.fieldViolations[0].fieldPath,"deal.name");
-const salesCreated=await createFixtureDeal(describeSalesV2Method("CreateDeal"),rpcFetch,admin,saleCreate);
+const salesCreated=await createFixtureDeal(rpcFetch,admin,saleCreate);
 const saleReplayed=await salesV2("CreateDeal",admin,saleCreate);
 assert.equal(saleReplayed.status,200);
 assert.equal(saleReplayed.body.receipt?.replayed,true);
@@ -2498,30 +2498,12 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id=?"
     actor_scoped_receipt:true,revocation:true,member_version_pin:true,concurrent_cas:true,
     reopen_admin_only:true,tenant_isolation:true,history_audit_receipts:true}));
 }
-const updateSale={dealId,
-  name:{operation:{case:"set",value:"Updated Connect Deal"}},
-  amount:{operation:{case:"set",value:{minorUnits:98765n,currencyCode:"PLN"}}},
-  probabilityBasisPoints:6750,
-  primaryContactId:{operation:{case:"clear",value:true}},
-  expectedCloseDate:{operation:{case:"set",value:{year:2028,month:2,day:29}}},
-  precondition:{expectedVersion:1n,idempotencyKey:"connect-sales-update-main"}};
+const updateSale=dealUpdateInput(dealId);
 assert.equal((await salesV2("UpdateDeal",viewer,updateSale)).status,403);
 assert.equal((await salesV2("UpdateDeal",admin,{
   ...updateSale,precondition:{expectedVersion:100n,
     idempotencyKey:"connect-sales-stale-version"}})).status,409);
-const saleUpdated=await salesV2("UpdateDeal",knownService,updateSale);
-assert.equal(saleUpdated.status,200,describeProtobuf(saleUpdated.body));
-assert.equal(saleUpdated.body.deal?.name,"Updated Connect Deal");
-assert.equal(saleUpdated.body.deal?.amount?.minorUnits,98765n);
-assert.equal(saleUpdated.body.deal?.amount?.currencyCode,"PLN");
-assert.equal(saleUpdated.body.deal?.probabilityBasisPoints,6750);
-assert.equal(saleUpdated.body.deal?.primaryContactId,"");
-assert.equal(saleUpdated.body.deal?.expectedCloseDate?.year,2028);
-assert.equal(saleUpdated.body.deal?.expectedCloseDate?.month,2);
-assert.equal(saleUpdated.body.deal?.expectedCloseDate?.day,29);
-assert.ok(saleUpdated.body.deal?.updatedAt);
-assert.equal(saleUpdated.body.receipt?.resourceVersion,2n);
-assert.equal(saleUpdated.body.receipt?.replayed,false);
+const saleUpdated=await updateFixtureDeal(rpcFetch,knownService,updateSale);
 // A later record version is not the original command's receipt version.
 const originalAfterUpdate=await salesV2("GetDeal",admin,{dealId,
   receiptIdempotencyKey:saleCreate.precondition.idempotencyKey});

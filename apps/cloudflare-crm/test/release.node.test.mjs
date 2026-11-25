@@ -274,7 +274,7 @@ function run(mode,variant="valid"){
  const dir=mkdtempSync(join(tmpdir(),"crm-release-test-"));
  const app=join(dir,"apps/cloudflare-crm"),out=join(app,".release");
  mkdirSync(out,{recursive:true});mkdirSync(join(app,"e2e-evidence"));
- for(const name of ["deploy.mjs","release-readback.mjs"])
+ for(const name of ["deploy.mjs","release-readback.mjs","native-telemetry.mts","json-boundary.mts"])
    copyFileSync(new URL("../scripts/"+name,import.meta.url),join(dir,name));
  const save=(path,value)=>writeFileSync(path,JSON.stringify(value));
  if(variant!=="no-checkpoint"&&mode!=="deploy")save(join(out,"checkpoint.json"),{git_sha:sha,previous_sha:previous,d1_database:database});

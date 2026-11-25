@@ -30,7 +30,6 @@ const serviceWire=name=>{
    return item;
  };
  return {
-   method,
    path:methodName=>"/"+name+"/"+method(methodName).name,
    binary:(methodName,payload)=>{
      const input=method(methodName).input;
@@ -84,7 +83,6 @@ export const consentV2Path=consentV2.path;
 export const binaryConsentV2=consentV2.binary;
 export const decodeConsentV2=consentV2.decode;
 const salesV2=serviceWire("crm.sales.v2.DealService");
-export const describeSalesV2Method=salesV2.method;
 export const salesV2Path=salesV2.path;
 export const binarySalesV2=salesV2.binary;
 export const decodeSalesV2=salesV2.decode;

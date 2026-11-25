@@ -6,7 +6,7 @@ import {mkdirSync,writeFileSync} from "node:fs";
 import {resolve} from "node:path";
 import {readFile} from "node:fs/promises";
 import {fileURLToPath} from "node:url";
-import {installUiDiagnostics,assertUiPanel} from "./ui-diagnostics.mjs";
+import {installUiDiagnostics,assertUiPanel} from "./ui-diagnostics.mts";
 
 export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,adminIdentity,
  adminHeaders={"cf-access-jwt-assertion":admin},
@@ -194,9 +194,9 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal((await response.headers())["x-crm-source-sha"],sourceSha);
  };
  const assertMutation=async(response,method,{replay=false}={})=>{
-   assert.equal(response.status(),200,method+" "+await response.text());
-   const headers=typeof response.allHeaders==="function"?await response.headers():response.headers();
+   const headers=await response.headers();
    const requestId=headers["x-request-id"];
+   assert.equal(response.status(),200,method+" request_id="+(requestId??"missing"));
    assert.match(requestId??"",/^[a-f0-9-]{36}$/i);
    const audit=await sql("SELECT action,subject_id,actor FROM crm_audit WHERE tenant_id=? AND request_id=?",tenantA,requestId);
    if(replay)assert.equal(audit.length,0,"Replay must not append audit");

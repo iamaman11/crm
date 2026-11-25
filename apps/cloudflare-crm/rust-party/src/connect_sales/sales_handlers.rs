@@ -1468,7 +1468,7 @@ impl sale_wire::DealService for SalesV2Service {
         )
         .await
         .map_err(|error| {
-            diagnostics::read_failure(&self.request_id, "sales_portfolio", error);
+            diagnostics::read_failure(&self.request_id, diagnostics::Phase::SalesPortfolio, error);
             ConnectError::internal("Sales D1 portfolio read failed")
         })?
         .ok_or_else(|| ConnectError::not_found("SALES_PIPELINE_NOT_FOUND"))?;
@@ -2462,7 +2462,7 @@ impl sale_wire::DealService for SalesV2Service {
             .map_err(|_| {
                 diagnostics::read_failure(
                     &self.request_id,
-                    "sales_view_read",
+                    diagnostics::Phase::SalesViewRead,
                     diagnostics::ReadFailureReason::InternalReadError,
                 );
                 ConnectError::internal("Sales view D1 read failed")
@@ -2476,7 +2476,7 @@ impl sale_wire::DealService for SalesV2Service {
                     .map_err(|_| {
                         diagnostics::read_failure(
                             &self.request_id,
-                            "sales_view_receipt_lookup",
+                            diagnostics::Phase::SalesViewReceiptLookup,
                             diagnostics::ReadFailureReason::InternalReadError,
                         );
                         ConnectError::unavailable("SALES_VIEW_RECEIPT_READ_FAILED")
@@ -2489,7 +2489,7 @@ impl sale_wire::DealService for SalesV2Service {
                 .map_err(|_| {
                     diagnostics::read_failure(
                         &self.request_id,
-                        "sales_view_receipt_decode",
+                        diagnostics::Phase::SalesViewReceiptDecode,
                         diagnostics::ReadFailureReason::SalesStateDecodeFailed,
                     );
                     ConnectError::unavailable("SALES_VIEW_RECEIPT_READ_FAILED")
@@ -2615,7 +2615,7 @@ impl sale_wire::DealService for SalesV2Service {
             .map_err(|_| {
                 diagnostics::read_failure(
                     &self.request_id,
-                    "sales_pipeline_read",
+                    diagnostics::Phase::SalesPipelineRead,
                     diagnostics::ReadFailureReason::InternalReadError,
                 );
                 ConnectError::internal("Pipeline D1 get failed")
@@ -2629,7 +2629,7 @@ impl sale_wire::DealService for SalesV2Service {
                     .map_err(|_| {
                         diagnostics::read_failure(
                             &self.request_id,
-                            "sales_pipeline_receipt_lookup",
+                            diagnostics::Phase::SalesPipelineReceiptLookup,
                             diagnostics::ReadFailureReason::InternalReadError,
                         );
                         ConnectError::unavailable("SALES_PIPELINE_RECEIPT_READ_FAILED")
@@ -2642,7 +2642,7 @@ impl sale_wire::DealService for SalesV2Service {
                 .map_err(|_| {
                     diagnostics::read_failure(
                         &self.request_id,
-                        "sales_pipeline_receipt_decode",
+                        diagnostics::Phase::SalesPipelineReceiptDecode,
                         diagnostics::ReadFailureReason::SalesStateDecodeFailed,
                     );
                     ConnectError::unavailable("SALES_PIPELINE_RECEIPT_READ_FAILED")
@@ -2762,7 +2762,7 @@ impl sale_wire::DealService for SalesV2Service {
         )
         .await
         .map_err(|error| {
-            diagnostics::read_failure(&self.request_id, "sales_stage_list", error);
+            diagnostics::read_failure(&self.request_id, diagnostics::Phase::SalesStageList, error);
             ConnectError::internal("Sales D1 stage list failed")
         })?;
         let deals = list
@@ -2836,7 +2836,7 @@ impl sale_wire::DealService for SalesV2Service {
         )
         .await
         .map_err(|error| {
-            diagnostics::read_failure(&self.request_id, "sales_metrics", error);
+            diagnostics::read_failure(&self.request_id, diagnostics::Phase::SalesMetrics, error);
             ConnectError::internal("Sales D1 metrics read failed")
         })?;
         let as_status = |value: DomainDealStatus| match value {
@@ -3443,7 +3443,7 @@ impl sale_wire::DealService for SalesV2Service {
             .map_err(|_| {
                 diagnostics::read_failure(
                     &self.request_id,
-                    "sales_history_owner",
+                    diagnostics::Phase::SalesHistoryOwner,
                     diagnostics::ReadFailureReason::InternalReadError,
                 );
                 ConnectError::internal("Sales history owner lookup failed")
@@ -3457,7 +3457,7 @@ impl sale_wire::DealService for SalesV2Service {
             .map_err(|_| {
                 diagnostics::read_failure(
                     &self.request_id,
-                    "sales_history_read",
+                    diagnostics::Phase::SalesHistoryRead,
                     diagnostics::ReadFailureReason::InternalReadError,
                 );
                 ConnectError::internal("Sales D1 history read failed")
@@ -3584,7 +3584,7 @@ impl sale_wire::DealService for SalesV2Service {
             .map_err(|_| {
                 diagnostics::read_failure(
                     &self.request_id,
-                    "sales_deal_read",
+                    diagnostics::Phase::SalesDealRead,
                     diagnostics::ReadFailureReason::InternalReadError,
                 );
                 ConnectError::internal("Sales original D1 read failed")
@@ -3596,7 +3596,11 @@ impl sale_wire::DealService for SalesV2Service {
                 sales_deals::confirmed_receipt(&db, &self.tenant, &id, key)
                     .await
                     .map_err(|error| {
-                        diagnostics::read_failure(&self.request_id, "sales_receipt_lookup", error);
+                        diagnostics::read_failure(
+                            &self.request_id,
+                            diagnostics::Phase::SalesReceiptLookup,
+                            error,
+                        );
                         ConnectError::unavailable("SALES_RECEIPT_READ_FAILED")
                     })?
                     .map(|(original, version)| core_v2::MutationCommitEvidence {
@@ -3684,7 +3688,7 @@ impl sale_wire::DealService for SalesV2Service {
         .map_err(|_| {
             diagnostics::read_failure(
                 &self.request_id,
-                "sales_deal_list",
+                diagnostics::Phase::SalesDealList,
                 diagnostics::ReadFailureReason::InternalReadError,
             );
             ConnectError::internal("Sales original D1 list failed")

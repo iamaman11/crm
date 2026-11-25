@@ -3,7 +3,7 @@
 //! Only this module serializes technical outcome events and maps SDK errors.
 use super::connect_sales::proto::crm::core::v2 as core_v2;
 use buffa::MessageName;
-use connectrpc::ConnectError;
+use connectrpc::{ConnectError, ErrorCode};
 use crm_module_sdk::{ErrorCategory, SdkError};
 use serde::Serialize;
 
@@ -63,6 +63,31 @@ enum Outcome {
     Unconfirmed,
 }
 
+#[derive(Clone, Copy, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum Phase {
+    Access,
+    Diagnostics,
+    #[serde(rename = "domain_d1")]
+    DomainD1,
+    Receipt,
+    Result,
+    SalesDealList,
+    SalesDealRead,
+    SalesHistoryOwner,
+    SalesHistoryRead,
+    SalesMetrics,
+    SalesPipelineRead,
+    SalesPipelineReceiptDecode,
+    SalesPipelineReceiptLookup,
+    SalesPortfolio,
+    SalesReceiptLookup,
+    SalesStageList,
+    SalesViewRead,
+    SalesViewReceiptDecode,
+    SalesViewReceiptLookup,
+}
+
 #[derive(Serialize)]
 #[serde(tag = "event")]
 enum Event<'a> {
@@ -70,7 +95,7 @@ enum Event<'a> {
     Request {
         request_id: &'a str,
         operation: &'a str,
-        phase: &'static str,
+        phase: Phase,
         status: u16,
         error_code: Option<&'a str>,
         duration_ms: u64,
@@ -78,13 +103,13 @@ enum Event<'a> {
     #[serde(rename = "crm.native.read.failure")]
     ReadFailure {
         request_id: &'a str,
-        phase: &'static str,
+        phase: Phase,
         reason: ReadFailureReason,
     },
     #[serde(rename = "crm.native.mutation.outcome")]
     Mutation {
         operation: &'static str,
-        phase: &'static str,
+        phase: Phase,
         request_id: &'a str,
         outcome: Outcome,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -97,7 +122,7 @@ enum Event<'a> {
         #[serde(skip_serializing_if = "Option::is_none")]
         domain_code: Option<&'a str>,
         #[serde(skip_serializing_if = "Option::is_none")]
-        connect_code: Option<&'a str>,
+        connect_code: Option<ErrorCode>,
         #[serde(skip_serializing_if = "Option::is_none")]
         reason: Option<ReceiptUncertainty>,
     },
@@ -112,7 +137,7 @@ fn emit(event: Event<'_>) {
 pub(super) fn request(
     request_id: &str,
     operation: &str,
-    phase: &'static str,
+    phase: Phase,
     status: u16,
     error_code: Option<&str>,
     duration_ms: u64,
@@ -127,7 +152,7 @@ pub(super) fn request(
     });
 }
 
-pub(super) fn read_failure(request_id: &str, phase: &'static str, reason: ReadFailureReason) {
+pub(super) fn read_failure(request_id: &str, phase: Phase, reason: ReadFailureReason) {
     emit(Event::ReadFailure {
         request_id,
         phase,
@@ -165,7 +190,7 @@ pub(super) fn receipt(
 ) -> core_v2::MutationReceipt {
     emit(Event::Mutation {
         operation,
-        phase: "receipt",
+        phase: Phase::Receipt,
         request_id,
         outcome: if replayed {
             Outcome::Replayed
@@ -239,14 +264,14 @@ pub(super) fn mutation_error(
     };
     emit(Event::Mutation {
         operation,
-        phase: "result",
+        phase: Phase::Result,
         request_id,
         outcome,
         original_request_id: None,
         version: None,
         d1_statement_changes: None,
         domain_code: Some(&code),
-        connect_code: Some(error.code.as_str()),
+        connect_code: Some(error.code),
         reason,
     });
     let detail = core_v2::DomainErrorDetail {
@@ -276,7 +301,6 @@ pub(super) fn wire_write_error(
     {
         return error;
     }
-    use connectrpc::ErrorCode;
     let outcome = if before_dispatch
         || matches!(
             error.code,

@@ -9,5 +9,5 @@ plugins:
     strategy: all
     out: packages/client/gen
     opt:
-      - target=ts
-      - import_extension=none
+      - target=js+dts
+      - import_extension=js

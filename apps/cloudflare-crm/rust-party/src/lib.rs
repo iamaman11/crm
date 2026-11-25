@@ -1304,24 +1304,27 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             Ok(Some(actor))
                 if technical == Some(TechnicalRoute::Doctor) && method == Method::Get =>
             {
-                (native_doctor(env, &actor, &request_id).await, "diagnostics")
+                (
+                    native_doctor(env, &actor, &request_id).await,
+                    diagnostics::Phase::Diagnostics,
+                )
             }
             Ok(Some(actor)) => (
                 dispatch(req, env, &actor.tenant, &request_id, &actor, technical).await,
-                "domain_d1",
+                diagnostics::Phase::DomainD1,
             ),
             Ok(None) if path.starts_with("/crm.") => (
                 rpc_failure(
                     connectrpc::ConnectError::unauthenticated("AUTH_REQUIRED"),
                     true,
                 ),
-                "access",
+                diagnostics::Phase::Access,
             ),
-            Ok(None) => (error("AUTH_REQUIRED", 401), "access"),
+            Ok(None) => (error("AUTH_REQUIRED", 401), diagnostics::Phase::Access),
             Err(_) => {
                 diagnostics::read_failure(
                     &request_id,
-                    "access",
+                    diagnostics::Phase::Access,
                     diagnostics::ReadFailureReason::AccessProviderFailed,
                 );
                 let reply = if path.starts_with("/crm.") {
@@ -1332,7 +1335,7 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
                 } else {
                     error("ACCESS_INTERNAL_ERROR", 503)
                 };
-                (reply, "access")
+                (reply, diagnostics::Phase::Access)
             }
         };
         let mut reply = match result {

@@ -316,7 +316,7 @@ jobs:
           CRM_SOURCE_SHA: ${{ github.sha }}
           CRM_PRODUCTION_ACCESS_PROOF: /tmp/crm-production-access.json
           CRM_RPC_RUNTIME_PROOF: /tmp/crm-rpc-runtime.json
-        run: node rust-party/test/production-access.mjs
+        run: node rust-party/test/production-access.mts
       - name: Enforce committed native Worker dependency lock
         run: git diff --exit-code -- apps/cloudflare-crm/rust-party/Cargo.lock
       - name: Dry-run exact native entrypoint upload with original CRM Wrangler configuration

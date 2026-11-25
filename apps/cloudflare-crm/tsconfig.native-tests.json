@@ -1,8 +1,20 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "types": ["node"],
-    "noEmit": true
+    "types": [
+      "node"
+    ],
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "jsx": "react-jsx"
   },
-  "include": ["../../packages/client/test/**/*.ts"]
+  "include": [
+    "../../packages/client/test/**/*.ts",
+    "rust-party/test/**/*.mts",
+    "e2e/**/*.mts",
+    "test/**/*.mts",
+    "test/**/*.ts",
+    "test/**/*.tsx"
+  ]
 }

@@ -3,7 +3,7 @@ import {SalesQuotaCadence,SalesScorecardAxis} from "@ultimate-crm/client/cloudfl
 import assert from "node:assert/strict";
 import {currencyCatalog,minorUnits,decimalUnits,basisPoints,weightedMoneyText} from "../web/src/money.ts";
 import {inputDate,parseDate} from "../web/src/calendarInput.ts";
-import {panelFailureCode} from "../rust-party/test/ui-diagnostics.mjs";
+import {panelFailureCode} from "../rust-party/test/ui-diagnostics.mts";
 
 const currencies=currencyCatalog([
   {currencyCode:"USD",minorUnitExponent:2},
