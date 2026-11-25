@@ -109,6 +109,11 @@ provides:
       binding:
         kind: protobuf_rpc
         rpc: crm.activities.v2.AutomationService.RunInteractionAutomation
+    - id: activities.automation.run.cancel
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.activities.v2.AutomationService.CancelAutomationRun
     - id: activities.automation.run.get
       version: 1.0.0
       binding:
