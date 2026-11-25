@@ -20,6 +20,14 @@ function runDisposition(value:AutomationRunDisposition) {
       return {title:"Исполнение прекращено",detail:"Версия правила отключена или заменена. Новая задача по этому запуску запрещена.",retry:false};
     case AutomationRunDisposition.RECONCILE_RECEIPT:
       return {title:"Требуется сверка подтверждения",detail:"Найдено возможное подтверждение Task. Rust сверит исходное намерение без новой задачи.",retry:true};
+    case AutomationRunDisposition.EXECUTING:
+      return {title:"Выполняется",detail:"Другой запрос владеет временным правом исполнения.",retry:false};
+    case AutomationRunDisposition.BACKOFF:
+      return {title:"Пауза перед повтором",detail:"Обновите историю после наступления срока следующей попытки.",retry:false};
+    case AutomationRunDisposition.ATTEMPTS_EXHAUSTED:
+      return {title:"Лимит попыток исчерпан",detail:"Новые попытки запрещены; подтверждение уже выполненной задачи может быть восстановлено.",retry:false};
+    case AutomationRunDisposition.CANCELLED:
+      return {title:"Запуск отменён",detail:"Новая задача по этому запуску запрещена.",retry:false};
     default:
       return {title:"Состояние неизвестно",detail:"Обновите историю перед продолжением.",retry:false};
   }
@@ -79,6 +87,18 @@ export function AutomationScreen({initialInteractionId=""}:{initialInteractionId
       else {setRunFilter(id);setRunCursor("");}
     }
   });
+  const cancelMutation=useMutation({
+    storageKey:"crm.automation.cancel.pending.v1",
+    lookup:async({resourceId,key},signal)=>{
+      const split=resourceId.indexOf("/");
+      if(split<1)throw Error("Некорректный исходный запуск");
+      return (await api.automations.getAutomationRun({
+        ruleId:resourceId.slice(0,split),interactionId:resourceId.slice(split+1),
+        receiptIdempotencyKey:key
+      },{signal})).confirmedMutation;
+    },
+    refresh:async()=>{await runs.reload();}
+  });
   const reset=()=>{
     setEditing(undefined);setDraftId(newId());setSubject("");setAssignee("");
     setDelay("0");setEnabled(false);ruleMutation.changed();
@@ -88,7 +108,8 @@ export function AutomationScreen({initialInteractionId=""}:{initialInteractionId
     setAssignee(rule.assigneeEmail);setDelay(String(rule.dueAfterSeconds));
     setEnabled(rule.enabled);ruleMutation.changed();
   };
-  const pending=ruleMutation.busy||ruleMutation.pending||runMutation.busy||runMutation.pending;
+  const pending=ruleMutation.busy||ruleMutation.pending||runMutation.busy||runMutation.pending||
+    cancelMutation.busy||cancelMutation.pending;
   const executeRun=(ruleId:string,sourceId:string,version:bigint)=>
     runMutation.runIntent(()=>prepareMutation(api.automations.runInteractionAutomation,{
       ruleId,interactionId:sourceId,expectedRuleVersion:version,
@@ -196,6 +217,11 @@ export function AutomationScreen({initialInteractionId=""}:{initialInteractionId
         <p>Правило: {run.ruleId} · Версия: {run.ruleVersion.toString()}</p>
         <p>Источник Interaction: {run.interactionId}</p>
         <p>Оригинальный запрос: {run.originalRequestId}</p>
+        <p>Попыток исполнения: {run.attemptCount.toString()} из {run.attemptLimit.toString()}</p>
+        {run.disposition===AutomationRunDisposition.BACKOFF&&
+          <p>Следующая попытка: {new Date(Number(run.nextAttemptAtUnixMillis)).toLocaleString("ru-RU")}</p>}
+        {run.status===AutomationRunStatus.CANCELLED&&
+          <p>Отмена: {run.cancelledBy} · Запрос: {run.cancelRequestId}</p>}
         {run.status===AutomationRunStatus.COMMITTED?
           <p><a href={taskHref(run.taskId,"")}>Открыть созданную задачу</a> ·
             Task receipt: {run.taskRequestId}</p>:
@@ -203,8 +229,18 @@ export function AutomationScreen({initialInteractionId=""}:{initialInteractionId
             {isAdmin&&state.retry&&<Button disabled={pending}
               onClick={()=>void executeRun(run.ruleId,run.interactionId,run.ruleVersion)}>
               Восстановить исходный запуск
+            </Button>}
+            {isAdmin&&run.canCancel&&<Button variant="secondary" disabled={pending}
+              onClick={()=>void cancelMutation.runIntent(()=>prepareMutation(
+                api.automations.cancelAutomationRun,{
+                  ruleId:run.ruleId,interactionId:run.interactionId,expectedRuleVersion:run.ruleVersion,
+                  precondition:{idempotencyKey:cancelMutation.key}
+                },run.ruleId+"/"+run.interactionId
+              ),async()=>{await runs.reload();})}>
+              Отменить исходный запуск
             </Button>}</>}
       </Card>})}
+      <MutationNotice state={cancelMutation}/>
       {!runs.busy&&runs.data?.runs.length===0&&<p>Запусков пока нет.</p>}
       <Paging next={runs.data?.pageInfo?.nextPageToken??""} busy={runs.busy}
         onFirst={()=>setRunCursor("")}

@@ -488,6 +488,12 @@ const RPC_POLICIES: &[(&str, RpcPolicy)] = &[
         },
     ),
     (
+        "/crm.activities.v2.AutomationService/CancelAutomationRun",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
         "/crm.activities.v2.AutomationService/GetAutomationRun",
         RpcPolicy {
             permission: RpcPermission::Read,

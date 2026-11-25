@@ -154,7 +154,38 @@ impl auto_wire::AutomationService for AutomationV2Service {
                 request_id: self.request_id.clone(),
                 resource_version: 1,
                 replayed: saved.replayed,
-                original_request_id: saved.task_original_request_id,
+                original_request_id: saved.original_request_id,
+                ..Default::default()
+            })
+            .into(),
+            ..Default::default()
+        })
+    }
+    #[worker::send]
+    async fn cancel_automation_run(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, auto_wire::CancelAutomationRunRequest>,
+    ) -> ServiceResult<auto_wire::CancelAutomationRunResponse> {
+        let input = req.to_owned_message();
+        let (key, _) = wire_precondition(input.precondition.as_option(), true)?;
+        let saved = automation::cancel(
+            &self.d1()?,
+            &self.actor,
+            &input.rule_id,
+            &input.interaction_id,
+            input.expected_rule_version,
+            &key,
+            &self.request_id,
+        )
+        .await?;
+        RpcResponse::ok(auto_wire::CancelAutomationRunResponse {
+            run: Some(Self::run(&saved.run)?).into(),
+            receipt: Some(core_v2::MutationReceipt {
+                request_id: self.request_id.clone(),
+                resource_version: 1,
+                replayed: saved.replayed,
+                original_request_id: saved.original_request_id,
                 ..Default::default()
             })
             .into(),
@@ -179,15 +210,14 @@ impl auto_wire::AutomationService for AutomationV2Service {
         .ok_or_else(|| ConnectError::not_found("ACTIVITIES_AUTOMATION_RUN_NOT_FOUND"))?;
         let confirmed_mutation = match receipt_key(input.receipt_idempotency_key.as_deref())? {
             None => None,
-            Some(key) if automation::confirmed(&db, &self.actor.tenant, &run, key).await? => {
-                Some(core_v2::MutationCommitEvidence {
+            Some(key) => automation::confirmed_request(&db, &self.actor.tenant, &run, key)
+                .await?
+                .map(|original_request_id| core_v2::MutationCommitEvidence {
                     request_id: self.request_id.clone(),
-                    original_request_id: run.task_request_id.clone().unwrap_or_default(),
+                    original_request_id,
                     resource_version: 1,
                     ..Default::default()
-                })
-            }
-            Some(_) => None,
+                }),
         };
         RpcResponse::ok(auto_wire::GetAutomationRunResponse {
             run: Some(Self::run(&run)?).into(),
@@ -291,6 +321,9 @@ impl AutomationV2Service {
         row: &automation::RunRow,
     ) -> std::result::Result<auto_wire::AutomationRun, ConnectError> {
         let status = match row.status.as_str() {
+            "pending" if row.cancel_request_id.is_some() => {
+                auto_wire::AutomationRunStatus::AUTOMATION_RUN_STATUS_CANCELLED
+            }
             "pending" => auto_wire::AutomationRunStatus::AUTOMATION_RUN_STATUS_PENDING,
             "committed" => auto_wire::AutomationRunStatus::AUTOMATION_RUN_STATUS_COMMITTED,
             _ => {
@@ -313,6 +346,12 @@ impl AutomationV2Service {
             RunDisposition::ReconcileReceipt => {
                 WireDisposition::AUTOMATION_RUN_DISPOSITION_RECONCILE_RECEIPT
             }
+            RunDisposition::Executing => WireDisposition::AUTOMATION_RUN_DISPOSITION_EXECUTING,
+            RunDisposition::Backoff => WireDisposition::AUTOMATION_RUN_DISPOSITION_BACKOFF,
+            RunDisposition::AttemptsExhausted => {
+                WireDisposition::AUTOMATION_RUN_DISPOSITION_ATTEMPTS_EXHAUSTED
+            }
+            RunDisposition::Cancelled => WireDisposition::AUTOMATION_RUN_DISPOSITION_CANCELLED,
         };
         Ok(auto_wire::AutomationRun {
             rule_id: row.rule_id.clone(),
@@ -327,6 +366,14 @@ impl AutomationV2Service {
             created_at_unix_millis: row.created_at_unix_millis,
             completed_at_unix_millis: row.completed_at_unix_millis.unwrap_or_default(),
             disposition: disposition.into(),
+            attempt_count: row.attempt_count,
+            attempt_limit: automation::MAX_ATTEMPTS,
+            next_attempt_at_unix_millis: row.next_attempt_at_unix_millis,
+            lease_until_unix_millis: row.lease_until_unix_millis,
+            can_cancel: row.can_cancel(),
+            cancelled_by: row.cancelled_by.clone().unwrap_or_default(),
+            cancel_request_id: row.cancel_request_id.clone().unwrap_or_default(),
+            cancelled_at_unix_millis: row.cancelled_at_unix_millis.unwrap_or_default(),
             ..Default::default()
         })
     }

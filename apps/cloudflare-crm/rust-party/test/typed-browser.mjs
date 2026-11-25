@@ -3357,6 +3357,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("link",{name:"Открыть созданную задачу",exact:true}).waitFor();
    await mutation(executeButton,"RunInteractionAutomation",{replay:true});
    await page.getByRole("heading",{name:"Задача подтверждена",exact:true}).waitFor();
+   await page.getByText("Попыток исполнения: 1 из 5",{exact:true}).waitFor();
+   assert.equal(await page.getByRole("button",{name:"Отменить исходный запуск",exact:true}).count(),0);
    assert.equal(await page.getByRole("button",{name:"Восстановить исходный запуск",exact:true}).count(),0);
    await page.getByRole("button",{name:"Обновить историю",exact:true}).click();
    await page.getByRole("heading",{name:"Задача подтверждена",exact:true}).waitFor();

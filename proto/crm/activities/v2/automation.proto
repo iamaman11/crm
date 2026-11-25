@@ -70,6 +70,7 @@ enum AutomationRunStatus {
   AUTOMATION_RUN_STATUS_UNSPECIFIED = 0;
   AUTOMATION_RUN_STATUS_PENDING = 1;
   AUTOMATION_RUN_STATUS_COMMITTED = 2;
+  AUTOMATION_RUN_STATUS_CANCELLED = 3;
 }
 // Current server-derived disposition of the immutable claimed intent.
 // A pending ledger entry is not itself proof that the Task did not commit.
@@ -82,6 +83,10 @@ enum AutomationRunDisposition {
   AUTOMATION_RUN_DISPOSITION_RULE_SUPERSEDED = 4;
   // A candidate Task receipt exists; the original Task owner must validate it.
   AUTOMATION_RUN_DISPOSITION_RECONCILE_RECEIPT = 5;
+  AUTOMATION_RUN_DISPOSITION_EXECUTING = 6;
+  AUTOMATION_RUN_DISPOSITION_BACKOFF = 7;
+  AUTOMATION_RUN_DISPOSITION_ATTEMPTS_EXHAUSTED = 8;
+  AUTOMATION_RUN_DISPOSITION_CANCELLED = 9;
 }
 message AutomationRun {
   string rule_id = 1;
@@ -96,8 +101,28 @@ message AutomationRun {
   int64 created_at_unix_millis = 10;
   int64 completed_at_unix_millis = 11;
   AutomationRunDisposition disposition = 12;
+  int64 attempt_count = 13;
+  int64 next_attempt_at_unix_millis = 14;
+  int64 lease_until_unix_millis = 15;
+  bool can_cancel = 16;
+  string cancelled_by = 17;
+  string cancel_request_id = 18;
+  int64 cancelled_at_unix_millis = 19;
+  int64 attempt_limit = 20;
 }
 message RunInteractionAutomationResponse {
+  AutomationRun run = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+// Explicit signed-admin cancellation of one already claimed run. Never
+// compensates or deletes an original Task that has already committed.
+message CancelAutomationRunRequest {
+  string rule_id = 1;
+  string interaction_id = 2;
+  int64 expected_rule_version = 3;
+  crm.core.v2.MutationPrecondition precondition = 4;
+}
+message CancelAutomationRunResponse {
   AutomationRun run = 1;
   crm.core.v2.MutationReceipt receipt = 2;
 }
@@ -131,6 +156,9 @@ service AutomationService {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
   rpc RunInteractionAutomation(RunInteractionAutomationRequest) returns (RunInteractionAutomationResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc CancelAutomationRun(CancelAutomationRunRequest) returns (CancelAutomationRunResponse) {
     option idempotency_level = IDEMPOTENT;
   }
   rpc GetAutomationRun(GetAutomationRunRequest) returns (GetAutomationRunResponse) {

@@ -14,6 +14,8 @@ use sha2::{Digest, Sha256};
 use wasm_bindgen::JsValue;
 use worker::D1Database;
 
+pub(super) const MAX_ATTEMPTS: i64 = 5;
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(super) struct RuleRow {
     pub rule_id: String,
@@ -60,6 +62,17 @@ pub(super) struct RunRow {
     receipt_exists: i64,
     rule_current: i64,
     assignee_active: i64,
+    pub attempt_count: i64,
+    pub next_attempt_at_unix_millis: i64,
+    pub lease_until_unix_millis: i64,
+    lease_request_id: Option<String>,
+    lease_active: i64,
+    backoff_active: i64,
+    task_exists: i64,
+    cancel_key: Option<String>,
+    pub cancel_request_id: Option<String>,
+    pub cancelled_by: Option<String>,
+    pub cancelled_at_unix_millis: Option<i64>,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum RunDisposition {
@@ -68,14 +81,29 @@ pub(super) enum RunDisposition {
     WaitingAssignee,
     RuleSuperseded,
     ReconcileReceipt,
+    Executing,
+    Backoff,
+    AttemptsExhausted,
+    Cancelled,
 }
 impl RunRow {
+    pub(super) fn can_cancel(&self) -> bool {
+        self.status == "pending"
+            && self.cancel_request_id.is_none()
+            && self.receipt_exists == 0
+            && self.task_exists == 0
+    }
+
     pub(super) fn disposition(&self) -> Result<RunDisposition, ConnectError> {
         match self.status.as_str() {
             "committed" => Ok(RunDisposition::Committed),
+            "pending" if self.cancel_request_id.is_some() => Ok(RunDisposition::Cancelled),
             "pending" if self.receipt_exists == 1 => Ok(RunDisposition::ReconcileReceipt),
             "pending" if self.rule_current != 1 => Ok(RunDisposition::RuleSuperseded),
             "pending" if self.assignee_active != 1 => Ok(RunDisposition::WaitingAssignee),
+            "pending" if self.lease_active == 1 => Ok(RunDisposition::Executing),
+            "pending" if self.attempt_count >= MAX_ATTEMPTS => Ok(RunDisposition::AttemptsExhausted),
+            "pending" if self.backoff_active == 1 => Ok(RunDisposition::Backoff),
             "pending" => Ok(RunDisposition::RetryReady),
             _ => Err(ConnectError::internal(
                 "ACTIVITIES_AUTOMATION_RUN_STATUS_INVALID",
@@ -86,7 +114,7 @@ impl RunRow {
 pub(super) struct RunSaved {
     pub run: RunRow,
     pub replayed: bool,
-    pub task_original_request_id: Option<String>,
+    pub original_request_id: Option<String>,
 }
 
 fn storage() -> ConnectError {
@@ -354,7 +382,14 @@ const RUN_SELECT: &str = concat!(
     " AND r.id=a.rule_id AND r.version=a.rule_version AND r.enabled=1) AS rule_current,",
     "EXISTS(SELECT 1 FROM crm_users u WHERE u.tenant_id=a.tenant",
     " AND u.email=json_extract(a.task_intent,'$.assignee_email') AND u.active=1)",
-    " AS assignee_active FROM crm_activity_automation_runs a"
+    " AS assignee_active,a.attempt_count,a.next_attempt_at_unix_millis,",
+    "a.lease_until_unix_millis,a.lease_request_id,",
+    "(a.lease_until_unix_millis>unixepoch('now')*1000) AS lease_active,",
+    "(a.next_attempt_at_unix_millis>unixepoch('now')*1000) AS backoff_active,",
+    "EXISTS(SELECT 1 FROM crm_activity_task_records t WHERE t.tenant=a.tenant",
+    " AND t.id=a.task_id) AS task_exists,",
+    "a.cancel_key,a.cancel_request_id,a.cancelled_by,a.cancelled_at_unix_millis",
+    " FROM crm_activity_automation_runs a"
 );
 
 async fn read_run(
@@ -622,7 +657,7 @@ pub(super) async fn execute_interaction(
     match row.disposition()? {
         RunDisposition::Committed => {
             return Ok(RunSaved {
-                task_original_request_id: row.task_request_id.clone(),
+                original_request_id: row.task_request_id.clone(),
                 run: row,
                 replayed: true,
             });
@@ -636,6 +671,20 @@ pub(super) async fn execute_interaction(
             return Err(ConnectError::invalid_argument(
                 "ACTIVITIES_ASSIGNEE_NOT_ENROLLED",
             ));
+        }
+        RunDisposition::Executing => {
+            return Err(ConnectError::aborted("AUTOMATION_RUN_EXECUTING"));
+        }
+        RunDisposition::Backoff => {
+            return Err(ConnectError::failed_precondition("AUTOMATION_RUN_BACKOFF"));
+        }
+        RunDisposition::AttemptsExhausted => {
+            return Err(ConnectError::failed_precondition(
+                "AUTOMATION_RUN_ATTEMPTS_EXHAUSTED",
+            ));
+        }
+        RunDisposition::Cancelled => {
+            return Err(ConnectError::failed_precondition("AUTOMATION_RUN_CANCELLED"));
         }
         RunDisposition::RetryReady | RunDisposition::ReconcileReceipt => {}
     }
@@ -668,7 +717,12 @@ pub(super) async fn execute_interaction(
             ));
         }
     }
-    let outcome = activity_tasks::create_typed(
+    // Only new Task creation spends an attempt. Receipt reconciliation is
+    // allowed after expiry, exhaustion or rule revision and writes no new Task.
+    if !has_receipt {
+        acquire_attempt(db, tenant, &row, &principal.identity, request_id).await?;
+    }
+    let result = activity_tasks::create_typed(
         input,
         &row.task_id,
         db,
@@ -676,9 +730,19 @@ pub(super) async fn execute_interaction(
         &principal.identity,
         request_id,
     )
-    .await
-    .map_err(|_| storage())?
-    .map_err(|error| error.connect("RunInteractionAutomation", request_id))?;
+    .await;
+    let outcome = match result {
+        Ok(Ok(outcome)) => outcome,
+        other => {
+            if !has_receipt {
+                release_attempt(db, tenant, &row, request_id).await?;
+            }
+            return Err(match other {
+                Ok(Err(error)) => error.connect("RunInteractionAutomation", request_id),
+                _ => storage(),
+            });
+        }
+    };
     if outcome.task.task_id().as_str() != row.task_id {
         return Err(ConnectError::unavailable(
             "AUTOMATION_TASK_RECEIPT_MISMATCH",
@@ -689,8 +753,10 @@ pub(super) async fn execute_interaction(
         db,
         concat!(
             "UPDATE crm_activity_automation_runs SET status='committed',",
-            "task_request_id=?,completed_at_unix_millis=? WHERE tenant=?",
-            " AND rule_id=? AND source_event_id=? AND status='pending'"
+            "task_request_id=?,completed_at_unix_millis=?,lease_until_unix_millis=0,",
+            "next_attempt_at_unix_millis=0 WHERE tenant=?",
+            " AND rule_id=? AND source_event_id=? AND status='pending'",
+            " AND cancel_request_id IS NULL"
         ),
         &[
             task_trace
@@ -718,8 +784,172 @@ pub(super) async fn execute_interaction(
     Ok(RunSaved {
         run: completed,
         replayed: outcome.replayed,
-        task_original_request_id: task_trace,
+        original_request_id: task_trace,
     })
+}
+
+// The D1 clock and exact request id fence the original Task INSERT. A
+// crashed worker leaves a bounded lease; a later attempt cannot be written
+// by the expired worker even if its asynchronous D1 call resumes.
+async fn acquire_attempt(
+    db: &D1Database,
+    tenant: &str,
+    row: &RunRow,
+    actor: &str,
+    request_id: &str,
+) -> Result<(), ConnectError> {
+    let _write = bind(
+        db,
+        concat!(
+            "UPDATE crm_activity_automation_runs SET attempt_count=attempt_count+1,",
+            "lease_request_id=?,lease_actor=?,lease_until_unix_millis=unixepoch('now')*1000+60000,",
+            "next_attempt_at_unix_millis=unixepoch('now')*1000+60000+(5000<<attempt_count)",
+            " WHERE tenant=? AND rule_id=? AND source_event_id=? AND status='pending'",
+            " AND cancel_request_id IS NULL AND attempt_count<?",
+            " AND lease_until_unix_millis<=unixepoch('now')*1000",
+            " AND next_attempt_at_unix_millis<=unixepoch('now')*1000",
+            " AND NOT EXISTS(SELECT 1 FROM crm_activity_task_receipts t",
+            " WHERE t.tenant=crm_activity_automation_runs.tenant",
+            " AND t.key=crm_activity_automation_runs.task_id)"
+        ),
+        &[
+            JsValue::from_str(request_id),
+            JsValue::from_str(actor),
+            JsValue::from_str(tenant),
+            JsValue::from_str(&row.rule_id),
+            JsValue::from_str(&row.source_event_id),
+            JsValue::from_f64(MAX_ATTEMPTS as f64),
+        ],
+    )
+    .map_err(|_| storage())?
+    .run()
+    .await;
+    let fresh = read_run(db, tenant, &row.rule_id, &row.source_event_id)
+        .await?
+        .ok_or_else(storage)?;
+    if fresh.lease_request_id.as_deref() == Some(request_id)
+        && fresh.lease_active == 1
+        && fresh.cancel_request_id.is_none()
+    {
+        Ok(())
+    } else {
+        Err(ConnectError::aborted("AUTOMATION_ATTEMPT_NOT_ACQUIRED"))
+    }
+}
+
+async fn release_attempt(
+    db: &D1Database,
+    tenant: &str,
+    row: &RunRow,
+    request_id: &str,
+) -> Result<(), ConnectError> {
+    // A failed release leaves the original expiration + backoff intact.
+    // Never undo another attempt or mark a receipt-bearing run as failed.
+    let _write = bind(
+        db,
+        concat!(
+            "UPDATE crm_activity_automation_runs SET lease_until_unix_millis=0,",
+            "next_attempt_at_unix_millis=unixepoch('now')*1000+(5000<<(attempt_count-1))",
+            " WHERE tenant=? AND rule_id=? AND source_event_id=? AND status='pending'",
+            " AND lease_request_id=? AND cancel_request_id IS NULL",
+            " AND NOT EXISTS(SELECT 1 FROM crm_activity_task_receipts t",
+            " WHERE t.tenant=crm_activity_automation_runs.tenant",
+            " AND t.key=crm_activity_automation_runs.task_id)"
+        ),
+        &[
+            JsValue::from_str(tenant),
+            JsValue::from_str(&row.rule_id),
+            JsValue::from_str(&row.source_event_id),
+            JsValue::from_str(request_id),
+        ],
+    )
+    .map_err(|_| storage())?
+    .run()
+    .await;
+    Ok(())
+}
+
+pub(super) async fn cancel(
+    db: &D1Database,
+    principal: &access::Actor,
+    rule: &str,
+    interaction: &str,
+    expected_version: i64,
+    key: &str,
+    request_id: &str,
+) -> Result<RunSaved, ConnectError> {
+    let tenant = &principal.tenant;
+    let row = get_run(db, tenant, rule, interaction)
+        .await?
+        .ok_or_else(|| ConnectError::not_found("ACTIVITIES_AUTOMATION_RUN_NOT_FOUND"))?;
+    let digest = format!(
+        "{:x}",
+        Sha256::digest(
+            serde_json::to_vec(&json!([
+                "cancel_automation_run",
+                rule,
+                interaction,
+                expected_version
+            ]))
+            .map_err(|_| storage())?
+        )
+    );
+    let replayed = verify_run_request(db, tenant, key, rule, &row.source_event_id, &digest).await?;
+    if replayed && row.cancel_key.as_deref() == Some(key) {
+        return Ok(RunSaved {
+            original_request_id: row.cancel_request_id.clone(),
+            run: row,
+            replayed: true,
+        });
+    }
+    if row.rule_version != expected_version || !row.can_cancel() {
+        return Err(ConnectError::failed_precondition("AUTOMATION_CANCEL_NOT_ALLOWED"));
+    }
+    let _write = bind(
+        db,
+        concat!(
+            "UPDATE crm_activity_automation_runs SET cancel_key=?,cancel_digest=?,",
+            "cancel_request_id=?,cancelled_by=?,cancelled_at_unix_millis=unixepoch('now')*1000,",
+            "lease_until_unix_millis=0,next_attempt_at_unix_millis=0",
+            " WHERE tenant=? AND rule_id=? AND source_event_id=? AND status='pending'",
+            " AND rule_version=? AND cancel_request_id IS NULL",
+            " AND NOT EXISTS(SELECT 1 FROM crm_activity_task_records t",
+            " WHERE t.tenant=crm_activity_automation_runs.tenant",
+            " AND t.id=crm_activity_automation_runs.task_id)",
+            " AND NOT EXISTS(SELECT 1 FROM crm_activity_task_receipts t",
+            " WHERE t.tenant=crm_activity_automation_runs.tenant",
+            " AND t.key=crm_activity_automation_runs.task_id)"
+        ),
+        &[
+            JsValue::from_str(key),
+            JsValue::from_str(&digest),
+            JsValue::from_str(request_id),
+            JsValue::from_str(&principal.identity),
+            JsValue::from_str(tenant),
+            JsValue::from_str(rule),
+            JsValue::from_str(&row.source_event_id),
+            JsValue::from_f64(expected_version as f64),
+        ],
+    )
+    .map_err(|_| storage())?
+    .run()
+    .await;
+    let fresh = read_run(db, tenant, rule, &row.source_event_id)
+        .await?
+        .ok_or_else(storage)?;
+    let bound = verify_run_request(db, tenant, key, rule, &row.source_event_id, &digest).await?;
+    if bound && fresh.cancel_key.as_deref() == Some(key) {
+        let original = fresh.cancel_request_id.clone().ok_or_else(storage)?;
+        return Ok(RunSaved {
+            replayed: original != request_id,
+            original_request_id: Some(original),
+            run: fresh,
+        });
+    }
+    if !fresh.can_cancel() {
+        return Err(ConnectError::failed_precondition("AUTOMATION_CANCEL_NOT_ALLOWED"));
+    }
+    Err(ConnectError::unavailable("AUTOMATION_CANCEL_UNCONFIRMED"))
 }
 
 // Read-only recovery: a matching caller key and the original, atomic Task
@@ -747,20 +977,26 @@ pub(super) async fn get_run(
     };
     read_run(db, tenant, rule, &event.event_id).await
 }
-pub(super) async fn confirmed(
+pub(super) async fn confirmed_request(
     db: &D1Database,
     tenant: &str,
     run: &RunRow,
     key: &str,
-) -> Result<bool, ConnectError> {
+) -> Result<Option<String>, ConnectError> {
+    if run.cancel_key.as_deref() == Some(key) && run.cancel_request_id.is_some() {
+        let binding = run_request(db, tenant, key).await?;
+        return Ok(binding
+            .filter(|b| b.rule_id == run.rule_id && b.source_event_id == run.source_event_id)
+            .and(run.cancel_request_id.clone()));
+    }
     if run.status != "committed" {
-        return Ok(false);
+        return Ok(None);
     }
     let Some(binding) = run_request(db, tenant, key).await? else {
-        return Ok(false);
+        return Ok(None);
     };
     if binding.rule_id != run.rule_id || binding.source_event_id != run.source_event_id {
-        return Ok(false);
+        return Ok(None);
     }
     let original = bind(
         db,
@@ -774,10 +1010,11 @@ pub(super) async fn confirmed(
     .first::<serde_json::Value>(None)
     .await
     .map_err(|_| storage())?;
-    Ok(original
-        .as_ref()
-        .and_then(|v| v.get("original_request_id"))
-        .and_then(|v| v.as_str())
-        == run.task_request_id.as_deref()
-        && run.task_request_id.is_some())
+    Ok(run.task_request_id.clone().filter(|request| {
+        original
+            .as_ref()
+            .and_then(|v| v.get("original_request_id"))
+            .and_then(|v| v.as_str())
+            == Some(request.as_str())
+    }))
 }
