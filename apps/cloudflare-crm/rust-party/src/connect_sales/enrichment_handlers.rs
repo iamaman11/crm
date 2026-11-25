@@ -207,7 +207,7 @@ impl enrichment_wire::EnrichmentConfigurationService for EnrichmentV2Service {
             Self::id(&input.profile_version_id)?;
             let value = owner::profile(&db, &self.actor.tenant, &input.profile_version_id)
                 .await
-                .map_err(|_| ConnectError::internal("profile D1 read failed"))?
+                .map_err(|error| crate::diagnostics::read_error(&self.request_id, &error))?
                 .ok_or_else(|| ConnectError::not_found("ENRICHMENT_PROVIDER_PROFILE_NOT_FOUND"))?;
             let original_request_id = if let Some(key) = key {
                 owner::profile_by_receipt(&db, &self.actor.tenant, key)
@@ -258,7 +258,7 @@ impl enrichment_wire::EnrichmentConfigurationService for EnrichmentV2Service {
             Self::id(&input.mapping_version_id)?;
             let value = owner::mapping(&db, &self.actor.tenant, &input.mapping_version_id)
                 .await
-                .map_err(|_| ConnectError::internal("mapping D1 read failed"))?
+                .map_err(|error| crate::diagnostics::read_error(&self.request_id, &error))?
                 .ok_or_else(|| ConnectError::not_found("ENRICHMENT_MAPPING_NOT_FOUND"))?;
             let original_request_id = if let Some(key) = key {
                 owner::mapping_by_receipt(&db, &self.actor.tenant, key)
@@ -296,7 +296,7 @@ impl enrichment_wire::EnrichmentConfigurationService for EnrichmentV2Service {
         let (items, next) =
             owner::profiles(&self.d1()?, &self.actor.tenant, req.page.page_token, size)
                 .await
-                .map_err(|_| ConnectError::internal("profile D1 list failed"))?;
+                .map_err(|error| crate::diagnostics::read_error(&self.request_id, &error))?;
         RpcResponse::ok(enrichment_wire::ListProviderProfilesResponse {
             profiles: items
                 .iter()
@@ -320,7 +320,7 @@ impl enrichment_wire::EnrichmentConfigurationService for EnrichmentV2Service {
         let (items, next) =
             owner::mappings(&self.d1()?, &self.actor.tenant, req.page.page_token, size)
                 .await
-                .map_err(|_| ConnectError::internal("mapping D1 list failed"))?;
+                .map_err(|error| crate::diagnostics::read_error(&self.request_id, &error))?;
         RpcResponse::ok(enrichment_wire::ListMappingsResponse {
             mappings: items.iter().map(Self::mapping).collect(),
             page_info: Some(core_v2::PageInfo {

@@ -800,6 +800,7 @@ impl TaskV2Service {
 struct DataQualityV2Service {
     env: Arc<Env>,
     tenant: String,
+    request_id: String,
 }
 
 impl OwnedService for DataQualityV2Service {
@@ -1691,6 +1692,7 @@ pub(super) fn router(
     .add_service(Arc::new(DataQualityV2Service {
         env: Arc::clone(&env),
         tenant: tenant.to_owned(),
+        request_id: request_id.to_owned(),
     }))
     .add_service(Arc::new(IdentityV2Service {
         env: Arc::clone(&env),
@@ -1705,6 +1707,7 @@ pub(super) fn router(
     .add_service(Arc::new(Customer360V2Service {
         env: Arc::clone(&env),
         tenant: tenant.to_owned(),
+        request_id: request_id.to_owned(),
     }))
     .add_service(Arc::new(PartyCsvV2Service {
         env: Arc::clone(&env),

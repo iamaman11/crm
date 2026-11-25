@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {captureBrowserRpcEvidence} from "../rust-party/test/rpc-browser-evidence.mts";
 import {readFileSync} from "node:fs";
-import {validateWorkerConfig,validateNativeFixtureSource} from "../scripts/architecture-gate.mjs";
+import {validateWorkerConfig,validateNativeFixtureSource} from "../scripts/architecture-gate.mts";
 const config=JSON.parse(readFileSync(new URL("../wrangler.jsonc",import.meta.url),"utf8"));
 const local=JSON.parse(readFileSync(new URL("../rust-party/wrangler.jsonc",import.meta.url),"utf8"));
 test("canonical Worker configuration has exactly one D1 and matching local routing",()=>{

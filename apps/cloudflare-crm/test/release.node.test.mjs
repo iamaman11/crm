@@ -262,7 +262,7 @@ async function subprocessEntry(){
    finally{telemetryInFlight--;}
  };
  process.argv[2]=mode;
- try{await import("./deploy.mjs");}finally{
+ try{await import("./deploy.mts");}finally{
    writeFileSync("posts.json",JSON.stringify(posts));
    writeFileSync("state.json",JSON.stringify({enabled,migrated,published,edgeAttempts,anonymousAttempts,auditAttempts,telemetryAttempts,maxTelemetryInFlight,postDeployReads,commands,role}));
    db?.close();
@@ -274,7 +274,7 @@ function run(mode,variant="valid"){
  const dir=mkdtempSync(join(tmpdir(),"crm-release-test-"));
  const app=join(dir,"apps/cloudflare-crm"),out=join(app,".release");
  mkdirSync(out,{recursive:true});mkdirSync(join(app,"e2e-evidence"));
- for(const name of ["deploy.mjs","release-readback.mts","native-telemetry.mts","json-boundary.mts"])
+ for(const name of ["deploy.mts","release-readback.mts","native-telemetry.mts","json-boundary.mts"])
    copyFileSync(new URL("../scripts/"+name,import.meta.url),join(dir,name));
  const save=(path,value)=>writeFileSync(path,JSON.stringify(value));
  if(variant!=="no-checkpoint"&&mode!=="deploy")save(join(out,"checkpoint.json"),{git_sha:sha,previous_sha:previous,d1_database:database});
@@ -410,6 +410,20 @@ test("repeating a Cloudflare telemetry cursor cannot pass release acceptance",()
  assert.match(result.error,/CRM_TELEMETRY_CURSOR_REPEATED/);
  assert.ok(result.state.telemetryAttempts<=3);
 });
+test("published RPC preflight resets on a signed response from the previous Worker",async()=>{
+ const {waitForPublishedRpc}=await import("../scripts/release-readback.mts");
+ const exact={status:501,runtime:"native-workers-rs",source:sha,errorCode:"unimplemented"};
+ const stale={...exact,source:previous};
+ const observations=[exact,exact,stale,exact,exact,exact];
+ let calls=0;
+ await waitForPublishedRpc(sha,async()=>observations[calls++],async()=>{});
+ assert.equal(calls,observations.length);
+ await assert.rejects(waitForPublishedRpc(sha,async()=>stale,async()=>{}),/SOURCE_UNSTABLE/);
+ await assert.rejects(waitForPublishedRpc(sha,async()=>({
+   status:403,runtime:null,source:null,errorCode:null
+ }),async()=>{}),/PREFLIGHT_UNEXPECTED status=403/);
+});
+
 test("Retry-After delta-seconds, HTTP-date and invalid headers are parsed safely",async()=>{
  const {parseRetryAfterMs}=await import("../scripts/release-readback.mts");
  const now=Date.parse("Fri, 20 Nov 2026 18:00:00 GMT");

@@ -39,7 +39,7 @@ impl csv_wire::PartyCsvService for PartyCsvV2Service {
         };
         let export = owner::assemble(&self.d1()?, &self.actor.tenant, kind)
             .await
-            .map_err(|_| ConnectError::internal("export D1 read failed"))?
+            .map_err(|error| crate::diagnostics::read_error(&self.request_id, &error))?
             .ok_or_else(|| ConnectError::failed_precondition("EXPORT_SCOPE_LIMIT_REACHED"))?;
         RpcResponse::ok(csv_wire::PreviewPartyExportResponse {
             count: export.count as u32,
@@ -95,7 +95,7 @@ impl csv_wire::PartyCsvService for PartyCsvV2Service {
         }
         let preview = owner::preview_import(&input.csv, &db, &self.actor.tenant)
             .await
-            .map_err(|_| ConnectError::internal("import preview D1 read failed"))?
+            .map_err(|error| crate::diagnostics::read_error(&self.request_id, &error))?
             .map_err(|failure| failure.connect("PreviewPartyImport", &self.request_id))?;
         RpcResponse::ok(csv_wire::PreviewPartyImportResponse {
             count: preview.count as u32,

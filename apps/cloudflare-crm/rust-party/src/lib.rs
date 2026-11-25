@@ -1340,10 +1340,23 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         };
         let mut reply = match result {
             Ok(reply) => reply,
-            Err(_) if path.starts_with("/crm.") => {
-                rpc_failure(connectrpc::ConnectError::internal("INTERNAL_ERROR"), false)?
+            Err(error_source) => {
+                if matches!(
+                    rpc_policy(&path).map(|policy| policy.permission),
+                    Some(RpcPermission::Read | RpcPermission::AdminRead)
+                ) {
+                    diagnostics::read_failure(
+                        &request_id,
+                        phase,
+                        diagnostics::ReadFailureReason::dispatch(&error_source),
+                    );
+                }
+                if path.starts_with("/crm.") {
+                    rpc_failure(connectrpc::ConnectError::internal("INTERNAL_ERROR"), false)?
+                } else {
+                    error("INTERNAL_ERROR", 500)?
+                }
             }
-            Err(_) => error("INTERNAL_ERROR", 500)?,
         };
         reply.headers_mut().set("x-request-id", &request_id)?;
         reply

@@ -1,4 +1,8 @@
-export async function readRpcError(response: Response, path: string, method: string): Promise<unknown> {
+export async function readRpcError(
+  response: {status: number; headers: Pick<Headers, "get">; json(): Promise<unknown>},
+  path: string,
+  method: string,
+): Promise<unknown> {
   try {
     return await response.json();
   } catch {

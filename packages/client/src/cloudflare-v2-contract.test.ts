@@ -62,7 +62,7 @@ describe("S1 generated mutation outcomes and correlation",()=>{
      domainCode:"SALES_COMMIT_UNCONFIRMED",requestId:"attempt-id",
      commitOutcome:MutationCommitOutcome.UNCONFIRMED});
    const error=new ConnectError("write acknowledgement missing",Code.Aborted,meta,[{desc:DomainErrorDetailSchema,value:detail}]);
-   expect(decodeCrmError(error)).toMatchObject({outcome:"unconfirmed",domainCode:"SALES_COMMIT_UNCONFIRMED",
+   expect(decodeCrmError(error)).toMatchObject({outcome:"unconfirmed",domainCode:undefined,
      requestId:"attempt-id"});
  });
  it("includes typed rejection and field paths without parsing message text",()=>{
@@ -72,17 +72,43 @@ describe("S1 generated mutation outcomes and correlation",()=>{
      fieldViolations:[{fieldPath:"amount.currency_code",description:"Unsupported currency"}]});
    const error=new ConnectError("invalid",Code.InvalidArgument,meta,[{desc:DomainErrorDetailSchema,value:detail}]);
    const failure=decodeCrmError(error);
-   expect(failure).toMatchObject({outcome:"rejected",domainCode:"INVALID_DEAL",requestId:"attempt-id"});
-   expect(failure.fieldViolations[0]).toMatchObject({fieldPath:"amount.currency_code"});
+   expect(failure).toMatchObject({outcome:"rejected",domainCode:undefined,requestId:"attempt-id"});
+   expect(failure.fieldViolations[0]).toMatchObject({fieldPath:"Валюта",description:"Проверьте значение."});
    const wrongAttempt=new ConnectError("invalid",Code.Aborted,{...meta,"x-request-id":"other"},
      [{desc:DomainErrorDetailSchema,value:detail}]);
    expect(decodeCrmError(wrongAttempt).outcome).toBe("unconfirmed");
    const received=new ConnectError("invalid wire response",Code.InvalidArgument,meta);
    received.details=[{type:DomainErrorDetailSchema.typeName,value:toBinary(DomainErrorDetailSchema,detail)}];
    expect(decodeCrmError(received)).toMatchObject({
-     outcome:"rejected",domainCode:"INVALID_DEAL",requestId:"attempt-id",
-     fieldViolations:[{fieldPath:"amount.currency_code",description:"Unsupported currency"}]
+     outcome:"rejected",domainCode:undefined,requestId:"attempt-id",
+     fieldViolations:[{fieldPath:"Валюта",description:"Проверьте значение."}]
    });
+ });
+ it("shows a safe request identifier and a localized known domain error",()=>{
+   const id="12345678-1234-4234-8234-123456789abc";
+   const detail=create(DomainErrorDetailSchema,{domainCode:"SALES_DEAL_VERSION_CONFLICT",requestId:id,
+     commitOutcome:MutationCommitOutcome.REJECTED});
+   const failure=decodeCrmError(new ConnectError("secret",Code.Aborted,{"x-request-id":id},
+     [{desc:DomainErrorDetailSchema,value:detail}]));
+   expect(failure.outcome).toBe("rejected");
+   expect(failure.domainCode).toBe("SALES_DEAL_VERSION_CONFLICT");
+   expect(failure.text).toContain(id);
+   expect(failure.text).not.toContain("secret");
+ });
+ it("does not expose untrusted messages or field details",()=>{
+   const detail=create(DomainErrorDetailSchema,{domainCode:"PRIVATE_VALUE",requestId:"attempt-id",
+     commitOutcome:MutationCommitOutcome.REJECTED,
+     fieldViolations:[{fieldPath:"private value",description:"secret"},
+       {fieldPath:"amount.currency_code",description:"secret"}]});
+   const failure=decodeCrmError(new ConnectError("secret",Code.InvalidArgument,meta,
+     [{desc:DomainErrorDetailSchema,value:detail}]));
+   expect(JSON.stringify(failure)).not.toContain("secret");
+   expect(JSON.stringify(failure)).not.toContain("PRIVATE_VALUE");
+   expect(failure.fieldViolations).toHaveLength(1);
+   expect(decodeCrmError(new Error("secret")).text).not.toContain("secret");
+   const mismatch=decodeCrmError(new ConnectError("secret",Code.InvalidArgument,{"x-request-id":"other"},
+     [{desc:DomainErrorDetailSchema,value:detail}]));
+   expect(mismatch.fieldViolations).toEqual([]);
  });
  it("treats edge errors, lost responses and internal exceptions conservatively",()=>{
    expect(decodeCrmError(new ConnectError("HTTP 404",Code.NotFound)).outcome).toBe("unconfirmed");

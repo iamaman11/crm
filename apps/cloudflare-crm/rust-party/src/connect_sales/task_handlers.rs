@@ -296,7 +296,7 @@ impl task_wire::TaskService for TaskV2Service {
         let db = self.d1()?;
         let item = activity_tasks::stored(&db, &self.actor.tenant, &id)
             .await
-            .map_err(|_| ConnectError::internal("TASK original D1 read failed"))?
+            .map_err(|error| crate::diagnostics::read_error(&self.request_id, &error))?
             .ok_or_else(|| ConnectError::not_found("ACTIVITIES_TASK_NOT_FOUND"))?;
         let confirmed_mutation = match receipt_key(input.receipt_idempotency_key.as_deref())? {
             None => None,
@@ -470,7 +470,7 @@ impl task_wire::TaskService for TaskV2Service {
             },
         )
         .await
-        .map_err(|_| ConnectError::internal("Task D1 list failed"))?;
+        .map_err(|error| crate::diagnostics::read_error(&self.request_id, &error))?;
         let mut response = task_wire::ListTasksResponse::default();
         for (task, account_id, name) in &list {
             response
@@ -496,7 +496,7 @@ impl task_wire::TaskService for TaskV2Service {
         let (buckets, as_of_unix_seconds) =
             activity_tasks::workload(&self.d1()?, &self.actor.tenant)
                 .await
-                .map_err(|_| ConnectError::internal("Task workload D1 failed"))?;
+                .map_err(|error| crate::diagnostics::read_error(&self.request_id, &error))?;
         let as_count = |n: i64| {
             u64::try_from(n).map_err(|_| ConnectError::internal("Invalid Task workload count"))
         };

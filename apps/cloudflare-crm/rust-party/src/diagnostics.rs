@@ -43,6 +43,15 @@ impl From<worker::Error> for ReadFailureReason {
     }
 }
 
+impl ReadFailureReason {
+    pub(super) fn dispatch(error: &worker::Error) -> Self {
+        match error {
+            worker::Error::D1(_) => Self::D1ReadFailed,
+            _ => Self::InternalReadError,
+        }
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub(super) enum MutationFailure {
     #[error(transparent)]
@@ -158,6 +167,15 @@ pub(super) fn read_failure(request_id: &str, phase: Phase, reason: ReadFailureRe
         phase,
         reason,
     });
+}
+
+pub(super) fn read_error(request_id: &str, error: &worker::Error) -> ConnectError {
+    read_failure(
+        request_id,
+        Phase::DomainD1,
+        ReadFailureReason::dispatch(error),
+    );
+    ConnectError::internal("INTERNAL_ERROR")
 }
 
 // Outer adapter errors are raised before the D1 write is submitted.
@@ -287,6 +305,30 @@ pub(super) fn mutation_error(
     ))
 }
 
+fn fallback_write_outcome(
+    code: ErrorCode,
+    before_dispatch: bool,
+) -> core_v2::MutationCommitOutcome {
+    if before_dispatch
+        || matches!(
+            code,
+            ErrorCode::InvalidArgument
+                | ErrorCode::NotFound
+                | ErrorCode::AlreadyExists
+                | ErrorCode::PermissionDenied
+                | ErrorCode::FailedPrecondition
+                | ErrorCode::Aborted
+                | ErrorCode::OutOfRange
+                | ErrorCode::Unauthenticated
+                | ErrorCode::Unimplemented
+        )
+    {
+        core_v2::MutationCommitOutcome::Rejected
+    } else {
+        core_v2::MutationCommitOutcome::Unconfirmed
+    }
+}
+
 /// Every write uses the same protobuf outcome, including errors raised before
 /// the owner runs. Preserve stronger owner evidence when it is available.
 pub(super) fn wire_write_error(
@@ -301,33 +343,9 @@ pub(super) fn wire_write_error(
     {
         return error;
     }
-    let outcome = if before_dispatch
-        || matches!(
-            error.code,
-            ErrorCode::InvalidArgument
-                | ErrorCode::NotFound
-                | ErrorCode::AlreadyExists
-                | ErrorCode::PermissionDenied
-                | ErrorCode::FailedPrecondition
-                | ErrorCode::Aborted
-                | ErrorCode::OutOfRange
-                | ErrorCode::Unauthenticated
-                | ErrorCode::Unimplemented
-        ) {
-        core_v2::MutationCommitOutcome::Rejected
-    } else {
-        core_v2::MutationCommitOutcome::Unconfirmed
-    };
-    let domain_code = error
-        .message
-        .as_deref()
-        .filter(|s| {
-            !s.is_empty()
-                && s.bytes()
-                    .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_')
-        })
-        .map(str::to_owned)
-        .unwrap_or_else(|| error.code.as_str().to_ascii_uppercase());
+    let outcome = fallback_write_outcome(error.code, before_dispatch);
+    // Fallback classification comes only from the typed Connect code.
+    let domain_code = error.code.as_str().to_ascii_uppercase();
     let detail = core_v2::DomainErrorDetail {
         request_id: request_id.to_owned(),
         domain_code,
@@ -338,4 +356,110 @@ pub(super) fn wire_write_error(
         core_v2::DomainErrorDetail::FULL_NAME,
         &detail,
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sdk_categories_preserve_the_connect_code() {
+        for (category, expected) in [
+            (ErrorCategory::InvalidArgument, ErrorCode::InvalidArgument),
+            (ErrorCategory::Authentication, ErrorCode::Unauthenticated),
+            (ErrorCategory::Authorization, ErrorCode::PermissionDenied),
+            (ErrorCategory::Conflict, ErrorCode::Aborted),
+            (ErrorCategory::NotFound, ErrorCode::NotFound),
+            (ErrorCategory::RateLimit, ErrorCode::ResourceExhausted),
+            (ErrorCategory::Dependency, ErrorCode::Unavailable),
+            (ErrorCategory::Unavailable, ErrorCode::Unavailable),
+            (ErrorCategory::Internal, ErrorCode::Internal),
+        ] {
+            let failure = SdkError::new("TYPED_CODE", category, false, "private-fixture");
+            let error = sdk_connect(&failure);
+            assert_eq!(error.code, expected);
+            assert_eq!(error.message.as_deref(), Some("TYPED_CODE"));
+        }
+    }
+
+    #[test]
+    fn read_event_preserves_safe_typed_reason_and_correlation() {
+        let event = Event::ReadFailure {
+            request_id: "request-1",
+            phase: Phase::SalesMetrics,
+            reason: ReadFailureReason::D1ReadFailed,
+        };
+        let value = serde_json::to_value(event).unwrap();
+        assert_eq!(value["request_id"], "request-1");
+        assert_eq!(value["phase"], "sales_metrics");
+        assert_eq!(value["reason"], "D1_READ_FAILED");
+        let source = worker::Error::RustError("private-fixture".into());
+        let internal = serde_json::to_value(Event::ReadFailure {
+            request_id: "request-2",
+            phase: Phase::DomainD1,
+            reason: ReadFailureReason::dispatch(&source),
+        })
+        .unwrap();
+        assert_eq!(internal["reason"], "INTERNAL_READ_ERROR");
+        assert_eq!(
+            internal,
+            serde_json::json!({
+                "event": "crm.native.read.failure",
+                "request_id": "request-2",
+                "phase": "domain_d1",
+                "reason": "INTERNAL_READ_ERROR"
+            })
+        );
+    }
+
+    #[test]
+    fn fallback_outcome_is_based_on_code_and_dispatch_boundary() {
+        assert_eq!(
+            fallback_write_outcome(ErrorCode::Aborted, false),
+            core_v2::MutationCommitOutcome::Rejected
+        );
+        assert_eq!(
+            fallback_write_outcome(ErrorCode::Internal, false),
+            core_v2::MutationCommitOutcome::Unconfirmed
+        );
+        assert_eq!(
+            fallback_write_outcome(ErrorCode::Internal, true),
+            core_v2::MutationCommitOutcome::Rejected
+        );
+    }
+
+    #[test]
+    fn wire_detail_carries_a_typed_outcome_and_keeps_stronger_owner_evidence() {
+        let detail = |domain_code: &str, outcome: core_v2::MutationCommitOutcome| {
+            connectrpc::ErrorDetail::from_message(
+                core_v2::DomainErrorDetail::FULL_NAME,
+                &core_v2::DomainErrorDetail {
+                    request_id: "request-1".into(),
+                    domain_code: domain_code.into(),
+                    commit_outcome: outcome.into(),
+                    ..Default::default()
+                },
+            )
+        };
+        let fallback =
+            wire_write_error(ConnectError::internal("UNTRUSTED_TEXT"), "request-1", false);
+        let expected = detail("INTERNAL", core_v2::MutationCommitOutcome::Unconfirmed);
+        assert_eq!(fallback.details.len(), 1);
+        assert_eq!(fallback.details[0].type_url, expected.type_url);
+        assert_eq!(fallback.details[0].value, expected.value);
+        assert!(fallback.details[0].debug.is_none());
+
+        let owner = detail(
+            "TYPED_OWNER_CONFLICT",
+            core_v2::MutationCommitOutcome::Rejected,
+        );
+        let expected = owner.value.clone();
+        let preserved = wire_write_error(
+            ConnectError::aborted("LOCALIZED_TEXT").with_detail(owner),
+            "request-1",
+            false,
+        );
+        assert_eq!(preserved.details.len(), 1);
+        assert_eq!(preserved.details[0].value, expected);
+    }
 }

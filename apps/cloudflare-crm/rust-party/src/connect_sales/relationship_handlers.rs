@@ -114,7 +114,7 @@ impl rel_wire::PartyRelationshipService for RelationshipV2Service {
         let db = self.d1()?;
         let item = party_relationships::load(&db, &self.tenant, &id)
             .await
-            .map_err(|_| ConnectError::internal("RELATIONSHIP original D1 read failed"))?
+            .map_err(|error| crate::diagnostics::read_error(&self.request_id, &error))?
             .ok_or_else(|| ConnectError::not_found("PARTY_RELATIONSHIPS_NOT_FOUND"))?;
         let confirmed_mutation = match receipt_key(input.receipt_idempotency_key.as_deref())? {
             None => None,
@@ -185,7 +185,7 @@ impl rel_wire::PartyRelationshipService for RelationshipV2Service {
             status,
         )
         .await
-        .map_err(|_| ConnectError::internal("Relationship D1 list failed"))?;
+        .map_err(|error| crate::diagnostics::read_error(&self.request_id, &error))?;
         let mut results = Vec::with_capacity(list.len());
         for relationship in &list {
             results.push(Self::convert(relationship)?);

@@ -90,7 +90,7 @@ impl party_v3::PartyService for PartyV3Service {
         let db = self.d1()?;
         let item = parties::stored(&db, &self.actor.tenant, id.as_str())
             .await
-            .map_err(|_| ConnectError::internal("PARTY original D1 read failed"))?
+            .map_err(|error| crate::diagnostics::read_error(&self.request_id, &error))?
             .ok_or_else(|| ConnectError::not_found("PARTIES_NOT_FOUND"))?;
         let confirmed_mutation = match receipt_key(input.receipt_idempotency_key.as_deref())? {
             None => None,
@@ -147,7 +147,7 @@ impl party_v3::PartyService for PartyV3Service {
             wire_search(req.search)?,
         )
         .await
-        .map_err(|_| ConnectError::internal("Party D1 list failed"))?;
+        .map_err(|error| crate::diagnostics::read_error(&self.request_id, &error))?;
         let mut items = Vec::with_capacity(parties.len());
         for party in &parties {
             items.push(Self::convert(party)?);

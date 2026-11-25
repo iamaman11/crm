@@ -85,7 +85,7 @@ impl account_wire::AccountService for AccountV2Service {
         let db = self.d1()?;
         let item = accounts::load(&db, &self.actor.tenant, &id)
             .await
-            .map_err(|_| ConnectError::internal("ACCOUNT original D1 read failed"))?
+            .map_err(|error| crate::diagnostics::read_error(&self.request_id, &error))?
             .ok_or_else(|| ConnectError::not_found("CUSTOMER_ACCOUNTS_NOT_FOUND"))?;
         let confirmed_mutation = match receipt_key(input.receipt_idempotency_key.as_deref())? {
             None => None,
@@ -148,7 +148,7 @@ impl account_wire::AccountService for AccountV2Service {
             wire_search(req.search)?,
         )
         .await
-        .map_err(|_| ConnectError::internal("Account D1 list failed"))?;
+        .map_err(|error| crate::diagnostics::read_error(&self.request_id, &error))?;
         let mut result = Vec::new();
         for account in &list {
             result.push(Self::convert(account)?);

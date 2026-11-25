@@ -6,6 +6,7 @@ use crm_customer_360_query_adapter::account_overview::COLLECTION_LIMIT;
 pub(super) struct Customer360V2Service {
     pub(super) env: Arc<Env>,
     pub(super) tenant: String,
+    pub(super) request_id: String,
 }
 
 impl OwnedService for Customer360V2Service {
@@ -25,7 +26,7 @@ impl overview_wire::Customer360Service for Customer360V2Service {
             .map_err(|_| ConnectError::internal("D1 unavailable"))?;
         let overview = account_overview::overview(&db, &self.tenant, &id)
             .await
-            .map_err(|_| ConnectError::internal("Account overview read failed"))?
+            .map_err(|error| crate::diagnostics::read_error(&self.request_id, &error))?
             .ok_or_else(|| ConnectError::not_found("CUSTOMER_ACCOUNTS_NOT_FOUND"))?;
         let values = overview.sources();
         let truncated = overview.truncation();

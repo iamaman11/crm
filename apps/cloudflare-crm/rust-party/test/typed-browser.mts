@@ -1,5 +1,8 @@
 // Real Chromium -> built React -> generated Connect client -> signed native Worker -> D1.
 import {chromium} from "playwright";
+import type {APIResponse, BrowserContext, Dialog, Locator, Page, Request, Response, Route} from "playwright";
+import type {BrowserSql} from "./browser-boundaries.mts";
+import {number, record, records, string} from "../../scripts/json-boundary.mts";
 import {expect} from "playwright/test";
 import assert from "node:assert/strict";
 import {mkdirSync,writeFileSync} from "node:fs";
@@ -8,20 +11,57 @@ import {readFile} from "node:fs/promises";
 import {fileURLToPath} from "node:url";
 import {installUiDiagnostics,assertUiPanel} from "./ui-diagnostics.mts";
 import {captureBrowserRpcEvidence} from "./rpc-browser-evidence.mts";
+import {browserFirstId,matchesRpcPath} from "./browser-boundaries.mts";
+import {browserRecovery} from "./browser-recovery.mts";
+import {verifyBrowserMobile} from "./browser-mobile.mts";
+import {verifyBrowserAutomation} from "./browser-automation.mts";
+import {AccountService} from "../../../../packages/client/gen/crm/accounts/v2/account_pb.js";
+import {PartyRelationshipService} from "../../../../packages/client/gen/crm/party_relationships/v2/relationship_pb.js";
+import {ContactPointService} from "../../../../packages/client/gen/crm/contact_points/v2/contact_point_pb.js";
+import {TaskService} from "../../../../packages/client/gen/crm/activities/v2/task_pb.js";
+import {PartyService} from "../../../../packages/client/gen/crm/parties/v3/party_pb.js";
+import {fixtureRpcPath} from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
+
+import {ConsentAuthorizationService} from "../../../../packages/client/gen/crm/consents/v2/consent_pb.js";
+import {Customer360Service} from "../../../../packages/client/gen/crm/customer_360/v2/customer_360_pb.js";
+import {DataQualityService} from "../../../../packages/client/gen/crm/data_quality/v2/quality_pb.js";
+import {DealService} from "../../../../packages/client/gen/crm/sales/v2/deal_pb.js";
+import {EnrichmentConfigurationService} from "../../../../packages/client/gen/crm/customer_enrichment/v2/config_pb.js";
+import {IdentityResolutionService} from "../../../../packages/client/gen/crm/identity_resolution/v2/identity_pb.js";
+import {InteractionService} from "../../../../packages/client/gen/crm/activities/v2/interaction_pb.js";
+import {MemberService} from "../../../../packages/client/gen/crm/access/v2/member_pb.js";
+import {PartyCsvService} from "../../../../packages/client/gen/crm/customer_data_operations/v2/party_csv_pb.js";
+import {PrivacyCaseService} from "../../../../packages/client/gen/crm/customer_privacy/v2/case_pb.js";
+
+type RpcMethod = Parameters<typeof fixtureRpcPath>[0];
+type BrowserOptions = {
+ base: string; admin: string; viewer: string; tenantB: string; sql: BrowserSql; sourceSha: string;
+ adminIdentity: string; adminHeaders?: Record<string,string>; viewerHeaders?: Record<string,string>;
+ tenantBHeaders?: Record<string,string>; tenantA?: string; features?: string[];
+ beforeViewer?: () => Promise<() => Promise<void>>; directory?: string;
+};
+type RouteEvent = {event: string; document_id: string; hash: string; at: number; persisted: boolean | null;
+ rendered_kind: string | null; rendered_account_status: string | null; history_length: number};
+declare global { interface Window { __crmRouteEvents?: RouteEvent[] } }
+type Recovery = {kind: "replay" | "lookup"; original_request_id: string; subsequent_request_id: string};
+type OwnerRecovery = Recovery & {owner: string; kind: "lookup"};
 
 export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,adminIdentity,
  adminHeaders={"cf-access-jwt-assertion":admin},
  viewerHeaders={"cf-access-jwt-assertion":viewer},
  tenantBHeaders={"cf-access-jwt-assertion":tenantB},tenantA="tenant-a",
  features=["native-ci"],beforeViewer=async()=>async()=>{},
- directory=fileURLToPath(new URL("../../e2e-evidence-native/",import.meta.url))}) {
+ directory=fileURLToPath(new URL("../../e2e-evidence-native/",import.meta.url))}: BrowserOptions) {
  const tenantSql=tenantA.replaceAll("'","''");
  assert.ok(adminIdentity,"Expected signed actor is required for browser audit assertions");
  const startedAt=Date.now();
  const {requests,recordResponse,flushHeaderReads,assertSource}=captureBrowserRpcEvidence();
- const writes=[],recovery=[],ownerRecovery=[],syntheticPrivateProbes=[],pageErrors=[],steps=[];
+ const writes: {path: string; request_id: string; audit: Awaited<ReturnType<BrowserSql>>}[]=[];
+ const recovery: Recovery[]=[],ownerRecovery: OwnerRecovery[]=[];
+ const syntheticPrivateProbes: {kind: string; request_id: string | undefined; value: string}[]=[];
+ const pageErrors: string[]=[],steps: string[]=[];
  let lastCheckpointAt=startedAt;
- const checkpoint=label=>{
+ const checkpoint=(label: string)=>{
    const now=Date.now();
    steps.push(label);
    // Same evidence for local workerd and live Chromium: timings and scenario
@@ -31,9 +71,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    lastCheckpointAt=now;
  };
  let restoreViewer=async()=>{};
- // Match the RPC pathname, not the serialized URL: privacy probes deliberately add query parameters.
- const responsePathEndsWith=(response,suffix)=>new URL(response.url()).pathname.endsWith(suffix);
- const watch=context=>{
+ const watch=(context: BrowserContext)=>{
    context.on("page",p=>p.on("pageerror",error=>pageErrors.push(error.message)));
    context.on("response",recordResponse);
  };
@@ -44,14 +82,14 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
  const page=await context.newPage();
  await installUiDiagnostics(page);
  await page.addInitScript(()=>{
-   const events=[];
+   const events: RouteEvent[]=[];
    Object.defineProperty(window,"__crmRouteEvents",{value:events});
    const documentId=crypto.randomUUID();
-   const capture=(event)=>{
+   const capture=(event: Event)=>{
      const root=document.querySelector("[data-crm-route-kind]");
      events.push({event:event.type,document_id:documentId,
        hash:window.location.hash,at:performance.now(),
-       persisted:"persisted" in event?event.persisted:null,
+       persisted:event instanceof PageTransitionEvent?event.persisted:null,
        rendered_kind:root?.getAttribute("data-crm-route-kind")??null,
        rendered_account_status:root?.getAttribute("data-crm-account-status")??null,
        history_length:history.length});
@@ -64,7 +102,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
  // Only browser document/assets, never authenticated response bodies or headers.
  // After a protected D1 migration, Workers.dev can briefly serve its own HTML
  // 404 before the static asset route has propagated to every edge.
- const shellResponses=[];
+ const shellResponses: {kind: string; path: string; status: number; fromWorker: boolean}[]=[];
  page.on("response",response=>{
    const kind=response.request().resourceType();
    if(!["document","script","stylesheet"].includes(kind))return;
@@ -76,7 +114,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    if(shellResponses.length>40)shellResponses.shift();
  });
  let firstBrowserNavigation=true;
- const navigate=async(hash,title)=>{
+ const navigate=async(hash: string,title: string)=>{
    const first=firstBrowserNavigation;
    const limit=first?6:1;
    for(let attempt=0;attempt<limit;attempt++){
@@ -86,7 +124,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      const response=first?await page.goto(base+"/#"+hash):
        await page.evaluate(next=>{window.location.hash="#"+next;return null;},hash);
      try {
-       await page.getByRole("heading",{name:title,exact:true})
+       await page.getByRole("heading",{name:string(title),exact:true})
          .waitFor({timeout:first?8000:30000});
        firstBrowserNavigation=false;
        return;
@@ -158,18 +196,18 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      await new Promise(resolve=>setTimeout(resolve,1500));
    }
  };
- const search=async(label,value,method)=>{
+ const search=async(label: string,value: string,method: RpcMethod)=>{
    const input=page.getByLabel(label,{exact:true});
    await input.fill(value);
-   const pending=page.waitForResponse(r=>responsePathEndsWith(r,"/"+method)&&r.request().method()==="POST");
+   const pending=page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(method))&&r.request().method()==="POST");
    await input.press("Enter");
    const response=await pending;
    assert.equal(response.status(),200);
    assert.equal((await response.headers())["x-crm-source-sha"],sourceSha);
  };
- const assertMutation=async(response,method,{replay=false}={})=>{
+ const assertMutation=async(response: APIResponse | Response,method: string,{replay=false}: {replay?: boolean}={})=>{
    const headers=await response.headers();
-   const requestId=headers["x-request-id"];
+   const requestId=string(headers["x-request-id"]);
    assert.equal(response.status(),200,method+" request_id="+(requestId??"missing"));
    assert.match(requestId??"",/^[a-f0-9-]{36}$/i);
    const audit=await sql("SELECT action,subject_id,actor FROM crm_audit WHERE tenant_id=? AND request_id=?",tenantA,requestId);
@@ -182,76 +220,24 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      writes.push({path:new URL(response.url()).pathname,request_id:requestId,audit});
    }
  };
- const mutation=async(button,method,options)=>{
-   const pending=page.waitForResponse(r=>responsePathEndsWith(r,"/"+method)&&r.request().method()==="POST");
+ const mutation=async(button: Locator,method: RpcMethod,options?: {replay?: boolean})=>{
+   const pending=page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(method))&&r.request().method()==="POST");
    await button.click();const response=await pending;
-   await assertMutation(response,method,options);
+   await assertMutation(response,method.name,options);
    await page.getByRole("heading",{name:/^Сохранено/}).last().waitFor();
  };
  // One tenant-scoped D1 read proves the original audit and the absence
  // of any follow-up audit. Keep both exact-count checks for every owner.
- const assertAuditRecovery=async(originalId,readId,action,owner)=>{
-   for(const id of [originalId,readId])
-     assert.match(id??"",/^[a-f0-9-]{36}$/i,owner+" must have a signed request ID");
-   assert.notEqual(originalId,readId,owner+" recovery must be a distinct request");
-   assert.match(action,/^[a-z_]+\.[a-z_]+$/,owner+" must use a known audit action");
-   const rows=await sql("SELECT request_id,action FROM crm_audit WHERE tenant_id=? AND request_id IN (?,?)",
-     tenantA,originalId,readId);
-   assert.equal(rows.filter(row=>row.request_id===originalId&&row.action===action).length,
-     1,owner+" original commit must have one matching audit action");
-   assert.equal(rows.filter(row=>row.request_id===readId).length,
-     0,owner+" recovery request must not append audit");
- };
- const reloadAfterPending=async()=>{
-   const accept=dialog=>void dialog.accept();
-   page.on("dialog",accept);
-   try{await reloadDocument();}finally{page.off("dialog",accept);}
- };
- const recoverOwnerWrite=async({owner,writeRoute,method,readSuffix,storageKey,
-   auditAction,heading,trigger})=>{
-   let calls=0,originalRequestId;
-   const loseAcknowledgement=async route=>{
-     calls++;
-     const committed=await route.fetch();
-     recordResponse(committed);await assertMutation(committed,method);
-     originalRequestId=(await committed.headers())["x-request-id"];
-     await route.abort("failed");
-   };
-   await page.route(writeRoute,loseAcknowledgement);
-   await trigger();
-   await page.getByRole("heading",{name:/Результат записи не подтверждён/}).last().waitFor();
-   const marker=await page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)),storageKey);
-   assert.deepEqual(Object.keys(marker).sort(),["expectedVersion","key","resourceId"]);
-   assert.equal(marker.expectedVersion,"0");
-   assert.match(marker.key,/^[a-f0-9-]{36}$/i);
-   await reloadAfterPending();
-   await page.getByRole("heading",{name:heading,exact:true}).waitFor();
-   const check=page.getByRole("button",{name:"Проверить результат записи",exact:true}).last();
-   await check.waitFor();
-   const pending=page.waitForResponse(response=>
-     responsePathEndsWith(response,readSuffix)&&response.request().method()==="POST");
-   await check.click();
-   const readResponse=await pending;
-   assert.equal(readResponse.status(),200,owner+" receipt lookup");
-   const readRequestId=(await readResponse.headers())["x-request-id"];
-   assert.match(readRequestId??"",/^[a-f0-9-]{36}$/i);
-   assert.ok(originalRequestId,owner+" original request id");
-   assert.equal(calls,1,owner+" recovery must not re-execute the original write");
-   await expect.poll(()=>page.evaluate(key=>sessionStorage.getItem(key),storageKey)).toBe(null);
-   await assertAuditRecovery(originalRequestId,readRequestId,auditAction,owner);
-   ownerRecovery.push({owner,kind:"lookup",original_request_id:originalRequestId,
-     subsequent_request_id:readRequestId});
-   await page.unroute(writeRoute,loseAcknowledgement);
-   checkpoint("S5 "+owner+" lost acknowledgement: opaque marker, immutable receipt lookup, one D1 audit");
-   return marker.resourceId;
- };
+ const {assertAuditRecovery,reloadAfterPending,recoverOwnerWrite}=browserRecovery({
+   page,sql,tenantA,recordResponse,assertMutation,reloadDocument,checkpoint,ownerRecovery
+ });
  // Pickers show one bounded page of options; randomly generated IDs
  // need not be on the first page. Use real UI pagination, not sleeps.
- const selectPagedPicker=async(scope,label,id,kind="party")=>{
+ const selectPagedPicker=async(scope: Page | Locator,label: string,id: string,kind="party")=>{
   const select=scope.getByLabel(label,{exact:true});
   const picker=select.locator("xpath=../.."); // SelectField div -> picker div
   const nextLabel=kind==="party"?"Другие участники":"Другие клиенты";
-  const method=kind==="party"?"/ListParties":"/ListAccounts";
+  const method=kind==="party"?PartyService.method.listParties:AccountService.method.listAccounts;
   for(let pageNumber=0;pageNumber<30;pageNumber++){
    await picker.locator("option").nth(1).waitFor({state:"attached"});
    await picker.getByRole("status").waitFor({state:"hidden"});
@@ -266,7 +252,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal(await next.count(),1,
      label+" has no further page containing "+id+" (page "+pageNumber+")");
    const pending=page.waitForResponse(response=>
-     responsePathEndsWith(response,method)&&response.request().method()==="POST");
+     matchesRpcPath(response,fixtureRpcPath(method))&&response.request().method()==="POST");
    await next.click();
    assert.equal((await pending).status(),200,label+" pagination RPC failed");
    await picker.getByRole("status").waitFor({state:"hidden"});
@@ -276,13 +262,13 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
  // Browser contract: UI/typed Connect proves visible business state;
  // D1 is read directly only for generated IDs and independent persistence,
  // audit, receipt, rollback or no-write invariants not proven by the UI.
- const firstId=async(table,column,value)=>{
-   const rows=await sql("SELECT id FROM "+table+" WHERE tenant=? AND json_extract(state,?)=?",
-     tenantA,"$."+column,value);
-   assert.equal(rows.length,1);return rows[0].id;
- };
+ const firstId=browserFirstId(sql,tenantA);
+ const pendingMarker=async(key: string)=>record(await page.evaluate(key=>{
+   const value=sessionStorage.getItem(key);
+   return value===null?null:JSON.parse(value);
+ },key));
  const runId=Date.now().toString();
- let partyId,accountId;
+ let partyId: string,accountId: string;
  try {
    await navigate("parties","Люди и организации");
    // Use only synthetic markers; signed browser sends a real Cookie and a
@@ -294,7 +280,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const privateQuery="crm-s3-query-"+runId;
    await context.addCookies([{name:"crm_s3_test_cookie",value:privateCookie,url:base}]);
    let privateHeaderRequests=0;
-   const privateRoute=async route=>{
+   const privateRoute=async (route: Route)=>{
      const headers=await route.request().headers();
      assert.ok((headers.cookie??"").includes("crm_s3_test_cookie="+privateCookie),
        "Synthetic test cookie must be present in the real signed request");
@@ -306,11 +292,11 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
        authorization:privateAuthorization,"x-crm-s3-test-jwt":privateJwt
      }});
    };
-   const createPartyRoute="**/crm.parties.v3.PartyService/CreateParty";
+   const createPartyRoute="**"+fixtureRpcPath(PartyService.method.createParty);
    await page.route(createPartyRoute,privateRoute);
    await page.getByRole("button",{name:"Создать участника",exact:true}).click();
    await page.getByLabel("Имя или название",{exact:true}).fill("Browser Party "+runId);
-   await mutation(page.getByRole("button",{name:"Сохранить участника",exact:true}),"CreateParty");
+   await mutation(page.getByRole("button",{name:"Сохранить участника",exact:true}),PartyService.method.createParty);
    await page.unroute(createPartyRoute,privateRoute);
    assert.equal(privateHeaderRequests,1,
      "Synthetic header must accompany exactly one real signed mutation");
@@ -324,7 +310,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      {kind:"jwt",request_id:firstMutationId,value:privateJwt},
      {kind:"query-string",request_id:firstMutationId,value:privateQuery});
    partyId=await firstId("crm_party_records","display_name","Browser Party "+runId);
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"' AND subject_id='"+partyId+"'"))[0].n,1);
+   assert.equal(record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"' AND subject_id='"+partyId+"'"))[0]).n,1);
    await reloadDocument();
    const skipLink=page.locator(".crm-skip-link");
    assert.equal(await skipLink.getAttribute("href"),"#main-content");
@@ -346,11 +332,11 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
        const notice=page.getByRole("heading",{name:"Ошибка сервиса. HTTP 404",exact:true});
        if(!await notice.isVisible())throw error;
        await flushHeaderReads();
-       const last=requests.findLast(entry=>entry.path.endsWith("/ListParties"));
+       const last=[...requests].reverse().find(entry=>entry.path===fixtureRpcPath(PartyService.method.listParties));
        if(last?.status!==404||last.source_sha||last.runtime)
          throw Error("ListParties failed inside CRM; no edge-only recovery allowed: "+
            JSON.stringify(last));
-       const pending=page.waitForResponse(r=>responsePathEndsWith(r,"/ListParties")&&
+       const pending=page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(PartyService.method.listParties))&&
          r.request().method()==="POST");
        await page.getByRole("button",{name:"Повторить чтение",exact:true}).click();
        const response=await pending;
@@ -385,7 +371,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("heading",{name:"Изменить участника",exact:true}).waitFor();
    assert.equal(await page.getByRole("dialog").count(),1);
    await page.getByLabel("Имя или название",{exact:true}).fill("Browser Updated "+runId);
-   await mutation(page.getByRole("button",{name:"Сохранить участника",exact:true}),"UpdateParty");
+   await mutation(page.getByRole("button",{name:"Сохранить участника",exact:true}),PartyService.method.updateParty);
    checkpoint("Party create/edit/reload and D1 version/audit");
    // S5a: original Party commit happens, its HTTP acknowledgement is lost,
    // and a fresh React instance MUST use GetParty + typed D1 receipt, not
@@ -393,9 +379,9 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("button",{name:"Создать участника",exact:true}).click();
    const s5aPartyName="S5a Recovery "+runId;
    await page.getByLabel("Имя или название",{exact:true}).fill(s5aPartyName);
-   const s5aRoute="**/crm.parties.v3.PartyService/CreateParty";
+   const s5aRoute=createPartyRoute;
    let s5aOriginalRequestId, s5aCreateCalls=0;
-   const loseS5aAcknowledgement=async route=>{
+   const loseS5aAcknowledgement=async (route: Route)=>{
      s5aCreateCalls++;
      const committed=await route.fetch();
      recordResponse(committed);
@@ -407,51 +393,51 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("button",{name:"Сохранить участника",exact:true}).click();
    await page.getByRole("dialog").getByRole("heading",{name:/Результат записи не подтверждён/}).waitFor();
    const s5aPartyId=await firstId("crm_party_records","display_name",s5aPartyName);
-   const s5aMarker=await page.evaluate(()=>JSON.parse(sessionStorage.getItem("crm.party.pending.v1")));
+   const s5aMarker=await pendingMarker("crm.party.pending.v1");
    assert.deepEqual(Object.keys(s5aMarker).sort(),["expectedVersion","key","resourceId"]);
    assert.equal(s5aMarker.resourceId,s5aPartyId);
    assert.equal(s5aMarker.expectedVersion,"0");
    await expect(page.getByRole("button",{name:"Сохранить участника",exact:true})).toBeDisabled();
-   const acceptS5aReload=dialog=>void dialog.accept();
+   const acceptS5aReload=(dialog: Dialog)=>void dialog.accept();
    page.on("dialog",acceptS5aReload);
    try {await reloadDocument();} finally {page.off("dialog",acceptS5aReload);}
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).waitFor();
    await expect(page.getByRole("button",{name:"Создать участника",exact:true})).toBeDisabled();
-   const s5aGetRoute="**/crm.parties.v3.PartyService/GetParty";
-   const failS5aRead=route=>route.abort("failed");
+   const s5aGetRoute="**"+fixtureRpcPath(PartyService.method.getParty);
+   const failS5aRead=(route: Route)=>route.abort("failed");
    await page.route(s5aGetRoute,failS5aRead);
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
    await expect(page.getByRole("button",{name:"Проверить результат записи",exact:true})).toBeEnabled();
-   assert.deepEqual(await page.evaluate(()=>JSON.parse(sessionStorage.getItem("crm.party.pending.v1"))),s5aMarker);
+   assert.deepEqual(await pendingMarker("crm.party.pending.v1"),s5aMarker);
    await page.unroute(s5aGetRoute,failS5aRead);
-   const s5aProofRead=page.waitForResponse(r=>responsePathEndsWith(r,"/GetParty")&&r.request().method()==="POST");
+   const s5aProofRead=page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(PartyService.method.getParty))&&r.request().method()==="POST");
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
    const s5aChecked=await s5aProofRead;
    assert.equal(s5aChecked.status(),200);
-   const s5aReadRequestId=(await s5aChecked.headers())["x-request-id"];
+   const s5aReadRequestId=string((await s5aChecked.headers())["x-request-id"]);
    await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
-     .toContainText(s5aOriginalRequestId);
+     .toContainText(string(s5aOriginalRequestId));
    assert.equal(s5aCreateCalls,1,"Recovery must not retry the original Party mutation after reload");
-   await assertAuditRecovery(s5aOriginalRequestId,s5aReadRequestId,"parties.create","party");
+   await assertAuditRecovery(string(s5aOriginalRequestId),s5aReadRequestId,"parties.create","party");
    assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.party.pending.v1")),null);
-   ownerRecovery.push({owner:"party",kind:"lookup",original_request_id:s5aOriginalRequestId,
+   ownerRecovery.push({owner:"party",kind:"lookup",original_request_id:string(s5aOriginalRequestId),
      subsequent_request_id:s5aReadRequestId});
    await page.unroute(s5aRoute,loseS5aAcknowledgement);
    checkpoint("S5a lost Party acknowledgment: opaque reload marker, signed GetParty receipt, no second commit");
 
    await page.getByRole("button",{name:"Создать участника",exact:true}).click();
    await page.getByLabel("Имя или название",{exact:true}).fill("Browser Other "+runId);
-   await mutation(page.getByRole("button",{name:"Сохранить участника",exact:true}),"CreateParty");
+   await mutation(page.getByRole("button",{name:"Сохранить участника",exact:true}),PartyService.method.createParty);
    const otherPartyId=await firstId("crm_party_records","display_name","Browser Other "+runId);
-   const searchAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
-   await search("Поиск участников","Browser Updated "+runId,"ListParties");
+   const searchAuditBefore=record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n;
+   await search("Поиск участников","Browser Updated "+runId,PartyService.method.listParties);
    await page.getByRole("heading",{name:"Browser Updated "+runId,exact:true}).waitFor();
    assert.equal(await page.getByRole("heading",{name:"Browser Other "+runId,exact:true}).count(),0);
-   await search("Поиск участников","missing-search-"+runId,"ListParties");
+   await search("Поиск участников","missing-search-"+runId,PartyService.method.listParties);
    await page.getByText("Участники не найдены.",{exact:true}).waitFor();
-   await search("Поиск участников",partyId,"ListParties");
+   await search("Поиск участников",partyId,PartyService.method.listParties);
    await page.getByRole("heading",{name:"Browser Updated "+runId,exact:true}).waitFor();
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,searchAuditBefore);
+   assert.equal(record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n,searchAuditBefore);
    // Party -> Account is one existing CreateAccount command, not a second submit owner.
    const accountFromParty=async()=>{
      await page.locator("section").filter({has:page.getByRole("heading",
@@ -462,25 +448,25 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      await expect(page.getByLabel("Название клиента",{exact:true})).toHaveValue("Browser Updated "+runId);
      await expect(page.getByLabel("Основной участник",{exact:true})).toHaveValue(partyId);
    };
-   const partyAccountAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   const partyAccountAuditBefore=record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n;
    await accountFromParty();
    await page.getByLabel("Название клиента",{exact:true}).fill("Not saved "+runId);
-   page.once("dialog",dialog=>void dialog.dismiss());
+   page.once("dialog",(dialog: Dialog)=>void dialog.dismiss());
    await page.getByRole("button",{name:"К участнику",exact:true}).click();
    assert.equal(new URL(await page.url()).hash,"#accounts/new?partyId="+partyId,
      "cancelled discard must keep the unsaved Account form");
    assert.equal(await page.getByLabel("Название клиента",{exact:true}).inputValue(),"Not saved "+runId);
-   page.once("dialog",dialog=>void dialog.accept());
+   page.once("dialog",(dialog: Dialog)=>void dialog.accept());
    await page.getByRole("button",{name:"К участнику",exact:true}).click();
    await expect(page).toHaveURL(/#parties\?partyId=/);
    await page.getByRole("heading",{name:"Browser Updated "+runId,exact:true}).waitFor();
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
+   assert.equal(record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n,
      partyAccountAuditBefore,"Cancel/Back must not create an Account");
    await accountFromParty();
    await page.getByLabel("Название клиента",{exact:true}).fill("Browser Party Account "+runId);
    await recoverOwnerWrite({
-     owner:"account",writeRoute:"**/CreateAccount",method:"CreateAccount",
-     readSuffix:"/GetAccount",storageKey:"crm.account.create.pending.v1",
+     owner:"account",method:AccountService.method.createAccount,
+     readMethod:AccountService.method.getAccount,storageKey:"crm.account.create.pending.v1",
      auditAction:"accounts.create",heading:"Новый клиент",
      trigger:()=>page.getByRole("button",{name:"Сохранить клиента",exact:true}).click()
    });
@@ -495,8 +481,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await selectPagedPicker(page,"Второй участник",otherPartyId);
    await page.getByLabel("Код отношения",{exact:true}).fill("browser_relation_"+runId);
    await recoverOwnerWrite({
-     owner:"relationship",writeRoute:"**/CreatePartyRelationship",method:"CreatePartyRelationship",
-     readSuffix:"/GetPartyRelationship",storageKey:"crm.relationship.pending.v1",
+     owner:"relationship",method:PartyRelationshipService.method.createPartyRelationship,
+     readMethod:PartyRelationshipService.method.getPartyRelationship,storageKey:"crm.relationship.pending.v1",
      auditAction:"party_relationships.create",heading:"Связи",
      trigger:()=>page.getByRole("button",{name:"Сохранить связь",exact:true}).click()
    });
@@ -504,27 +490,27 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      .getByRole("button",{name:"Редактировать связь",exact:true}).click();
    await page.getByRole("heading",{name:"Изменить связь",exact:true}).waitFor();
    await page.getByLabel("Статус",{exact:true}).selectOption("2");
-   await mutation(page.getByRole("button",{name:"Сохранить связь",exact:true}),"UpdatePartyRelationship");
-   const relationship=(await sql("SELECT version,json_extract(state,'$.status') AS status FROM crm_party_relationship_records WHERE tenant='"+tenantSql+"' AND from_party='"+partyId+"' AND to_party='"+otherPartyId+"'"))[0];
+   await mutation(page.getByRole("button",{name:"Сохранить связь",exact:true}),PartyRelationshipService.method.updatePartyRelationship);
+   const relationship=record((await sql("SELECT version,json_extract(state,'$.status') AS status FROM crm_party_relationship_records WHERE tenant='"+tenantSql+"' AND from_party='"+partyId+"' AND to_party='"+otherPartyId+"'"))[0]);
    assert.equal(relationship.version,2);assert.equal(relationship.status,"inactive");
    checkpoint("Relationship create/edit through original owner with D1 version/status");
-   const relationFilterAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   const relationFilterAuditBefore=record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n;
    // Other Parties can have active relationships in this tenant.
    // Filter the *specific* updated record; do not demand an empty global list.
    const relationHeading=page.getByRole("heading",{name:"browser_relation_"+runId,exact:true});
-   const activeRelationRead=page.waitForResponse(r=>responsePathEndsWith(r,"/ListPartyRelationships")&&
+   const activeRelationRead=page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(PartyRelationshipService.method.listPartyRelationships))&&
      r.request().method()==="POST");
    await page.getByLabel("Статус связей",{exact:true}).selectOption("1");
    assert.equal((await activeRelationRead).status(),200);
    await relationHeading.waitFor({state:"hidden"});
-   const inactiveRelationRead=page.waitForResponse(r=>responsePathEndsWith(r,"/ListPartyRelationships")&&
+   const inactiveRelationRead=page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(PartyRelationshipService.method.listPartyRelationships))&&
      r.request().method()==="POST");
    await page.getByLabel("Статус связей",{exact:true}).selectOption("2");
    assert.equal((await inactiveRelationRead).status(),200);
    await relationHeading.waitFor();
    await page.getByLabel("Статус связей",{exact:true}).selectOption("");
    await page.getByRole("heading",{name:"browser_relation_"+runId,exact:true}).waitFor();
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
+   assert.equal(record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n,
      relationFilterAuditBefore,"Relationship list filtering never writes audit");
    checkpoint("M1-05 real status-filtered Relationship list preserves Party and D1 audit");
    // S-M1-A: the relationship must show authorized names, and its Party
@@ -534,7 +520,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await namedRelationship.getByRole("link",{name:"Browser Updated "+runId,exact:true}).waitFor();
    const linkedParty=namedRelationship.getByRole("link",{name:"Browser Other "+runId,exact:true});
    await linkedParty.waitFor();
-   const directPartyRead=page.waitForResponse(r=>responsePathEndsWith(r,"/GetParty")&&
+   const directPartyRead=page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(PartyService.method.getParty))&&
      r.request().method()==="POST");
    await linkedParty.click();
    assert.equal((await directPartyRead).status(),200);
@@ -548,20 +534,20 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await navigate("accounts","Клиенты");
    await page.getByRole("button",{name:"Создать клиента",exact:true}).click();
    await page.getByLabel("Название клиента",{exact:true}).fill("Browser Account "+runId);
-   await search("Поиск: Основной участник",partyId,"ListParties");
+   await search("Поиск: Основной участник",partyId,PartyService.method.listParties);
    // HTTP completion precedes React query commit. Assert the exact filtered
    // option entered the DOM before the generic paged picker checks cursors.
    // A bad server result still fails (the expected option never appears).
    await page.getByLabel("Основной участник",{exact:true})
      .locator(`option[value="${partyId}"]`).waitFor({state:"attached"});
    await selectPagedPicker(page,"Основной участник",partyId);
-   await mutation(page.getByRole("button",{name:"Сохранить клиента",exact:true}),"CreateAccount");
+   await mutation(page.getByRole("button",{name:"Сохранить клиента",exact:true}),AccountService.method.createAccount);
    accountId=await firstId("crm_account_records","name","Browser Account "+runId);
    await page.getByRole("heading",{name:"Browser Account "+runId,exact:true}).waitFor();
-   await search("Поиск клиентов",accountId,"ListAccounts");
+   await search("Поиск клиентов",accountId,AccountService.method.listAccounts);
    await page.getByRole("heading",{name:"Browser Account "+runId,exact:true}).waitFor();
    const accountCard=page.locator("section").filter({has:page.getByRole("heading",{name:"Browser Account "+runId,level:2,exact:true})});
-   const overviewResponse=page.waitForResponse(r=>responsePathEndsWith(r,"/GetAccountOverview"));
+   const overviewResponse=page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(Customer360Service.method.getAccountOverview)));
    await accountCard.getByRole("button",{name:"Открыть карточку",exact:true}).click();
    assert.equal((await overviewResponse).status(),200);
    await page.getByText("Основной участник: Browser Updated "+runId,{exact:true}).waitFor();
@@ -572,7 +558,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByLabel("Статус",{exact:true}).waitFor();
    assert.equal(await page.getByRole("dialog").count(),0,"edit stays inline");
    await page.getByLabel("Статус",{exact:true}).selectOption("2");
-   await mutation(page.getByRole("button",{name:"Сохранить клиента",exact:true}),"UpdateAccount");
+   await mutation(page.getByRole("button",{name:"Сохранить клиента",exact:true}),AccountService.method.updateAccount);
    await page.getByLabel("Статус клиента",{exact:true}).selectOption("1");
    // Assert the navigation commit itself: list disappearance can also be a pending refresh.
    await expect(page).toHaveURL(/(?:\\?|&)status=1(?:&|$)/);
@@ -602,14 +588,14 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("heading",{name:"Карточка клиента",exact:true}).waitFor();
    await page.getByRole("button",{name:"Редактировать",exact:true}).click();
    await page.getByLabel("Название клиента",{exact:true}).fill("Unsaved "+runId);
-   page.once("dialog",dialog=>void dialog.dismiss());
+   page.once("dialog",(dialog: Dialog)=>void dialog.dismiss());
    await page.getByRole("button",{name:"К списку клиентов",exact:true}).click();
    assert.equal(new URL(await page.url()).hash,"#accounts/"+encodeURIComponent(accountId),"discard refusal must retain the page");
    assert.equal(await page.getByLabel("Название клиента",{exact:true}).inputValue(),"Unsaved "+runId);
    await page.getByLabel("Название клиента",{exact:true}).fill("Browser Account "+runId);
 
    await page.getByLabel("Статус",{exact:true}).selectOption("1");
-   await mutation(page.getByRole("button",{name:"Сохранить клиента",exact:true}),"UpdateAccount");
+   await mutation(page.getByRole("button",{name:"Сохранить клиента",exact:true}),AccountService.method.updateAccount);
    await page.getByRole("button",{name:"К списку клиентов",exact:true}).click();
    await page.getByRole("heading",{name:"Клиенты",exact:true}).waitFor();
    assert.equal(new URL(await page.url()).hash,listHash,"Back must restore search, status and cursor");
@@ -635,8 +621,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await selectPagedPicker(page,"Участник",partyId);
    await page.getByLabel("Значение контакта",{exact:true}).fill("browser-"+runId+"@example.org");
    await recoverOwnerWrite({
-     owner:"contact-point",writeRoute:"**/CreateContactPoint",method:"CreateContactPoint",
-     readSuffix:"/GetContactPoint",storageKey:"crm.contact.pending.v1",
+     owner:"contact-point",method:ContactPointService.method.createContactPoint,
+     readMethod:ContactPointService.method.getContactPoint,storageKey:"crm.contact.pending.v1",
      auditAction:"contact_points.create",heading:"Контакты",
      trigger:()=>page.getByRole("button",{name:"Сохранить контакт",exact:true}).click()
    });
@@ -648,9 +634,9 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      .getByRole("button",{name:"Редактировать контакт",exact:true}).click();
    await page.getByRole("heading",{name:"Изменить контакт",exact:true}).waitFor();
    await page.getByLabel("Предпочтительный",{exact:true}).check();
-   await mutation(page.getByRole("button",{name:"Сохранить контакт",exact:true}),"UpdateContactPoint");
+   await mutation(page.getByRole("button",{name:"Сохранить контакт",exact:true}),ContactPointService.method.updateContactPoint);
    // Filter by the known user-facing name, never by copying the Party ID.
-   await search("Поиск: Фильтр по участнику","Browser Updated "+runId,"ListParties");
+   await search("Поиск: Фильтр по участнику","Browser Updated "+runId,PartyService.method.listParties);
    await page.getByLabel("Фильтр по участнику",{exact:true})
      .locator('option[value="'+partyId+'"]').waitFor({state:"attached"});
    await page.getByLabel("Фильтр по участнику",{exact:true}).selectOption(partyId);
@@ -665,9 +651,9 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await selectPagedPicker(page,"Участник",partyId);
    await page.getByLabel("Тип контакта",{exact:true}).selectOption("2");
    await page.getByLabel("Значение контакта",{exact:true}).fill(privatePhone);
-   await mutation(page.getByRole("button",{name:"Сохранить контакт",exact:true}),"CreateContactPoint");
+   await mutation(page.getByRole("button",{name:"Сохранить контакт",exact:true}),ContactPointService.method.createContactPoint);
    syntheticPrivateProbes.push({kind:"contact-phone",request_id:writes.at(-1)?.request_id,value:privatePhone});
-   const contactFilterAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   const contactFilterAuditBefore=record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n;
    await page.getByLabel("Способ связи",{exact:true}).selectOption("2");
    await page.getByRole("heading",{name:privatePhone,exact:true}).waitFor();
    await page.getByRole("heading",{name:"browser-"+runId+"@example.org",exact:true})
@@ -678,7 +664,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("heading",{name:privatePhone,exact:true}).waitFor();
    await page.getByLabel("Способ связи",{exact:true}).selectOption("");
    await page.getByRole("heading",{name:"browser-"+runId+"@example.org",exact:true}).waitFor();
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
+   assert.equal(record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n,
      contactFilterAuditBefore,"Contact filter requests must not write audit");
    checkpoint("M1-04 typed Contact kind+status filters before page limit, Party scope unchanged");
    // M1-06: Account360 must link straight to the exact owned ContactPoint
@@ -687,14 +673,14 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const linkedRelationshipRows=await sql("SELECT id FROM crm_party_relationship_records "+
      "WHERE tenant='"+tenantSql+"' AND from_party='"+partyId+"' AND to_party='"+otherPartyId+"'");
    assert.equal(linkedRelationshipRows.length,1);
-   const linkedRelationshipId=linkedRelationshipRows[0].id;
-   const overviewNavigationAudit=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   const linkedRelationshipId=string(linkedRelationshipRows[0]?.id);
+   const overviewNavigationAudit=record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n;
    await navigate("accounts/"+accountId,"Карточка клиента");
    const emailFromAccount=page.getByRole("link",{name:"browser-"+runId+"@example.org",exact:true});
    await emailFromAccount.waitFor();
    assert.equal(await emailFromAccount.getAttribute("href"),
      "#contacts?partyId="+partyId+"&contactPointId="+browserSalesContactId);
-   const contactFromOverviewRead=page.waitForResponse(r=>responsePathEndsWith(r,"/GetContactPoint")&&
+   const contactFromOverviewRead=page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(ContactPointService.method.getContactPoint))&&
      r.request().method()==="POST");
    await emailFromAccount.click();
    assert.equal((await contactFromOverviewRead).status(),200);
@@ -711,7 +697,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await relationshipFromAccount.waitFor();
    assert.equal(await relationshipFromAccount.getAttribute("href"),
      "#relationships?partyId="+partyId+"&relationshipId="+linkedRelationshipId);
-   const relationshipFromOverviewRead=page.waitForResponse(r=>responsePathEndsWith(r,"/GetPartyRelationship")&&
+   const relationshipFromOverviewRead=page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(PartyRelationshipService.method.getPartyRelationship))&&
      r.request().method()==="POST");
    await relationshipFromAccount.click();
    assert.equal((await relationshipFromOverviewRead).status(),200);
@@ -741,7 +727,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await navigate("contacts?partyId="+partyId+"&contactPointId=bad%2Fid","Страница не найдена");
    await navigate("relationships?partyId="+partyId+"&relationshipId="+linkedRelationshipId+
      "&relationshipId="+linkedRelationshipId,"Страница не найдена");
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
+   assert.equal(record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n,
      overviewNavigationAudit,"Account360 and focused Get navigation may never write audit");
    checkpoint("M1-06 wrong-party, malformed and duplicate routes fail closed, no write");
    await navigate("tasks","Задачи");
@@ -749,8 +735,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByLabel("Тема задачи",{exact:true}).fill("Browser Task "+runId);
    await selectPagedPicker(page,"Клиент",accountId,"account");
    await recoverOwnerWrite({
-     owner:"task",writeRoute:"**/CreateTask",method:"CreateTask",
-     readSuffix:"/GetTask",storageKey:"crm.task.pending.v1",
+     owner:"task",method:TaskService.method.createTask,
+     readMethod:TaskService.method.getTask,storageKey:"crm.task.pending.v1",
      auditAction:"activity_tasks.create",heading:"Задачи",
      trigger:()=>page.getByRole("button",{name:"Создать задачу",exact:true}).click()
    });
@@ -763,29 +749,29 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await taskCard.getByRole("button",{name:"Назначить напоминание",exact:true}).click();
    await page.getByRole("heading",{name:"Напоминание задачи",exact:true}).waitFor();
    await page.getByLabel("Время напоминания",{exact:true}).fill("2030-06-01T12:00");
-   await mutation(page.getByRole("button",{name:"Сохранить напоминание",exact:true}),"ScheduleReminder");
-   assert.equal((await sql("SELECT version FROM crm_activity_task_records WHERE tenant='"+tenantSql+"' AND id='"+taskId+"'"))[0].version,2);
-   const scheduledAudits=async()=>(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+
-     "' AND subject_id='"+taskId+"' AND action='activity_tasks.reminder_scheduled'"))[0].n;
+   await mutation(page.getByRole("button",{name:"Сохранить напоминание",exact:true}),TaskService.method.scheduleReminder);
+   assert.equal(record((await sql("SELECT version FROM crm_activity_task_records WHERE tenant='"+tenantSql+"' AND id='"+taskId+"'"))[0]).version,2);
+   const scheduledAudits=async()=>record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+
+     "' AND subject_id='"+taskId+"' AND action='activity_tasks.reminder_scheduled'"))[0]).n;
    assert.equal(await scheduledAudits(),1,"one real schedule receipt and audit");
    await taskCard.getByRole("button",{name:"Изменить напоминание",exact:true}).click();
    await page.getByLabel("Время напоминания",{exact:true}).fill("2030-06-02T12:00");
-   await mutation(page.getByRole("button",{name:"Сохранить напоминание",exact:true}),"ScheduleReminder");
-   assert.equal((await sql("SELECT version FROM crm_activity_task_records WHERE tenant='"+tenantSql+"' AND id='"+taskId+"'"))[0].version,3);
+   await mutation(page.getByRole("button",{name:"Сохранить напоминание",exact:true}),TaskService.method.scheduleReminder);
+   assert.equal(record((await sql("SELECT version FROM crm_activity_task_records WHERE tenant='"+tenantSql+"' AND id='"+taskId+"'"))[0]).version,3);
    assert.equal(await scheduledAudits(),2,"rescheduling writes exactly one new audit");
    await taskCard.getByRole("button",{name:"Изменить напоминание",exact:true}).click();
    await page.getByLabel("Время напоминания",{exact:true}).fill("2030-06-02T12:00");
    await page.getByRole("button",{name:"Сохранить напоминание",exact:true}).click();
    await page.getByRole("heading",{name:/Изменений не было/}).waitFor();
-   assert.equal((await sql("SELECT version FROM crm_activity_task_records WHERE tenant='"+tenantSql+"' AND id='"+taskId+"'"))[0].version,3);
+   assert.equal(record((await sql("SELECT version FROM crm_activity_task_records WHERE tenant='"+tenantSql+"' AND id='"+taskId+"'"))[0]).version,3);
    assert.equal(await scheduledAudits(),2,"same-time no-op has no D1 audit or receipt");
    await reloadDocument();
    await page.getByRole("heading",{name:"Browser Task "+runId,exact:true}).waitFor();
    await taskCard.getByText(/Напоминание:.*2030/).waitFor();
    checkpoint("M1-08 original Task ScheduleReminder set/reschedule/no-op/reload and D1 audit");
-   await mutation(taskCard.getByRole("button",{name:"Выполнить задачу",exact:true}),"CompleteTask");
-   assert.equal((await sql("SELECT json_extract(state,'$.status') AS status FROM crm_activity_task_records WHERE tenant='"+tenantSql+"' AND id='"+taskId+"'"))[0].status,"completed");
-   await search("Поиск: Фильтр по клиенту","Browser Account "+runId,"ListAccounts");
+   await mutation(taskCard.getByRole("button",{name:"Выполнить задачу",exact:true}),TaskService.method.completeTask);
+   assert.equal(record((await sql("SELECT json_extract(state,'$.status') AS status FROM crm_activity_task_records WHERE tenant='"+tenantSql+"' AND id='"+taskId+"'"))[0]).status,"completed");
+   await search("Поиск: Фильтр по клиенту","Browser Account "+runId,AccountService.method.listAccounts);
    await page.getByLabel("Фильтр по клиенту",{exact:true})
      .locator('option[value="'+accountId+'"]').waitFor({state:"attached"});
    await page.getByLabel("Фильтр по клиенту",{exact:true}).selectOption(accountId);
@@ -798,9 +784,9 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByLabel("Тема задачи",{exact:true}).fill("Browser Urgent "+runId);
    await selectPagedPicker(page,"Клиент",accountId,"account");
    await page.getByLabel("Приоритет",{exact:true}).selectOption("4");
-   await mutation(page.getByRole("button",{name:"Создать задачу",exact:true}),"CreateTask");
+   await mutation(page.getByRole("button",{name:"Создать задачу",exact:true}),TaskService.method.createTask);
    const urgentId=await firstId("crm_activity_task_records","subject","Browser Urgent "+runId);
-   const beforeTaskFilters=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   const beforeTaskFilters=record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n;
    // Find a real Task by subject without manually paging through opaque IDs.
    await page.getByLabel("Поиск задач",{exact:true}).fill("Browser Urgent "+runId);
    await page.getByRole("button",{name:"Найти задачу по названию",exact:true}).click();
@@ -811,8 +797,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("heading",{name:"Browser Urgent "+runId,exact:true}).waitFor();
    await page.getByRole("button",{name:"Сбросить поиск задач",exact:true}).click();
    await page.getByRole("heading",{name:"Browser Task "+runId,exact:true}).waitFor();
-   const filterTasks=async(label,value)=>{
-     const response=page.waitForResponse(r=>responsePathEndsWith(r,"/ListTasks")&&r.request().method()==="POST");
+   const filterTasks=async(label: string,value: string)=>{
+     const response=page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(TaskService.method.listTasks))&&r.request().method()==="POST");
      await page.getByLabel(label,{exact:true}).selectOption(value);
      assert.equal((await response).status(),200);
    };
@@ -825,15 +811,15 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("heading",{name:"Browser Task "+runId,exact:true}).waitFor();
    await page.getByRole("heading",{name:"Browser Urgent "+runId,exact:true}).waitFor({state:"hidden"});
    const rowAccountReads=[];
-   const trackAccountRead=request=>{
-     if(new URL(request.url()).pathname.endsWith("/GetAccount"))rowAccountReads.push(request.url());
+   const trackAccountRead=(request: Request)=>{
+     if(new URL(request.url()).pathname===fixtureRpcPath(AccountService.method.getAccount))rowAccountReads.push(request.url());
    };
    page.on("request",trackAccountRead);
    await filterTasks("Статус задачи","");
    await filterTasks("Приоритет задач","");
    await page.getByRole("heading",{name:"Browser Task "+runId,exact:true}).waitFor();
    await page.getByRole("heading",{name:"Browser Urgent "+runId,exact:true}).waitFor();
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,beforeTaskFilters);
+   assert.equal(record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n,beforeTaskFilters);
    await expect(taskCard.locator('a[href="#accounts/'+accountId+'"]')).toHaveText(/.+/);
    page.off("request",trackAccountRead);
    assert.equal(rowAccountReads.length,0,"rendered task lists must use the account labels from ListTasks");
@@ -845,8 +831,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByLabel("Тема задачи: изменение",{exact:true}).fill("Browser Edited Urgent "+runId);
    await page.getByLabel("Описание задачи: изменение",{exact:true}).fill("Edited from UI");
    await page.getByLabel("Приоритет: изменение",{exact:true}).selectOption("3");
-   await mutation(page.getByRole("button",{name:"Сохранить изменения задачи",exact:true}),"UpdateTask");
-   const savedEdit=(await sql("SELECT version,json_extract(state,'$.subject') AS subject,json_extract(state,'$.priority') AS priority FROM crm_activity_task_records WHERE tenant='"+tenantSql+"' AND id='"+urgentId+"'"))[0];
+   await mutation(page.getByRole("button",{name:"Сохранить изменения задачи",exact:true}),TaskService.method.updateTask);
+   const savedEdit=record((await sql("SELECT version,json_extract(state,'$.subject') AS subject,json_extract(state,'$.priority') AS priority FROM crm_activity_task_records WHERE tenant='"+tenantSql+"' AND id='"+urgentId+"'"))[0]);
    assert.equal(savedEdit.version,2);
    assert.equal(savedEdit.subject,"Browser Edited Urgent "+runId);
    assert.equal(savedEdit.priority,"high");
@@ -866,12 +852,12 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByLabel("Тема задачи",{exact:true}).fill("Browser Overdue "+runId);
    await selectPagedPicker(page,"Клиент",accountId,"account");
    await page.getByLabel("Срок",{exact:true}).fill("2020-01-01T12:00");
-   await mutation(page.getByRole("button",{name:"Создать задачу",exact:true}),"CreateTask");
-   const overdueId=await firstId("crm_activity_task_records","subject","Browser Overdue "+runId);
+   await mutation(page.getByRole("button",{name:"Создать задачу",exact:true}),TaskService.method.createTask);
+   await firstId("crm_activity_task_records","subject","Browser Overdue "+runId);
    const overdueCard=page.locator("section").filter({has:page.getByRole("heading",{
      name:"Browser Overdue "+runId,exact:true})});
    await overdueCard.getByText("Просрочена",{exact:true}).waitFor();
-   const overdueReadAudit=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   const overdueReadAudit=record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n;
    await page.getByLabel("Только просроченные задачи",{exact:true}).check();
    assert.equal(new URL(page.url()).hash,"#tasks?accountId="+accountId+"&overdue=1");
    await page.getByRole("heading",{name:"Browser Overdue "+runId,exact:true}).waitFor();
@@ -888,12 +874,12 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByText("Просроченных задач нет.",{exact:true}).waitFor();
    await navigate("tasks?accountId="+accountId+"&overdue=1","Задачи");
    await page.getByRole("heading",{name:"Browser Overdue "+runId,exact:true}).waitFor();
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
+   assert.equal(record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n,
      overdueReadAudit,"Overdue filtering, card navigation and reload are read-only");
    await navigate("tasks?overdue=1&overdue=1","Страница не найдена");
    await navigate("tasks?overdue=invalid","Страница не найдена");
    await navigate("tasks?overdue=1","Задачи");
-   await mutation(overdueCard.getByRole("button",{name:"Выполнить задачу",exact:true}),"CompleteTask");
+   await mutation(overdueCard.getByRole("button",{name:"Выполнить задачу",exact:true}),TaskService.method.completeTask);
    // Other overdue tasks (including the native fixture) must remain visible:
    // completion removes ONLY this task, not the entire overdue list.
    await page.getByRole("heading",{name:"Browser Overdue "+runId,exact:true}).waitFor({state:"hidden"});
@@ -904,29 +890,29 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await navigate("sales","Сделки");
    await page.getByRole("button",{name:"Создать воронку",exact:true}).click();
    await page.getByLabel("Название воронки",{exact:true}).fill("Browser Pipeline "+runId);
-   const pipelineCreateRoute="**/crm.sales.v2.DealService/CreatePipeline";
+   const pipelineCreateRoute="**"+fixtureRpcPath(DealService.method.createPipeline);
    let pipelineCreateCalls=0,originalPipelineCreateRequestId;
-   await page.route(pipelineCreateRoute,async route=>{
+   await page.route(pipelineCreateRoute,async (route: Route)=>{
      pipelineCreateCalls++;
      const committed=await route.fetch();
      recordResponse(committed);await assertMutation(committed,"CreatePipeline");
-     originalPipelineCreateRequestId=(await committed.headers())["x-request-id"];
+     originalPipelineCreateRequestId=string((await committed.headers())["x-request-id"]);
      await route.abort("failed");
    });
    await page.getByRole("button",{name:"Сохранить воронку",exact:true}).click();
    await page.getByRole("heading",{name:/Результат записи не подтверждён/}).waitFor();
-   const pipelineMarker=await page.evaluate(()=>JSON.parse(sessionStorage.getItem("crm.sales.pipeline.pending.v1")));
+   const pipelineMarker=await pendingMarker("crm.sales.pipeline.pending.v1");
    assert.deepEqual(Object.keys(pipelineMarker).sort(),["expectedVersion","key","resourceId"]);
    assert.equal(pipelineMarker.expectedVersion,"0");
-   assert.match(pipelineMarker.key,/^[a-f0-9-]{36}$/i);
+   assert.match(string(pipelineMarker.key),/^[a-f0-9-]{36}$/i);
    await reloadAfterPending();
    await page.getByRole("heading",{name:"Сделки",exact:true}).waitFor();
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).waitFor();
-   const pipelineLookup=page.waitForResponse(r=>responsePathEndsWith(r,"/GetPipeline")&&r.request().method()==="POST");
+   const pipelineLookup=page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(DealService.method.getPipeline))&&r.request().method()==="POST");
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
    const pipelineLookupResponse=await pipelineLookup;
    assert.equal(pipelineLookupResponse.status(),200);
-   const pipelineLookupRequestId=(await pipelineLookupResponse.headers())["x-request-id"];
+   const pipelineLookupRequestId=string((await pipelineLookupResponse.headers())["x-request-id"]);
    assert.match(pipelineLookupRequestId??"",/^[a-f0-9-]{36}$/i);
    const newPipelineId=await firstId("crm_sales_pipeline_records","name","Browser Pipeline "+runId);
    assert.equal(pipelineMarker.resourceId,newPipelineId);
@@ -947,10 +933,10 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await expect(page.getByRole("region",{name:"Kanban — этапы и сделки"})).toBeVisible();
    checkpoint("S5 pipeline lost acknowledgement: opaque marker, immutable receipt lookup, one D1 audit");
    const recordedPipelines=await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"' AND subject_id='"+newPipelineId+"' AND action='sales_pipeline.create'");
-   assert.equal(recordedPipelines[0].n,1);
+   assert.equal(record(recordedPipelines[0]).n,1);
    // The test owns its pipeline end-to-end; old test Deals are discarded in 0012.
-   const pipelineState=(await sql("SELECT state FROM crm_sales_pipeline_records WHERE tenant='"+tenantSql+"' AND id='"+newPipelineId+"'"))[0].state;
-   const ownStageIds=JSON.parse(pipelineState).stages.map(s=>s.stage_id);
+   const pipelineState=record((await sql("SELECT state FROM crm_sales_pipeline_records WHERE tenant='"+tenantSql+"' AND id='"+newPipelineId+"'"))[0]).state;
+   const ownStageIds=records(record(JSON.parse(string(pipelineState))).stages).map(stage=>string(stage.stage_id));
    assert.equal(ownStageIds.length,2,"new user-managed pipeline must have two stages");
    await page.getByLabel("Воронка продаж",{exact:true}).selectOption(newPipelineId);
    await page.getByRole("button",{name:"Новая сделка",exact:true}).click();
@@ -968,23 +954,23 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByLabel("Категория прогноза",{exact:true}).selectOption("3");
    await page.getByLabel("Вероятность, %",{exact:true}).fill("37.45");
    await page.getByLabel("Название сделки",{exact:true}).fill("   ");
-   const invalidCreate=page.waitForResponse(r=>responsePathEndsWith(r,"/CreateDeal")&&r.request().method()==="POST");
+   const invalidCreate=page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(DealService.method.createDeal))&&r.request().method()==="POST");
    await page.getByRole("button",{name:"Сохранить сделку",exact:true}).click();
    assert.equal((await invalidCreate).status(),400);
    await expect(page.getByRole("dialog").getByText(/^deal\.name:/)).toBeVisible();
    await page.getByLabel("Название сделки",{exact:true}).fill("Browser Deal "+runId);
-   await mutation(page.getByRole("button",{name:"Сохранить сделку",exact:true}),"CreateDeal");
+   await mutation(page.getByRole("button",{name:"Сохранить сделку",exact:true}),DealService.method.createDeal);
    const dealId=await firstId("crm_sales_deal_records","name","Browser Deal "+runId);
    assert.ok(dealId);
-   const saleCreatedR72=(await sql("SELECT json_extract(state,'$.primary_contact.resource_id') AS contact_id, "+
+   const saleCreatedR72=record((await sql("SELECT json_extract(state,'$.primary_contact.resource_id') AS contact_id, "+
      "json_extract(state,'$.expected_close_date.year') AS year, "+
      "json_extract(state,'$.expected_close_date.month') AS month, "+
      "json_extract(state,'$.expected_close_date.day') AS day "+
-     "FROM crm_sales_deal_records WHERE tenant='"+tenantSql+"' AND id='"+dealId+"'"))[0];
+     "FROM crm_sales_deal_records WHERE tenant='"+tenantSql+"' AND id='"+dealId+"'"))[0]);
    assert.deepEqual(saleCreatedR72,{contact_id:browserSalesContactId,year:2030,month:5,day:21});
    await page.getByText("90071992547409.93 USD · 37.45%",{exact:true}).waitFor();
    // Manual board selection survives the real full Deal route and Back.
-   const boardAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   const boardAuditBefore=number(record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n);
    await page.locator('a[href="#sales/'+dealId+'"]').first().click();
    await page.getByRole("heading",{name:"Карточка сделки",exact:true}).waitFor();
    const detailsFromBoard=page.getByRole("region",{name:"Подробности сделки "+dealId});
@@ -994,12 +980,12 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    // sees both in chronological order after reload and an Account-only note.
    const dealHistory=detailsFromBoard.getByRole("region",
      {name:"История взаимодействий "+dealId});
-   const saveInteraction=async(panel,kind,when,body)=>{
+   const saveInteraction=async(panel: Locator,kind: number,when: string,body: string)=>{
      await panel.getByLabel("Вид взаимодействия",{exact:true}).selectOption(String(kind));
      await panel.getByLabel("Время события",{exact:true}).fill(when);
      await panel.getByLabel("Что произошло",{exact:true}).fill(body);
      await mutation(panel.getByRole("button",{name:"Добавить в историю",exact:true}),
-       "CreateInteraction");
+       InteractionService.method.createInteraction);
      await panel.getByText(body,{exact:true}).waitFor();
    };
    const laterCall="Browser SK05 call "+runId;
@@ -1013,10 +999,10 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await dealReloadHistory.getByText(laterCall,{exact:true}).waitFor();
    await dealReloadHistory.getByText(earlierMeeting,{exact:true}).waitFor();
    const dealText=await dealReloadHistory.locator("ol li").allTextContents();
-   assert.ok(dealText[0].includes(laterCall)&&dealText[1].includes(earlierMeeting),
+   assert.ok(dealText[0]?.includes(laterCall)&&dealText[1]?.includes(earlierMeeting),
      "SK05 must sort by fact time, not insertion order");
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_activity_interactions WHERE tenant=? AND deal_id=?",
-     tenantA,dealId))[0].n,2);
+   assert.equal(record((await sql("SELECT COUNT(*) AS n FROM crm_activity_interactions WHERE tenant=? AND deal_id=?",
+     tenantA,dealId))[0]).n,2);
    await navigate("accounts/"+accountId,"Карточка клиента");
    const accountTimeline=page.getByRole("region",{name:"История взаимодействий "+accountId});
    await accountTimeline.getByText(laterCall,{exact:true}).waitFor();
@@ -1027,18 +1013,18 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    for(const text of [laterCall,earlierMeeting,accountNote])
      await accountReload.getByText(text,{exact:true}).waitFor();
    const accountRows=await accountReload.locator("ol li").allTextContents();
-   assert.ok(accountRows[0].includes(laterCall)&&accountRows[1].includes(earlierMeeting)&&
-     accountRows[2].includes(accountNote),"Account history must contain deal events and own note");
+   assert.ok(accountRows[0]?.includes(laterCall)&&accountRows[1]?.includes(earlierMeeting)&&
+     accountRows[2]?.includes(accountNote),"Account history must contain deal events and own note");
    const receipts=await sql("SELECT count(*) AS n FROM crm_activity_interaction_receipts WHERE tenant=?",
      tenantA);
-   assert.ok(receipts[0].n>=3,"each UI write has an original immutable owner receipt");
+   assert.ok(number(receipts[0]?.n)>=3,"each UI write has an original immutable owner receipt");
    await navigate("sales/"+dealId,"Карточка сделки");
    const dealAfterAccountNote=page.getByRole("region",
      {name:"История взаимодействий "+dealId});
    await dealAfterAccountNote.getByText(laterCall,{exact:true}).waitFor();
    assert.equal(await dealAfterAccountNote.getByText(accountNote,{exact:true}).count(),0,
      "Account-only note must not be misattributed to Deal");
-   const sk05BackAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   const sk05BackAuditBefore=record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n;
    assert.equal(sk05BackAuditBefore,boardAuditBefore+3,
      "three SK-05 interactions must have exactly three new audit records");
    checkpoint("SK-05 React Account+Deal typed interaction history, authored facts, reload, ordering and D1 receipts");
@@ -1047,7 +1033,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    });
    await expect(dealContactLink).toHaveAttribute("href",
      "#contacts?partyId="+partyId+"&contactPointId="+browserSalesContactId);
-   const exactContactRead=page.waitForResponse(r=>responsePathEndsWith(r,"/GetContactPoint")&&
+   const exactContactRead=page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(ContactPointService.method.getContactPoint))&&
      r.request().method()==="POST");
    await dealContactLink.click();
    assert.equal((await exactContactRead).status(),200);
@@ -1075,9 +1061,9 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await expect(page.getByLabel("Воронка продаж",{exact:true})).toHaveValue(newPipelineId);
    await page.getByRole("region",{name:"Kanban — этапы и сделки"}).getByRole(
      "heading",{name:/Первичный контакт · 1/}).waitFor();
-   const initialStageRequests=[];
-   const countInitialStageRead=request=>{
-     if(request.method()==="POST"&&new URL(request.url()).pathname.endsWith("/ListStageDeals"))
+   const initialStageRequests: Request[]=[];
+   const countInitialStageRead=(request: Request)=>{
+     if(request.method()==="POST"&&new URL(request.url()).pathname===fixtureRpcPath(DealService.method.listStageDeals))
        initialStageRequests.push(request);
    };
    page.on("request",countInitialStageRead);
@@ -1094,7 +1080,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    }finally{
      page.off("request",countInitialStageRead);
    }
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
+   assert.equal(record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n,
      sk05BackAuditBefore,"manual board navigation must not write D1 audit");
    checkpoint("M2-01 native board and M2-02 exact Deal Contact direct Get survive reload/Back without read-audit");
    const leadTotals=page.getByRole("group",{name:"Итоги этапа Первичный контакт"});
@@ -1135,29 +1121,29 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByLabel("Статус сделки",{exact:true}).selectOption("1");
    await page.getByRole("button",{name:"Сохранить как новое",exact:true}).click();
    await page.getByLabel("Название представления",{exact:true}).fill(savedViewName);
-   const createViewRoute="**/crm.sales.v2.DealService/CreateSalesView";
+   const createViewRoute="**"+fixtureRpcPath(DealService.method.createSalesView);
    let createViewCalls=0,originalViewCreateRequestId;
-   await page.route(createViewRoute,async route=>{
+   await page.route(createViewRoute,async (route: Route)=>{
      createViewCalls++;
      const committed=await route.fetch();
      recordResponse(committed);await assertMutation(committed,"CreateSalesView");
-     originalViewCreateRequestId=(await committed.headers())["x-request-id"];
+     originalViewCreateRequestId=string((await committed.headers())["x-request-id"]);
      await route.abort("failed");
    });
    await page.getByRole("button",{name:"Сохранить новое представление",exact:true}).click();
    await page.getByRole("heading",{name:/Результат записи не подтверждён/}).waitFor();
-   const viewMarker=await page.evaluate(()=>JSON.parse(sessionStorage.getItem("crm.sales.view.pending.v1")));
+   const viewMarker=await pendingMarker("crm.sales.view.pending.v1");
    assert.deepEqual(Object.keys(viewMarker).sort(),["expectedVersion","key","resourceId"]);
    assert.equal(viewMarker.expectedVersion,"0");
-   assert.match(viewMarker.key,/^[a-f0-9-]{36}$/i);
+   assert.match(string(viewMarker.key),/^[a-f0-9-]{36}$/i);
    await reloadAfterPending();
    await page.getByRole("heading",{name:"Сделки",exact:true}).waitFor();
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).waitFor();
-   const viewLookup=page.waitForResponse(r=>responsePathEndsWith(r,"/GetSalesView")&&r.request().method()==="POST");
+   const viewLookup=page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(DealService.method.getSalesView))&&r.request().method()==="POST");
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
    const viewLookupResponse=await viewLookup;
    assert.equal(viewLookupResponse.status(),200);
-   const viewLookupRequestId=(await viewLookupResponse.headers())["x-request-id"];
+   const viewLookupRequestId=string((await viewLookupResponse.headers())["x-request-id"]);
    assert.match(viewLookupRequestId??"",/^[a-f0-9-]{36}$/i);
    const viewId=await firstId("crm_sales_saved_view_records","name",savedViewName);
    assert.equal(viewMarker.resourceId,viewId);
@@ -1175,8 +1161,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      "Committed saved view must become a typed native deep link");
    await expect(page.getByLabel("Статус сделки",{exact:true})).toHaveValue("1");
    checkpoint("S5 saved-view lost acknowledgement: opaque marker, immutable receipt lookup, one D1 audit");
-   const createdView=JSON.parse((await sql("SELECT state FROM crm_sales_saved_view_records "+
-     "WHERE tenant='"+tenantSql+"' AND id='"+viewId+"'"))[0].state);
+   const createdView=record(JSON.parse(string(record((await sql("SELECT state FROM crm_sales_saved_view_records "+
+     "WHERE tenant='"+tenantSql+"' AND id='"+viewId+"'"))[0]).state)));
    assert.equal(createdView.pipeline_id,newPipelineId);
    assert.equal(createdView.status,"open");
    assert.equal(createdView.version,1);
@@ -1212,12 +1198,12 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("region",{name:"Аналитика воронки"})
      .getByText(/^Всего сделок: 1 · срез по UTC:/).waitFor();
    // Hold an obsolete read to prove no previous-key data is displayed.
-   const metricsRoute="**/crm.sales.v2.DealService/GetPipelineMetrics";
-   let startedOldMetrics,releaseOldMetrics;
-   const oldMetricsStarted=new Promise(resolve=>{startedOldMetrics=resolve;});
-   const oldMetricsGate=new Promise(resolve=>{releaseOldMetrics=resolve;});
-   let oldMetricsRequest;
-   const blockOldMetrics=async route=>{
+   const metricsRoute="**"+fixtureRpcPath(DealService.method.getPipelineMetrics);
+   let startedOldMetrics: () => void,releaseOldMetrics: (() => void) | undefined;
+   const oldMetricsStarted=new Promise<void>(resolve=>{startedOldMetrics=resolve;});
+   const oldMetricsGate=new Promise<void>(resolve=>{releaseOldMetrics=resolve;});
+   let oldMetricsRequest: Request | undefined;
+   const blockOldMetrics=async (route: Route)=>{
      if(!oldMetricsRequest){
        oldMetricsRequest=route.request();startedOldMetrics();await oldMetricsGate;
      }
@@ -1237,6 +1223,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      await page.getByRole("region",{name:"Аналитика воронки"})
        .getByText(/^Всего сделок: 1 · срез по UTC:/).waitFor();
    } finally {
+     assert.ok(releaseOldMetrics);
      releaseOldMetrics();
      await page.unroute(metricsRoute,blockOldMetrics);
    }
@@ -1245,28 +1232,28 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await statusFilter.selectOption("2");
    await page.getByLabel("Название представления",{exact:true})
      .fill("Browser Won View "+runId);
-   const updateViewRoute="**/crm.sales.v2.DealService/UpdateSalesView";
+   const updateViewRoute="**"+fixtureRpcPath(DealService.method.updateSalesView);
    let updateViewCalls=0,originalViewUpdateRequestId;
-   await page.route(updateViewRoute,async route=>{
+   await page.route(updateViewRoute,async (route: Route)=>{
      updateViewCalls++;
      const committed=await route.fetch();
      recordResponse(committed);await assertMutation(committed,"UpdateSalesView");
-     originalViewUpdateRequestId=(await committed.headers())["x-request-id"];
+     originalViewUpdateRequestId=string((await committed.headers())["x-request-id"]);
      await route.abort("failed");
    });
    await page.getByRole("button",{name:"Обновить представление",exact:true}).click();
    await page.getByRole("heading",{name:/Результат записи не подтверждён/}).waitFor();
-   const viewUpdateMarker=await page.evaluate(()=>JSON.parse(sessionStorage.getItem("crm.sales.view.pending.v1")));
+   const viewUpdateMarker=await pendingMarker("crm.sales.view.pending.v1");
    assert.equal(viewUpdateMarker.resourceId,viewId);
    assert.equal(viewUpdateMarker.expectedVersion,"1");
    await reloadAfterPending();
    await page.getByRole("heading",{name:"Сделки",exact:true}).waitFor();
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).waitFor();
-   const viewUpdateLookup=page.waitForResponse(r=>responsePathEndsWith(r,"/GetSalesView")&&r.request().method()==="POST");
+   const viewUpdateLookup=page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(DealService.method.getSalesView))&&r.request().method()==="POST");
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
    const viewUpdateLookupResponse=await viewUpdateLookup;
    assert.equal(viewUpdateLookupResponse.status(),200);
-   const viewUpdateLookupRequestId=(await viewUpdateLookupResponse.headers())["x-request-id"];
+   const viewUpdateLookupRequestId=string((await viewUpdateLookupResponse.headers())["x-request-id"]);
    assert.equal(updateViewCalls,1,"Reload recovery must not re-execute UpdateSalesView");
    assert.ok(originalViewUpdateRequestId);
    await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
@@ -1276,21 +1263,21 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.unroute(updateViewRoute);
    await expect(page.getByLabel("Сохранённое представление",{exact:true})).toHaveValue(viewId);
    await expect(page.getByLabel("Статус сделки",{exact:true})).toHaveValue("2");
-   const updatedView=JSON.parse((await sql("SELECT state FROM crm_sales_saved_view_records "+
-     "WHERE tenant='"+tenantSql+"' AND id='"+viewId+"'"))[0].state);
+   const updatedView=record(JSON.parse(string(record((await sql("SELECT state FROM crm_sales_saved_view_records "+
+     "WHERE tenant='"+tenantSql+"' AND id='"+viewId+"'"))[0]).state)));
    assert.equal(updatedView.version,2);
    assert.equal(updatedView.status,"won");
    assert.equal(updatedView.name,"Browser Won View "+runId);
    // Delay the actual projection refresh after the committed archive.
    // A receipt must not announce UI completion while the old URL is active.
    const viewsSection=page.getByRole("region",{name:"Сохранённые представления"});
-   const listViewsRoute="**/crm.sales.v2.DealService/ListSalesViews";
+   const listViewsRoute="**"+fixtureRpcPath(DealService.method.listSalesViews);
    let releaseArchiveRead=()=>{};
-   const archiveReadGate=new Promise(resolve=>{releaseArchiveRead=resolve;});
-   const blockArchiveRead=async route=>{await archiveReadGate;await route.continue();};
+   const archiveReadGate=new Promise<void>(resolve=>{releaseArchiveRead=resolve;});
+   const blockArchiveRead=async (route: Route)=>{await archiveReadGate;await route.continue();};
    await page.route(listViewsRoute,blockArchiveRead);
    try {
-     const archived=page.waitForResponse(r=>responsePathEndsWith(r,"/UpdateSalesView")&&r.request().method()==="POST");
+     const archived=page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(DealService.method.updateSalesView))&&r.request().method()==="POST");
      await viewsSection.getByRole("button",{name:"Архивировать представление",exact:true}).click();
      await assertMutation(await archived,"UpdateSalesView");
      await expect(viewsSection.getByRole("status")).toHaveCount(1);
@@ -1303,7 +1290,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      releaseArchiveRead();
      await page.unroute(listViewsRoute,blockArchiveRead);
    }
-   const viewsAfterArchive=page.waitForResponse(r=>responsePathEndsWith(r,"/ListSalesViews")&&r.request().method()==="POST");
+   const viewsAfterArchive=page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(DealService.method.listSalesViews))&&r.request().method()==="POST");
    await reloadDocument();
    assert.equal((await viewsAfterArchive).status(),200);
    await page.getByRole("heading",{name:"Сделки",exact:true}).waitFor();
@@ -1336,9 +1323,9 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    // have not. A pending read must never turn an unchanged association
    // into a missing FormData field or silently Clear the selected contact.
    let releaseContactRead=()=>{};
-   const pendingContactRead=new Promise(resolve=>{releaseContactRead=resolve;});
+   const pendingContactRead=new Promise<void>(resolve=>{releaseContactRead=resolve;});
    let blockedContactRead=false;
-   const blockContactRead=async route=>{
+   const blockContactRead=async (route: Route)=>{
      if(!blockedContactRead) {
        blockedContactRead=true;
        await pendingContactRead;
@@ -1352,7 +1339,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
        if(!/Route is already handled!/.test(String(error)))throw error;
      }
    };
-   await page.route("**/crm.accounts.v2.AccountService/GetAccount",blockContactRead);
+   await page.route("**"+fixtureRpcPath(AccountService.method.getAccount),blockContactRead);
    await dealCard.getByRole("button",{name:"Изменить сделку",exact:true}).click();
    // GetDeal completes asynchronously and replaces the create form. Editing the
    // old field before this heading appears would lose the entered value.
@@ -1363,14 +1350,14 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByLabel("Вероятность, %",{exact:true}).fill("38.5");
    await page.getByLabel("Ожидаемая дата закрытия",{exact:true}).fill("2030-06-01");
    assert.equal(await page.getByLabel("Вероятность, %",{exact:true}).inputValue(),"38.5");
-   await mutation(page.getByRole("button",{name:"Сохранить сделку",exact:true}),"UpdateDeal");
+   await mutation(page.getByRole("button",{name:"Сохранить сделку",exact:true}),DealService.method.updateDeal);
    releaseContactRead();
-   await page.unroute("**/crm.accounts.v2.AccountService/GetAccount",blockContactRead);
-   const savedDeal=(await sql("SELECT version,json_extract(state,'$.probability_basis_points') AS probability FROM crm_sales_deal_records WHERE tenant='"+tenantSql+"' AND id='"+dealId+"'"))[0];
+   await page.unroute("**"+fixtureRpcPath(AccountService.method.getAccount),blockContactRead);
+   const savedDeal=record((await sql("SELECT version,json_extract(state,'$.probability_basis_points') AS probability FROM crm_sales_deal_records WHERE tenant='"+tenantSql+"' AND id='"+dealId+"'"))[0]);
    assert.equal(savedDeal.version,2);assert.equal(savedDeal.probability,3850);
-   const expectedAfterUpdate=(await sql("SELECT json_extract(state,'$.expected_close_date.day') AS day, "+
+   const expectedAfterUpdate=record((await sql("SELECT json_extract(state,'$.expected_close_date.day') AS day, "+
      "json_extract(state,'$.primary_contact.resource_id') AS contact_id "+
-     "FROM crm_sales_deal_records WHERE tenant='"+tenantSql+"' AND id='"+dealId+"'"))[0];
+     "FROM crm_sales_deal_records WHERE tenant='"+tenantSql+"' AND id='"+dealId+"'"))[0]);
    assert.equal(expectedAfterUpdate.day,1);
    assert.equal(expectedAfterUpdate.contact_id,browserSalesContactId,
      "async Account/Contact lookup must not erase unchanged Deal primary contact");
@@ -1380,16 +1367,16 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    // it opens and can be cancelled without a write before testing native DnD.
    const keyboardStageButton=dealCard.getByRole("button",{name:"Изменить этап",exact:true});
    const keyboardStageRead=page.waitForResponse(response=>
-     responsePathEndsWith(response,"/GetDeal")&&response.request().method()==="POST");
+     matchesRpcPath(response,fixtureRpcPath(DealService.method.getDeal))&&response.request().method()==="POST");
    await keyboardStageButton.press("Enter");
    const stageReadResponse=await keyboardStageRead;
    assert.equal(stageReadResponse.status(),200,
      "Keyboard fallback must load the current Deal from its original owner");
    await page.getByRole("heading",{name:"Этап сделки: Browser Deal "+runId,exact:true}).waitFor();
-   await page.getByLabel("Следующий этап",{exact:true}).selectOption(ownStageIds[1]);
+   await page.getByLabel("Следующий этап",{exact:true}).selectOption(string(ownStageIds[1]));
    await page.getByRole("button",{name:"Отмена",exact:true}).last().click();
-   assert.equal((await sql("SELECT version FROM crm_sales_deal_records WHERE tenant='"+
-     tenantSql+"' AND id='"+dealId+"'"))[0].version,2,
+   assert.equal(record((await sql("SELECT version FROM crm_sales_deal_records WHERE tenant='"+
+     tenantSql+"' AND id='"+dealId+"'"))[0]).version,2,
      "Keyboard fallback cancellation must not mutate a Deal");
 
    // HTML5 DnD uses the always visible, sticky drop target on long
@@ -1405,10 +1392,10 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      ownStageIds[1],"Native DnD must preselect the dropped stage");
    // A real Deal+Task atomic commit with a lost HTTP acknowledgement.
    // Retry must preserve the exact binary payload, not merely its key.
-   const advanceRoute="**/crm.sales.v2.DealService/AdvanceStage";
-   let committedIntent;
-   let originalAdvanceRequestId;
-   await page.route(advanceRoute,async route=>{
+   const advanceRoute="**"+fixtureRpcPath(DealService.method.advanceStage);
+   let committedIntent: Buffer | undefined;
+   let originalAdvanceRequestId: string | undefined;
+   await page.route(advanceRoute,async (route: Route)=>{
      const payload=route.request().postDataBuffer();
      assert.ok(payload,"AdvanceStage must send a binary request");
      if(committedIntent){
@@ -1444,28 +1431,28 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal(attemptedForward,"#accounts");
    await expect(page).toHaveURL(beforePendingNavigation);
    await expect(page.getByRole("dialog")).toBeVisible();
-   const retryAdvance=page.waitForResponse(r=>responsePathEndsWith(r,"/AdvanceStage")&&r.request().method()==="POST");
+   const retryAdvance=page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(DealService.method.advanceStage))&&r.request().method()==="POST");
    await page.getByRole("button",{name:"Повторить исходную операцию",exact:true}).click();
    const retryAdvanceResponse=await retryAdvance;
    await assertMutation(retryAdvanceResponse,"AdvanceStage",{replay:true});
-   const retryAdvanceRequestId=(await retryAdvanceResponse.headers())["x-request-id"];
+   const retryAdvanceRequestId=string((await retryAdvanceResponse.headers())["x-request-id"]);
    assert.match(retryAdvanceRequestId??"",/^[a-f0-9-]{36}$/i);
    assert.notEqual(retryAdvanceRequestId,originalAdvanceRequestId);
-   recovery.push({kind:"replay",original_request_id:originalAdvanceRequestId,
+   recovery.push({kind:"replay",original_request_id:string(originalAdvanceRequestId),
      subsequent_request_id:retryAdvanceRequestId});
    await page.getByRole("heading",{name:/Сохранено ранее/}).waitFor();
    assert.ok(originalAdvanceRequestId);
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+originalAdvanceRequestId+"' AND action='sales_deals.advance'"))[0].n,1);
+   assert.equal(record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+originalAdvanceRequestId+"' AND action='sales_deals.advance'"))[0]).n,1);
    await page.unroute(advanceRoute);
    checkpoint("S1 lost Deal acknowledgement: locked editor, exact binary retry, original audit");
    await page.getByRole("group",{name:"Итоги этапа Квалификация"})
      .getByText("90071992547409.93 USD · сделок с суммой: 1",
        {exact:true}).waitFor();
    await leadTotals.getByText("Суммы не указаны",{exact:true}).waitFor();
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_sales_link_delivery_records WHERE tenant='"+tenantSql+"' AND deal_id='"+dealId+"'"))[0].n,1);
+   assert.equal(record((await sql("SELECT COUNT(*) AS n FROM crm_sales_link_delivery_records WHERE tenant='"+tenantSql+"' AND deal_id='"+dealId+"'"))[0]).n,1);
    // Closing is independent of stage movement: retain the real stage and do
    // not create a fictitious terminal stage or a second follow-up Task.
-   const actualStage=(await sql("SELECT json_extract(state,'$.stage.stage_id') AS stage FROM crm_sales_deal_records WHERE tenant='"+tenantSql+"' AND id='"+dealId+"'"))[0].stage;
+   const actualStage=record((await sql("SELECT json_extract(state,'$.stage.stage_id') AS stage FROM crm_sales_deal_records WHERE tenant='"+tenantSql+"' AND id='"+dealId+"'"))[0]).stage;
    const movedDealCard=page.locator("section").filter({has:page.getByRole("heading",{name:"Browser Deal "+runId,exact:true})}).last();
    await movedDealCard.getByRole("button",{name:"Завершить сделку",exact:true}).click();
    await page.getByRole("heading",{name:"Завершить сделку: Browser Deal "+runId,exact:true}).waitFor();
@@ -1475,9 +1462,9 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await expect(page.getByRole("region",{name:"Предварительная коммерческая атрибуция"}).getByText(/^Сотрудник:/)).toBeVisible();
    // A different real write loses its response and the page is reloaded.
    // Only opaque identifiers survive; lookup must not issue CloseDeal again.
-   const closeRoute="**/crm.sales.v2.DealService/CloseDeal";
+   const closeRoute="**"+fixtureRpcPath(DealService.method.closeDeal);
    let closeCalls=0, originalCloseRequestId;
-   await page.route(closeRoute,async route=>{
+   await page.route(closeRoute,async (route: Route)=>{
      closeCalls++;
      const committed=await route.fetch();
      recordResponse(committed);
@@ -1487,32 +1474,32 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    });
    await page.getByRole("button",{name:"Завершить сделку",exact:true}).last().click();
    await page.getByRole("heading",{name:/Результат записи не подтверждён/}).waitFor();
-   const mark=await page.evaluate(()=>JSON.parse(sessionStorage.getItem("crm.deal.pending.v1")));
+   const mark=await pendingMarker("crm.deal.pending.v1");
    assert.deepEqual(Object.keys(mark).sort(),["expectedVersion","key","resourceId"]);
    assert.equal(mark.resourceId,dealId);
    assert.equal(mark.expectedVersion,"3");
-   assert.match(mark.key,/^[a-f0-9-]{36}$/i);
-   const acceptReload=dialog=>void dialog.accept();
+   assert.match(string(mark.key),/^[a-f0-9-]{36}$/i);
+   const acceptReload=(dialog: Dialog)=>void dialog.accept();
    page.on("dialog",acceptReload);
    try{await reloadDocument();}finally{page.off("dialog",acceptReload);}
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).waitFor();
    await page.getByLabel("Воронка продаж",{exact:true}).selectOption(newPipelineId);
    await expect(page.getByRole("button",{name:"Новая сделка",exact:true})).toBeDisabled();
    // A failed read cannot clear the marker or start another write.
-   const getDealRoute="**/crm.sales.v2.DealService/GetDeal";
-   const failLookup=route=>route.abort("failed");
+   const getDealRoute="**"+fixtureRpcPath(DealService.method.getDeal);
+   const failLookup=(route: Route)=>route.abort("failed");
    await page.route(getDealRoute,failLookup);
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
    await expect(page.getByRole("button",{name:"Проверить результат записи",exact:true})).toBeEnabled();
-   assert.deepEqual(await page.evaluate(()=>JSON.parse(sessionStorage.getItem("crm.deal.pending.v1"))),mark);
+   assert.deepEqual(await pendingMarker("crm.deal.pending.v1"),mark);
    assert.equal(closeCalls,1);
    await expect(page.getByRole("button",{name:"Новая сделка",exact:true})).toBeDisabled();
    await page.unroute(getDealRoute,failLookup);
-   const lookupResponse=page.waitForResponse(r=>responsePathEndsWith(r,"/GetDeal")&&r.request().method()==="POST");
+   const lookupResponse=page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(DealService.method.getDeal))&&r.request().method()==="POST");
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
    const checked=await lookupResponse;
    assert.equal(checked.status(),200);
-   const checkId=(await checked.headers())["x-request-id"];
+   const checkId=string((await checked.headers())["x-request-id"]);
    assert.match(checkId??"",/^[a-f0-9-]{36}$/i);
    assert.ok(originalCloseRequestId);
    await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
@@ -1524,37 +1511,37 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      subsequent_request_id:checkId});
    await page.unroute(closeRoute);
    checkpoint("S1 reload: opaque marker, read original receipt, no second CloseDeal");
-   const terminal=(await sql("SELECT version,json_extract(state,'$.status') AS status,json_extract(state,'$.stage.stage_id') AS stage FROM crm_sales_deal_records WHERE tenant='"+tenantSql+"' AND id='"+dealId+"'"))[0];
+   const terminal=record((await sql("SELECT version,json_extract(state,'$.status') AS status,json_extract(state,'$.stage.stage_id') AS stage FROM crm_sales_deal_records WHERE tenant='"+tenantSql+"' AND id='"+dealId+"'"))[0]);
    assert.deepEqual(terminal,{version:4,status:"won",stage:actualStage});
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_sales_link_delivery_records WHERE tenant='"+tenantSql+"' AND deal_id='"+dealId+"'"))[0].n,2);
+   assert.equal(record((await sql("SELECT COUNT(*) AS n FROM crm_sales_link_delivery_records WHERE tenant='"+tenantSql+"' AND deal_id='"+dealId+"'"))[0]).n,2);
    await movedDealCard.getByText("Выиграна · версия 4",{exact:true}).waitFor();
    assert.equal(await movedDealCard.getByRole("button",{name:"Изменить сделку",exact:true}).count(),0);
    checkpoint("CloseDeal: Won at unchanged stage, terminal read-only, D1 linked receipt");
    // The same visible editor may reorder stages already used by closed Deals.
    await page.getByRole("button",{name:"Настроить воронку",exact:true}).click();
    await page.getByRole("button",{name:"Выше",exact:true}).last().click();
-   const updatePipelineRoute="**/crm.sales.v2.DealService/UpdatePipeline";
+   const updatePipelineRoute="**"+fixtureRpcPath(DealService.method.updatePipeline);
    let updatePipelineCalls=0,originalPipelineUpdateRequestId;
-   await page.route(updatePipelineRoute,async route=>{
+   await page.route(updatePipelineRoute,async (route: Route)=>{
      updatePipelineCalls++;
      const committed=await route.fetch();
      recordResponse(committed);await assertMutation(committed,"UpdatePipeline");
-     originalPipelineUpdateRequestId=(await committed.headers())["x-request-id"];
+     originalPipelineUpdateRequestId=string((await committed.headers())["x-request-id"]);
      await route.abort("failed");
    });
    await page.getByRole("button",{name:"Сохранить воронку",exact:true}).click();
    await page.getByRole("heading",{name:/Результат записи не подтверждён/}).waitFor();
-   const pipelineUpdateMarker=await page.evaluate(()=>JSON.parse(sessionStorage.getItem("crm.sales.pipeline.pending.v1")));
+   const pipelineUpdateMarker=await pendingMarker("crm.sales.pipeline.pending.v1");
    assert.equal(pipelineUpdateMarker.resourceId,newPipelineId);
    assert.equal(pipelineUpdateMarker.expectedVersion,"1");
    await reloadAfterPending();
    await page.getByRole("heading",{name:"Сделки",exact:true}).waitFor();
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).waitFor();
-   const pipelineUpdateLookup=page.waitForResponse(r=>responsePathEndsWith(r,"/GetPipeline")&&r.request().method()==="POST");
+   const pipelineUpdateLookup=page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(DealService.method.getPipeline))&&r.request().method()==="POST");
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
    const pipelineUpdateLookupResponse=await pipelineUpdateLookup;
    assert.equal(pipelineUpdateLookupResponse.status(),200);
-   const pipelineUpdateLookupRequestId=(await pipelineUpdateLookupResponse.headers())["x-request-id"];
+   const pipelineUpdateLookupRequestId=string((await pipelineUpdateLookupResponse.headers())["x-request-id"]);
    assert.equal(updatePipelineCalls,1,"Reload recovery must not re-execute UpdatePipeline");
    assert.ok(originalPipelineUpdateRequestId);
    await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
@@ -1562,25 +1549,25 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await assertAuditRecovery(originalPipelineUpdateRequestId,pipelineUpdateLookupRequestId,"sales_pipeline.update","sales-pipeline-update");
    assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.sales.pipeline.pending.v1")),null);
    await page.unroute(updatePipelineRoute);
-   const newCatalog=JSON.parse((await sql("SELECT state FROM crm_sales_pipeline_records WHERE tenant='"+
-     tenantSql+"' AND id='"+newPipelineId+"'"))[0].state);
-   assert.deepEqual(newCatalog.stages.map(s=>s.stage_id),[ownStageIds[1],ownStageIds[0]]);
-   const rebased=(await sql("SELECT version,json_extract(state,'$.stage.ordinal') AS rank "+
-     "FROM crm_sales_deal_records WHERE tenant='"+tenantSql+"' AND id='"+dealId+"'"))[0];
+   const newCatalog=record(JSON.parse(string(record((await sql("SELECT state FROM crm_sales_pipeline_records WHERE tenant='"+
+     tenantSql+"' AND id='"+newPipelineId+"'"))[0]).state)));
+   assert.deepEqual(records(newCatalog.stages).map(stage=>string(stage.stage_id)),[ownStageIds[1],ownStageIds[0]]);
+   const rebased=record((await sql("SELECT version,json_extract(state,'$.stage.ordinal') AS rank "+
+     "FROM crm_sales_deal_records WHERE tenant='"+tenantSql+"' AND id='"+dealId+"'"))[0]);
    assert.deepEqual(rebased,{version:4,rank:1},
      "Occupied reorder must not increment Deal versions");
    await page.getByRole("heading",{name:"Browser Deal "+runId,exact:true}).waitFor();
    checkpoint("Occupied stage reorder in real React keeps Deal version and stable ID");
-   const currentCatalog=page.waitForResponse(r=>responsePathEndsWith(r,"/GetPipeline")&&r.request().method()==="POST");
+   const currentCatalog=page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(DealService.method.getPipeline))&&r.request().method()==="POST");
    await page.getByRole("button",{name:"Настроить воронку",exact:true}).click();
    assert.equal((await currentCatalog).status(),200,
      "Editor must read latest authoritative Pipeline version after reorder");
    await page.getByLabel("Архивировать воронку",{exact:true}).check();
-   await mutation(page.getByRole("button",{name:"Сохранить воронку",exact:true}),"UpdatePipeline");
+   await mutation(page.getByRole("button",{name:"Сохранить воронку",exact:true}),DealService.method.updatePipeline);
    await expect(page.getByRole("button",{name:"Новая сделка",exact:true})).toBeDisabled();
    await page.getByRole("button",{name:"Настроить воронку",exact:true}).click();
    await page.getByLabel("Архивировать воронку",{exact:true}).uncheck();
-   await mutation(page.getByRole("button",{name:"Сохранить воронку",exact:true}),"UpdatePipeline");
+   await mutation(page.getByRole("button",{name:"Сохранить воронку",exact:true}),DealService.method.updatePipeline);
    await expect(page.getByRole("button",{name:"Новая сделка",exact:true})).toBeEnabled();
    checkpoint("Pipeline archive and restore using real React, Connect and audit");
    // Actual full Deal route: typed append-only history, linked Task and
@@ -1593,11 +1580,11 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await namedDetails.getByText("Воронка: Browser Pipeline "+runId+" · этап: Квалификация",{exact:true}).waitFor();
    await namedHistory.getByText("Этап: Первичный контакт → Квалификация",{exact:true}).waitFor();
    await namedHistory.getByText(/Названия этапов показаны по текущему справочнику/).waitFor();
-   const auditBeforeNamedRead=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   const auditBeforeNamedRead=record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n;
    await reloadDocument();
    await namedDetails.getByText("Воронка: Browser Pipeline "+runId+" · этап: Квалификация",{exact:true}).waitFor();
    await namedHistory.getByText("Этап: Первичный контакт → Квалификация",{exact:true}).waitFor();
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
+   assert.equal(record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n,
      auditBeforeNamedRead,"Named stage catalog/history rendering must never create audit writes");
    checkpoint("M2-01 original immutable stage IDs shown as named pipeline/stage in full Deal and history after reload");
    await page.getByText("Сделка завершена",{exact:true}).waitFor();
@@ -1606,7 +1593,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const linkedTask=page.locator('section[aria-label^="История сделки"] a[href^="#tasks?"]').first();
    const linkedTaskHref=await linkedTask.getAttribute("href");
    assert.ok(linkedTaskHref?.includes("&taskId=delivery-"),"History must link the exact Task, not merely the Account task list");
-   const linkedTaskId=new URLSearchParams(linkedTaskHref.slice("#tasks?".length)).get("taskId");
+   const linkedTaskId=new URLSearchParams(string(linkedTaskHref).slice("#tasks?".length)).get("taskId");
    assert.ok(linkedTaskId);
    await linkedTask.click();
    await page.getByRole("heading",{name:"Карточка задачи",exact:true}).waitFor();
@@ -1620,19 +1607,19 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("heading",{name:"Повторно открыть сделку: Browser Deal "+runId,exact:true}).waitFor();
    await expect(page.getByText(/^Код причины без пробелов:/)).toBeVisible();
    await page.getByLabel("Причина повторного открытия",{exact:true}).fill("reconsidered");
-   await mutation(page.getByRole("button",{name:"Открыть повторно",exact:true}).last(),"ReopenDeal");
+   await mutation(page.getByRole("button",{name:"Открыть повторно",exact:true}).last(),DealService.method.reopenDeal);
    await page.getByText("Сделка повторно открыта",{exact:true}).waitFor();
-   const reopened=(await sql("SELECT version,json_extract(state,'$.status') AS status,"+
+   const reopened=record((await sql("SELECT version,json_extract(state,'$.status') AS status,"+
      "json_extract(state,'$.close_outcome') AS close_outcome FROM crm_sales_deal_records "+
-     "WHERE tenant='"+tenantSql+"' AND id='"+dealId+"'"))[0];
+     "WHERE tenant='"+tenantSql+"' AND id='"+dealId+"'"))[0]);
    assert.equal(reopened.version,5);
    assert.equal(reopened.status,"open");
    assert.equal(reopened.close_outcome,null);
    assert.deepEqual((await sql("SELECT action FROM crm_sales_deal_events "+
      "WHERE tenant='"+tenantSql+"' AND deal_id='"+dealId+"' ORDER BY deal_version DESC LIMIT 2"))
      .map(r=>r.action),["reopened","closed"]);
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_sales_link_delivery_records "+
-     "WHERE tenant='"+tenantSql+"' AND deal_id='"+dealId+"'"))[0].n,2);
+   assert.equal(record((await sql("SELECT COUNT(*) AS n FROM crm_sales_link_delivery_records "+
+     "WHERE tenant='"+tenantSql+"' AND deal_id='"+dealId+"'"))[0]).n,2);
    checkpoint("R7.2 CloseDeal→immutable history→ReopenDeal→D1 and linked Task");
    await page.goto(base+"/#sales");
    await page.getByRole("heading",{name:"Сделки",exact:true}).waitFor();
@@ -1641,7 +1628,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    // pipeline through React; never depend on CI-only pipeline.enterprise.
    await page.getByRole("button",{name:"Создать воронку",exact:true}).click();
    await page.getByLabel("Название воронки",{exact:true}).fill("Browser Alternate Pipeline "+runId);
-   await mutation(page.getByRole("button",{name:"Сохранить воронку",exact:true}),"CreatePipeline");
+   await mutation(page.getByRole("button",{name:"Сохранить воронку",exact:true}),DealService.method.createPipeline);
    const alternatePipelineId=await firstId("crm_sales_pipeline_records","name",
      "Browser Alternate Pipeline "+runId);
    assert.ok(alternatePipelineId,"Second pipeline must be persisted");
@@ -1650,7 +1637,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByLabel("Название сделки",{exact:true}).fill("Browser Alternate Deal "+runId);
    await selectPagedPicker(page,"Клиент",accountId,"account");
    await page.getByLabel("Сумма",{exact:true}).fill("100.00");
-   await mutation(page.getByRole("button",{name:"Сохранить сделку",exact:true}),"CreateDeal");
+   await mutation(page.getByRole("button",{name:"Сохранить сделку",exact:true}),DealService.method.createDeal);
    await page.getByRole("heading",{name:"Browser Alternate Deal "+runId,exact:true}).waitFor();
    const alternateDealCard=page.locator("section").filter({
      has:page.getByRole("heading",{name:"Browser Alternate Deal "+runId,exact:true})
@@ -1695,7 +1682,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    checkpoint("M2 Deal search across pipelines, typed name filter, result→full page→Back, no-results and reset");
 
    // L-08: original typed Party/Account/Deal tenant reads, not a search index.
-   const unifiedAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   const unifiedAuditBefore=record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n;
    await navigate("search","Поиск по CRM");
    await page.getByLabel("Поиск по CRM",{exact:true}).fill(runId);
    await page.getByRole("button",{name:"Найти",exact:true}).click();
@@ -1733,7 +1720,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("heading",{name:"Страница не найдена",exact:true}).waitFor();
    await page.goto(base+"/#search?query="+("x".repeat(201)));
    await page.getByRole("heading",{name:"Страница не найдена",exact:true}).waitFor();
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
+   assert.equal(record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n,
      unifiedAuditBefore,"L-08 search, reload, links and malformed URLs must not write audit");
    await page.goto(base+"/#sales");
    await page.getByRole("heading",{name:"Сделки",exact:true}).waitFor();
@@ -1780,27 +1767,27 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      has:page.getByRole("link",{name:"Browser Edited Urgent "+runId,exact:true})
    });
    await customer360Task.getByText(/Открыта/).waitFor();
-   const customer360Audit=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   const customer360Audit=record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n;
    await navigate("accounts/"+accountId,"Карточка клиента");
    await customer360Deal.getByText("Воронка: Browser Pipeline "+runId+" · этап: Квалификация",{exact:false}).waitFor();
    await reloadDocument();
    await customer360Deal.getByText("Воронка: Browser Pipeline "+runId+" · этап: Квалификация",{exact:false}).waitFor();
    await customer360Task.getByText(/Открыта/).waitFor();
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
+   assert.equal(record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n,
      customer360Audit,"Customer360 stage names and Task status reads must not write audit");
    checkpoint("N-03 Customer360 Deal names from original archived-capable Sales catalog, open Task status, reload and no read audit");
    checkpoint("Exact bigint Deal and atomic Sales–Activities flow visible in Account");
    await navigate("review","Качество и совпадения");
    const quality=page.locator("section").filter({has:page.getByRole("heading",{name:"Проверить имя",exact:true})});
    await selectPagedPicker(quality,"Участник",partyId);
-   const qualityResponse=page.waitForResponse(r=>responsePathEndsWith(r,"/EvaluatePartyName"));
+   const qualityResponse=page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(DataQualityService.method.evaluatePartyName)));
    await quality.getByRole("button",{name:"Проверить качество",exact:true}).click();
    assert.equal((await qualityResponse).status(),200);
    await page.getByText("Не пройдено: 0",{exact:true}).waitFor();
    const compare=page.locator("section").filter({has:page.getByRole("heading",{name:"Сравнить участников",exact:true})});
    await selectPagedPicker(compare,"Первый участник",partyId);
    await selectPagedPicker(compare,"Второй участник",otherPartyId);
-   const compared=page.waitForResponse(r=>responsePathEndsWith(r,"/CompareParties"));
+   const compared=page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(IdentityResolutionService.method.compareParties)));
    await compare.getByRole("button",{name:"Сравнить",exact:true}).click();
    assert.equal((await compared).status(),200);
    await compare.getByText(/разные записи; личность не подтверждена/).waitFor();
@@ -1810,8 +1797,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("button",{name:"Создать контакт",exact:true}).click();
    await selectPagedPicker(page,"Участник",otherPartyId);
    await page.getByLabel("Значение контакта",{exact:true}).fill("browser-"+runId+"@example.org");
-   await mutation(page.getByRole("button",{name:"Сохранить контакт",exact:true}),"CreateContactPoint");
-   const candidateReadAudit=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   await mutation(page.getByRole("button",{name:"Сохранить контакт",exact:true}),ContactPointService.method.createContactPoint);
+   const candidateReadAudit=record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n;
    await navigate("review","Качество и совпадения");
    const candidateCard=page.locator("section").filter({has:page.getByRole("heading",{name:"Совпадающие email",exact:true})});
    const candidateRow=candidateCard.getByRole("listitem").filter({
@@ -1819,11 +1806,11 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    });
    await candidateRow.getByRole("link",{name:"Browser Updated "+runId,exact:true}).waitFor();
    await candidateRow.getByText(/есть неподтверждённые контакты/).waitFor();
-   const candidateCompare=page.waitForResponse(r=>responsePathEndsWith(r,"/CompareParties"));
+   const candidateCompare=page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(IdentityResolutionService.method.compareParties)));
    await candidateRow.getByRole("button",{name:"Сравнить пару",exact:true}).click();
    assert.equal((await candidateCompare).status(),200);
    await candidateRow.getByText(/разные записи; личность не подтверждена/).waitFor();
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
+   assert.equal(record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n,
      candidateReadAudit,"Candidate discovery and comparison must never write audit");
    await candidateRow.getByRole("link",{name:"Browser Other "+runId,exact:true}).first().click();
    assert.equal(new URL(await page.url()).hash,"#parties?partyId="+encodeURIComponent(otherPartyId));
@@ -1836,7 +1823,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await candidateCard.getByRole("listitem").filter({has:page.getByRole("link",{
      name:"Browser Other "+runId,exact:true
    })}).getByRole("button",{name:"Сравнить пару",exact:true}).waitFor();
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
+   assert.equal(record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n,
      candidateReadAudit,"Navigating candidate Party and returning/reloading must remain read-only");
    checkpoint("N-05 original shared-email candidate -> direct typed CompareParties -> unconfirmed verdict, Party links/reload, zero read audit");
 
@@ -1846,8 +1833,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      "crm_party_relationship_records","crm_sales_deal_records",
      "crm_activity_task_records","crm_consent_records"];
    const l03Before=await Promise.all(l03Tables.map(async table=>
-     (await sql("SELECT COUNT(*) AS n FROM "+table+" WHERE tenant='"+tenantSql+"'"))[0].n));
-   const l03AuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+     record((await sql("SELECT COUNT(*) AS n FROM "+table+" WHERE tenant='"+tenantSql+"'"))[0]).n));
+   const l03AuditBefore=number(record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n);
    await candidateRow.getByRole("button",{name:"Сравнить пару",exact:true}).click();
    const canonicalCard=page.locator("section").filter({
      has:page.getByRole("heading",{name:"Каноническая запись и история объединений",exact:true})
@@ -1855,10 +1842,10 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await canonicalCard.getByLabel("Запись-дубликат (неосновная)",{exact:true}).selectOption(otherPartyId);
    await expect(canonicalCard.getByRole("button",{name:"Подтвердить объединение",exact:true})).toBeDisabled();
    await canonicalCard.getByLabel(/Я вручную проверил личность/).check();
-   await mutation(canonicalCard.getByRole("button",{name:"Подтвердить объединение",exact:true}),"MergeParty");
-   const l03Merge=(await sql("SELECT id,source_party,survivor_party,version,status "+
+   await mutation(canonicalCard.getByRole("button",{name:"Подтвердить объединение",exact:true}),IdentityResolutionService.method.mergeParty);
+   const l03Merge=record((await sql("SELECT id,source_party,survivor_party,version,status "+
      "FROM crm_identity_merge_records WHERE tenant='"+tenantSql+"' AND source_party='"+otherPartyId+"' "+
-     "AND survivor_party='"+partyId+"' ORDER BY rowid DESC LIMIT 1"))[0];
+     "AND survivor_party='"+partyId+"' ORDER BY rowid DESC LIMIT 1"))[0]);
    assert.ok(l03Merge);
    assert.equal(l03Merge.version,1);
    assert.equal(l03Merge.status,"active");
@@ -1867,14 +1854,14 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("heading",{name:"Browser Other "+runId,exact:true}).waitFor();
    await navigate("review?partyId="+encodeURIComponent(otherPartyId),"Качество и совпадения");
    await canonicalCard.getByRole("button",{name:"Отменить объединение",exact:true}).waitFor();
-   await mutation(canonicalCard.getByRole("button",{name:"Отменить объединение",exact:true}),"UnmergeParty");
-   const l03Unmerged=(await sql("SELECT version,status FROM crm_identity_merge_records "+
-     "WHERE tenant='"+tenantSql+"' AND id='"+l03Merge.id+"'"))[0];
+   await mutation(canonicalCard.getByRole("button",{name:"Отменить объединение",exact:true}),IdentityResolutionService.method.unmergeParty);
+   const l03Unmerged=record((await sql("SELECT version,status FROM crm_identity_merge_records "+
+     "WHERE tenant='"+tenantSql+"' AND id='"+l03Merge.id+"'"))[0]);
    assert.deepEqual(l03Unmerged,{version:2,status:"unmerged"});
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
+   assert.equal(record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n,
      l03AuditBefore+2,"Merge+Unmerge must write exactly 2 audits");
    const l03After=await Promise.all(l03Tables.map(async table=>
-     (await sql("SELECT COUNT(*) AS n FROM "+table+" WHERE tenant='"+tenantSql+"'"))[0].n));
+     record((await sql("SELECT COUNT(*) AS n FROM "+table+" WHERE tenant='"+tenantSql+"'"))[0]).n));
    assert.deepEqual(l03After,l03Before,"Lineage cannot lose downstream references");
    await reloadDocument();
    await canonicalCard.getByText(/Отменено:/).waitFor();
@@ -1887,27 +1874,27 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await navigate("parties?partyId="+encodeURIComponent(otherPartyId),"Люди и организации");
    await page.getByRole("button",{name:"Редактировать",exact:true}).click();
    await page.getByLabel("Имя или название",{exact:true}).fill("A");
-   await mutation(page.getByRole("button",{name:"Сохранить участника",exact:true}),"UpdateParty");
-   const qualityAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   await mutation(page.getByRole("button",{name:"Сохранить участника",exact:true}),PartyService.method.updateParty);
+   const qualityAuditBefore=record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n;
    await page.getByRole("link",{name:"Повторно проверить качество",exact:true}).click();
    assert.equal(new URL(await page.url()).hash,"#review?partyId="+encodeURIComponent(otherPartyId));
    await reloadDocument();
    const badQuality=page.locator("section").filter({has:page.getByRole("heading",{name:"Проверить имя",exact:true})});
    await expect(badQuality.getByLabel("Участник",{exact:true})).toHaveValue(otherPartyId);
    await expect(badQuality.getByLabel("Участник",{exact:true})).toBeEnabled();
-   const badQualityRead=page.waitForResponse(r=>responsePathEndsWith(r,"/EvaluatePartyName"));
+   const badQualityRead=page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(DataQualityService.method.evaluatePartyName)));
    await badQuality.getByRole("button",{name:"Проверить качество",exact:true}).click();
    assert.equal((await badQualityRead).status(),200);
    await badQuality.getByText("Не пройдено: 1",{exact:true}).waitFor();
    await badQuality.getByRole("link",{name:"Открыть карточку и исправить",exact:true}).click();
    assert.equal(new URL(await page.url()).hash,"#parties?partyId="+encodeURIComponent(otherPartyId));
    await page.getByRole("heading",{name:"A",exact:true}).waitFor();
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
+   assert.equal(record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n,
      qualityAuditBefore,"Data Quality reads and deep links must not write audit");
    await page.getByRole("button",{name:"Редактировать",exact:true}).click();
    await page.getByLabel("Имя или название",{exact:true}).fill("Browser Other "+runId);
-   await mutation(page.getByRole("button",{name:"Сохранить участника",exact:true}),"UpdateParty");
-   const repairedAudit=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   await mutation(page.getByRole("button",{name:"Сохранить участника",exact:true}),PartyService.method.updateParty);
+   const repairedAudit=record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n;
    await page.getByRole("link",{name:"Повторно проверить качество",exact:true}).click();
    assert.equal(new URL(await page.url()).hash,"#review?partyId="+encodeURIComponent(otherPartyId));
    const goodQuality=page.locator("section").filter({has:page.getByRole("heading",{name:"Проверить имя",exact:true})});
@@ -1921,7 +1908,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await expect(goodQuality.getByLabel("Участник",{exact:true})).toBeEnabled();
    await goodQuality.getByRole("button",{name:"Проверить качество",exact:true}).click();
    await goodQuality.getByText("Не пройдено: 0",{exact:true}).waitFor();
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
+   assert.equal(record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n,
      repairedAudit,"Repeated evaluation and reload must remain read-only");
    checkpoint("N-04 existing DataQuality + typed Party repair + exact review URL/reload, no read audit");
    // N-06 human and service-agent proofs are separate original Rust paths.
@@ -1933,19 +1920,19 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("button",{name:"Создать контакт",exact:true}).click();
    await selectPagedPicker(page,"Участник",partyId);
    await page.getByLabel("Значение контакта",{exact:true}).fill(consentEmail);
-   await mutation(page.getByRole("button",{name:"Сохранить контакт",exact:true}),"CreateContactPoint");
+   await mutation(page.getByRole("button",{name:"Сохранить контакт",exact:true}),ContactPointService.method.createContactPoint);
    const verifiedContactRows=await sql("SELECT id FROM crm_contact_point_records "+
      "WHERE tenant='"+tenantSql+"' AND party_id='"+partyId+"' AND json_extract(state,'$.normalized_value')='"+
      consentEmail.replaceAll("'","''")+"'");
    assert.equal(verifiedContactRows.length,1,"verified owner email is scoped to the selected Party");
-   const consentVerifiedContactId=verifiedContactRows[0].id;
+   const consentVerifiedContactId=string(verifiedContactRows[0]?.id);
    await selectPagedPicker(page,"Фильтр по участнику",partyId);
    const consentContactCard=page.locator("section").filter({
      has:page.getByRole("heading",{name:consentEmail,exact:true})
    });
    await mutation(consentContactCard.getByRole("button",{
      name:"Подтвердить email (Access / тестовый администратор)",exact:true
-   }),"VerifyOwnEmailContactPoint");
+   }),ContactPointService.method.verifyOwnEmailContactPoint);
    await navigate("consents","Коммуникации");
    // N-06: consume only original Party/ContactPoint owner reads instead of opaque IDs.
    await selectPagedPicker(page,"Фильтр по участнику",partyId);
@@ -1965,11 +1952,11 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await grantPickerPanel.getByLabel("Цель согласия",{exact:true}).fill(n06GrantPurpose);
    await mutation(grantPickerPanel.getByRole("button",{
      name:"Выдать согласие на email-коммуникацию",exact:true
-   }),"GrantVerifiedEmailConsent");
+   }),ConsentAuthorizationService.method.grantVerifiedEmailConsent);
    const grantCard=page.locator("section").filter({hasText:n06GrantPurpose});
    await grantCard.getByRole("button",{name:"Проверить разрешение",exact:true}).click();
    await grantCard.getByRole("heading",{name:"Контакт разрешён",exact:true}).waitFor();
-   await mutation(grantCard.getByRole("button",{name:"Отозвать согласие",exact:true}),"WithdrawConsentAuthorization");
+   await mutation(grantCard.getByRole("button",{name:"Отозвать согласие",exact:true}),ConsentAuthorizationService.method.withdrawConsentAuthorization);
    await grantCard.getByRole("button",{name:"Проверить разрешение",exact:true}).click();
    await grantCard.getByRole("heading",{name:"Контакт не разрешён",exact:true}).waitFor();
    await grantCard.getByText("Согласие отозвано",{exact:true}).waitFor();
@@ -1981,17 +1968,17 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await selectPagedPicker(suppress,"Участник",partyId);
    const n06DenyPurpose="n06.deny."+runId;
    await suppress.getByLabel("Цель",{exact:true}).fill(n06DenyPurpose);
-   await mutation(suppress.getByRole("button",{name:"Запретить контакт",exact:true}),"SuppressCommunication");
+   await mutation(suppress.getByRole("button",{name:"Запретить контакт",exact:true}),ConsentAuthorizationService.method.suppressCommunication);
    const authCard=page.locator("section").filter({hasText:n06DenyPurpose});
    await authCard.getByRole("button",{name:"Проверить разрешение",exact:true}).click();
    await authCard.getByRole("heading",{name:"Контакт не разрешён",exact:true}).waitFor();
    await authCard.getByText("Действующий запрет",{exact:true}).waitFor();
-   const consentReadAudit=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   const consentReadAudit=record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n;
    await reloadDocument();
    const authCardAfterReload=page.locator("section").filter({hasText:n06DenyPurpose});
    await authCardAfterReload.getByRole("button",{name:"Проверить разрешение",exact:true}).click();
    await authCardAfterReload.getByRole("heading",{name:"Контакт не разрешён",exact:true}).waitFor();
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
+   assert.equal(record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n,
      consentReadAudit,"Consent card Evaluate must remain read-only after reload");
    checkpoint("N-06 named Party filter and original ContactPoint chooser, unverified Email disabled; exact consent card Evaluate after reload with no read audit");
    const evaluate=page.locator("section").filter({has:page.getByRole("heading",{name:"Проверить возможность контакта",exact:true})});
@@ -2011,7 +1998,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await s5bConsentDialog.getByLabel("Цель",{exact:true}).fill("s5b_recovery_"+runId);
    const s5bConsentBefore=new Set((await sql("SELECT id FROM crm_consent_records WHERE tenant='"+tenantSql+"'")).map(x=>x.id));
    let s5bConsentCalls=0,s5bConsentRequestId;
-   const loseConsentAck=async route=>{
+   const loseConsentAck=async (route: Route)=>{
      s5bConsentCalls++;
      const committed=await route.fetch();
      recordResponse(committed);
@@ -2019,51 +2006,51 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      s5bConsentRequestId=committed.headers()["x-request-id"];
      await route.abort("failed");
    };
-   const s5bConsentPath="**/crm.consents.v2.ConsentAuthorizationService/SuppressCommunication";
+   const s5bConsentPath="**"+fixtureRpcPath(ConsentAuthorizationService.method.suppressCommunication);
    await page.route(s5bConsentPath,loseConsentAck);
    await s5bConsentDialog.getByRole("button",{name:"Запретить контакт",exact:true}).click();
    await s5bConsentDialog.getByRole("heading",{name:/Результат записи не подтверждён/}).waitFor();
    await expect(s5bConsentDialog.getByRole("button",{name:"Запретить контакт",exact:true})).toBeDisabled();
-   const s5bConsentMarker=await page.evaluate(()=>JSON.parse(sessionStorage.getItem("crm.consents.pending.v1")));
+   const s5bConsentMarker=await pendingMarker("crm.consents.pending.v1");
    assert.deepEqual(Object.keys(s5bConsentMarker).sort(),["expectedVersion","key","resourceId"]);
    assert.equal(s5bConsentMarker.expectedVersion,"0");
    const s5bConsentCreated=(await sql("SELECT id FROM crm_consent_records WHERE tenant='"+tenantSql+"'"))
      .filter(x=>!s5bConsentBefore.has(x.id));
    assert.equal(s5bConsentCreated.length,1);
-   assert.equal(s5bConsentMarker.resourceId,s5bConsentCreated[0].id);
-   const acceptConsentReload=dialog=>void dialog.accept();
+   assert.equal(s5bConsentMarker.resourceId,record(s5bConsentCreated[0]).id);
+   const acceptConsentReload=(dialog: Dialog)=>void dialog.accept();
    page.on("dialog",acceptConsentReload);
    try{await reloadDocument();}finally{page.off("dialog",acceptConsentReload);}
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).waitFor();
    await expect(page.getByRole("button",{name:"Запретить коммуникацию",exact:true})).toBeDisabled();
-   const s5bConsentRead=page.waitForResponse(r=>responsePathEndsWith(r,"/GetConsentAuthorization")
+   const s5bConsentRead=page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(ConsentAuthorizationService.method.getConsentAuthorization))
      &&r.request().method()==="POST");
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
    const s5bConsentChecked=await s5bConsentRead;
    assert.equal(s5bConsentChecked.status(),200);
-   const s5bConsentReadId=(await s5bConsentChecked.headers())["x-request-id"];
+   const s5bConsentReadId=string((await s5bConsentChecked.headers())["x-request-id"]);
    await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
-     .toContainText(s5bConsentRequestId);
+     .toContainText(string(s5bConsentRequestId));
    assert.equal(s5bConsentCalls,1);
-   await assertAuditRecovery(s5bConsentRequestId,s5bConsentReadId,"consents.operator_suppress","consent");
+   await assertAuditRecovery(string(s5bConsentRequestId),s5bConsentReadId,"consents.operator_suppress","consent");
    assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.consents.pending.v1")),null);
-   ownerRecovery.push({owner:"consent",kind:"lookup",original_request_id:s5bConsentRequestId,
+   ownerRecovery.push({owner:"consent",kind:"lookup",original_request_id:string(s5bConsentRequestId),
      subsequent_request_id:s5bConsentReadId});
    await page.unroute(s5bConsentPath,loseConsentAck);
    checkpoint("S5b consent DENY lost acknowledgment: read-only receipt after reload, no duplicate write");
    await navigate("privacy","Запросы о данных");
    await page.getByRole("button",{name:"Новое обращение",exact:true}).click();
    const privacyBefore=new Set((await sql("SELECT id FROM crm_privacy_case_records WHERE tenant='"+tenantSql+"'")).map(x=>x.id));
-   await mutation(page.getByRole("button",{name:"Создать обращение",exact:true}),"CreatePrivacyCase");
+   await mutation(page.getByRole("button",{name:"Создать обращение",exact:true}),PrivacyCaseService.method.createPrivacyCase);
    const newCases=(await sql("SELECT id FROM crm_privacy_case_records WHERE tenant='"+tenantSql+"'")).filter(x=>!privacyBefore.has(x.id));
    assert.equal(newCases.length,1);
-   const privacyId=newCases[0].id;
+   const privacyId=string(newCases[0]?.id);
    const privacyCard=page.locator("section").filter({has:page.getByText("ID: "+privacyId,{exact:true})});
    await privacyCard.getByRole("button",{name:"Открыть запрос",exact:true}).click();
-   await mutation(page.getByRole("button",{name:"Подать запрос",exact:true}),"SubmitPrivacyCase");
+   await mutation(page.getByRole("button",{name:"Подать запрос",exact:true}),PrivacyCaseService.method.submitPrivacyCase);
    await privacyCard.getByRole("button",{name:"Открыть запрос",exact:true}).click();
-   await mutation(page.getByRole("button",{name:"Отменить запрос",exact:true}),"CancelPrivacyCase");
-   const privacyState=(await sql("SELECT version,json_extract(state,'$.status.code') AS status FROM crm_privacy_case_records WHERE tenant='"+tenantSql+"' AND id='"+privacyId+"'"))[0];
+   await mutation(page.getByRole("button",{name:"Отменить запрос",exact:true}),PrivacyCaseService.method.cancelPrivacyCase);
+   const privacyState=record((await sql("SELECT version,json_extract(state,'$.status.code') AS status FROM crm_privacy_case_records WHERE tenant='"+tenantSql+"' AND id='"+privacyId+"'"))[0]);
    assert.equal(privacyState.version,3);assert.equal(privacyState.status,"cancelled");
    // A service token is deliberately not a human identity. Run the positive
    // signed-human E2E only in the native workerd session; live service-token
@@ -2079,16 +2066,16 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("button",{name:"Создать участника",exact:true}).click();
    await page.getByLabel("Тип",{exact:true}).selectOption("1");
    await page.getByLabel("Имя или название",{exact:true}).fill(privacyPersonName);
-   await mutation(page.getByRole("button",{name:"Сохранить участника",exact:true}),"CreateParty");
+   await mutation(page.getByRole("button",{name:"Сохранить участника",exact:true}),PartyService.method.createParty);
    const [privacyPerson]=await sql("SELECT id FROM crm_party_records "+
      "WHERE tenant=? AND json_extract(state,'$.display_name')=?",tenantA,privacyPersonName);
    assert.ok(privacyPerson?.id);
-   const privacyPartyId=privacyPerson.id;
+   const privacyPartyId=string(privacyPerson.id);
    await navigate("contacts","Контакты");
    await page.getByRole("button",{name:"Создать контакт",exact:true}).click();
    await selectPagedPicker(page,"Участник",privacyPartyId);
    await page.getByLabel("Значение контакта",{exact:true}).fill(adminIdentity);
-   await mutation(page.getByRole("button",{name:"Сохранить контакт",exact:true}),"CreateContactPoint");
+   await mutation(page.getByRole("button",{name:"Сохранить контакт",exact:true}),ContactPointService.method.createContactPoint);
    await selectPagedPicker(page,"Фильтр по участнику",privacyPartyId);
    await page.getByRole("heading",{name:adminIdentity,exact:true}).waitFor();
    const ownContactSection=page.locator("section").filter({
@@ -2096,50 +2083,51 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    });
    await mutation(ownContactSection.getByRole("button",{
      name:"Подтвердить email (Access / тестовый администратор)",exact:true
-   }),"VerifyOwnEmailContactPoint");
+   }),ContactPointService.method.verifyOwnEmailContactPoint);
    const ownContactRows=await sql(
      "SELECT id FROM crm_contact_point_records WHERE tenant=? AND party_id=? "+
      "AND json_extract(state,'$.normalized_value')=?",tenantA,privacyPartyId,adminIdentity);
    assert.equal(ownContactRows.length,1);
-   const ownContactId=ownContactRows[0].id;
+   const ownContactId=string(ownContactRows[0]?.id);
    await navigate("privacy","Запросы о данных");
    const r4CaseBefore=new Set((await sql("SELECT id FROM crm_privacy_case_records WHERE tenant='"+tenantSql+"'")).map(x=>x.id));
    await page.getByRole("button",{name:"Новое обращение",exact:true}).click();
-   await mutation(page.getByRole("button",{name:"Создать обращение",exact:true}),"CreatePrivacyCase");
+   await mutation(page.getByRole("button",{name:"Создать обращение",exact:true}),PrivacyCaseService.method.createPrivacyCase);
    const r4Cases=(await sql("SELECT id FROM crm_privacy_case_records WHERE tenant='"+tenantSql+"'"))
      .filter(x=>!r4CaseBefore.has(x.id));
    assert.equal(r4Cases.length,1);
-   const r4CaseId=r4Cases[0].id;
+   const r4CaseId=string(r4Cases[0]?.id);
    const r4Card=page.locator("section").filter({has:page.getByText("ID: "+r4CaseId,{exact:true})});
    await r4Card.getByRole("button",{name:"Открыть запрос",exact:true}).click();
-   await mutation(page.getByRole("button",{name:"Подать запрос",exact:true}),"SubmitPrivacyCase");
+   await mutation(page.getByRole("button",{name:"Подать запрос",exact:true}),PrivacyCaseService.method.submitPrivacyCase);
    await r4Card.getByRole("button",{name:"Открыть запрос",exact:true}).click();
    await selectPagedPicker(page,"Мой участник (Person)",privacyPartyId);
    await page.getByLabel("ID проверенного email ContactPoint",{exact:true}).fill(ownContactId);
    await mutation(page.getByRole("button",{name:"Подтвердить свою личность",exact:true}),
-     "VerifyOwnPrivacyCaseSubject");
+     PrivacyCaseService.method.verifyOwnPrivacyCaseSubject);
    const [r4State]=await sql("SELECT version,json_extract(state,'$.status.code') AS status, "+
      "json_extract(state,'$.subject_binding.canonical_party_id') AS party_id "+
      "FROM crm_privacy_case_records WHERE tenant=? AND id=?",tenantA,r4CaseId);
+   assert.ok(r4State);
    assert.equal(r4State.version,3);assert.equal(r4State.status,"subject_verified");
    assert.equal(r4State.party_id,privacyPartyId);
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id=? "+
-     "AND subject_id=? AND action='customer_privacy.subject.verify_own'",tenantA,r4CaseId))[0].n,1);
+   assert.equal(record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id=? "+
+     "AND subject_id=? AND action='customer_privacy.subject.verify_own'",tenantA,r4CaseId))[0]).n,1);
    checkpoint("R4a signed human ContactPoint -> original PrivacyCase subject verification, D1 receipt and audit");
    // Only the verified human can inspect the current two-owner preview.
    // It must remain incomplete (seven other canonical owner contributions)
    // and must not create a D1 case receipt or audit write.
    await r4Card.getByRole("button",{name:"Открыть запрос",exact:true}).click();
-   const beforeScopeReads=(await sql("SELECT COUNT(*) AS n FROM crm_audit "+
-     "WHERE tenant_id=? AND subject_id=?",tenantA,r4CaseId))[0].n;
+   const beforeScopeReads=record((await sql("SELECT COUNT(*) AS n FROM crm_audit "+
+     "WHERE tenant_id=? AND subject_id=?",tenantA,r4CaseId))[0]).n;
    await page.getByRole("button",{
      name:"Посмотреть предварительный состав моих данных",exact:true
    }).click();
    await page.getByText("Неполный предварительный состав",{exact:true}).waitFor();
    await page.getByText(/Проверено владельцев: 2 из 9/).waitFor();
    await expect(page.getByText(/Ещё не охвачены: crm\./)).toBeVisible();
-   const afterScopeReads=(await sql("SELECT COUNT(*) AS n FROM crm_audit "+
-     "WHERE tenant_id=? AND subject_id=?",tenantA,r4CaseId))[0].n;
+   const afterScopeReads=record((await sql("SELECT COUNT(*) AS n FROM crm_audit "+
+     "WHERE tenant_id=? AND subject_id=?",tenantA,r4CaseId))[0]).n;
    assert.equal(afterScopeReads,beforeScopeReads,"Privacy preview must be read-only in real Chromium");
    await page.getByRole("button",{name:"Закрыть панель",exact:true}).click();
    checkpoint("R4a own-scope preview: original 2/9 owner contributions, seven explicitly missing, D1 read-only");
@@ -2154,7 +2142,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("button",{name:"Новое обращение",exact:true}).click();
    const s5bPrivacyBefore=new Set((await sql("SELECT id FROM crm_privacy_case_records WHERE tenant='"+tenantSql+"'")).map(x=>x.id));
    let s5bPrivacyCalls=0, s5bPrivacyRequestId;
-   const losePrivacyAck=async route=>{
+   const losePrivacyAck=async (route: Route)=>{
      s5bPrivacyCalls++;
      const committed=await route.fetch();
      recordResponse(committed);
@@ -2162,41 +2150,41 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      s5bPrivacyRequestId=committed.headers()["x-request-id"];
      await route.abort("failed");
    };
-   await page.route("**/crm.customer_privacy.v2.PrivacyCaseService/CreatePrivacyCase",losePrivacyAck);
+   await page.route("**"+fixtureRpcPath(PrivacyCaseService.method.createPrivacyCase),losePrivacyAck);
    await page.getByRole("button",{name:"Создать обращение",exact:true}).click();
    await page.getByRole("dialog").getByRole("heading",{name:/Результат записи не подтверждён/}).waitFor();
    await expect(page.getByRole("button",{name:"Создать обращение",exact:true})).toBeDisabled();
-   const s5bPrivacyMarker=await page.evaluate(()=>JSON.parse(sessionStorage.getItem("crm.privacy.pending.v1")));
+   const s5bPrivacyMarker=await pendingMarker("crm.privacy.pending.v1");
    assert.deepEqual(Object.keys(s5bPrivacyMarker).sort(),["expectedVersion","key","resourceId"]);
    assert.equal(s5bPrivacyMarker.expectedVersion,"0");
    const s5bPrivacyNew=(await sql("SELECT id FROM crm_privacy_case_records WHERE tenant='"+tenantSql+"'"))
      .filter(x=>!s5bPrivacyBefore.has(x.id));
    assert.equal(s5bPrivacyNew.length,1);
-   assert.equal(s5bPrivacyMarker.resourceId,s5bPrivacyNew[0].id);
-   const acceptPrivacyReload=dialog=>void dialog.accept();
+   assert.equal(s5bPrivacyMarker.resourceId,record(s5bPrivacyNew[0]).id);
+   const acceptPrivacyReload=(dialog: Dialog)=>void dialog.accept();
    page.on("dialog",acceptPrivacyReload);
    try {await reloadDocument();} finally {page.off("dialog",acceptPrivacyReload);}
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).waitFor();
    await expect(page.getByRole("button",{name:"Новое обращение",exact:true})).toBeDisabled();
-   const s5bPrivacyRead=page.waitForResponse(r=>responsePathEndsWith(r,"/GetPrivacyCase")&&r.request().method()==="POST");
+   const s5bPrivacyRead=page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(PrivacyCaseService.method.getPrivacyCase))&&r.request().method()==="POST");
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
    const s5bPrivacyChecked=await s5bPrivacyRead;
    assert.equal(s5bPrivacyChecked.status(),200);
-   const s5bPrivacyReadId=(await s5bPrivacyChecked.headers())["x-request-id"];
+   const s5bPrivacyReadId=string((await s5bPrivacyChecked.headers())["x-request-id"]);
    await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
-     .toContainText(s5bPrivacyRequestId);
+     .toContainText(string(s5bPrivacyRequestId));
    assert.equal(s5bPrivacyCalls,1);
-   await assertAuditRecovery(s5bPrivacyRequestId,s5bPrivacyReadId,"customer_privacy.create","privacy");
+   await assertAuditRecovery(string(s5bPrivacyRequestId),s5bPrivacyReadId,"customer_privacy.create","privacy");
    assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.privacy.pending.v1")),null);
-   ownerRecovery.push({owner:"privacy",kind:"lookup",original_request_id:s5bPrivacyRequestId,
+   ownerRecovery.push({owner:"privacy",kind:"lookup",original_request_id:string(s5bPrivacyRequestId),
      subsequent_request_id:s5bPrivacyReadId});
-   await page.unroute("**/crm.customer_privacy.v2.PrivacyCaseService/CreatePrivacyCase",losePrivacyAck);
+   await page.unroute("**"+fixtureRpcPath(PrivacyCaseService.method.createPrivacyCase),losePrivacyAck);
    checkpoint("S5b Privacy lost acknowledgement: reload + immutable GetPrivacyCase provenance without duplicate create");
    await navigate("enrichment","Обогащение данных");
    const providerKey="browser_registry_"+runId;
    const profileBefore=new Set((await sql("SELECT id FROM crm_enrichment_profiles WHERE tenant='"+tenantSql+"'")).map(x=>x.id));
    let s5bProfileCalls=0,s5bProfileRequestId;
-   const loseProfileAck=async route=>{
+   const loseProfileAck=async (route: Route)=>{
      s5bProfileCalls++;
      const committed=await route.fetch();
      recordResponse(committed);
@@ -2204,7 +2192,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      s5bProfileRequestId=committed.headers()["x-request-id"];
      await route.abort("failed");
    };
-   const s5bProfilePath="**/crm.customer_enrichment.v2.EnrichmentConfigurationService/PublishProviderProfile";
+   const s5bProfilePath="**"+fixtureRpcPath(EnrichmentConfigurationService.method.publishProviderProfile);
    await page.route(s5bProfilePath,loseProfileAck);
    await page.getByRole("button",{name:"Новый профиль",exact:true}).click();
    await page.getByLabel("Ключ провайдера",{exact:true}).fill(providerKey);
@@ -2217,7 +2205,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await profileDialog.getByRole("button",{name:"Опубликовать профиль",exact:true}).click();
    await profileDialog.getByRole("heading",{name:/Результат записи не подтверждён/}).waitFor();
    await expect(profileDialog.getByRole("button",{name:"Опубликовать профиль",exact:true})).toBeDisabled();
-   const s5bProfileMarker=await page.evaluate(()=>JSON.parse(sessionStorage.getItem("crm.enrichment.profile.pending.v1")));
+   const s5bProfileMarker=await pendingMarker("crm.enrichment.profile.pending.v1");
    assert.deepEqual(Object.keys(s5bProfileMarker).sort(),["expectedVersion","key","resourceId"]);
    assert.equal(s5bProfileMarker.expectedVersion,"0");
    assert.equal(s5bProfileMarker.resourceId,providerKey);
@@ -2229,22 +2217,22 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      {kind:"enrichment-license",request_id:s5bProfileRequestId,value:"Browser test license"},
      {kind:"enrichment-credential-handle",request_id:s5bProfileRequestId,
        value:"browser-credential-handle-"+runId});
-   const acceptProfileReload=dialog=>void dialog.accept();
+   const acceptProfileReload=(dialog: Dialog)=>void dialog.accept();
    page.on("dialog",acceptProfileReload);
    try{await reloadDocument();}finally{page.off("dialog",acceptProfileReload);}
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).waitFor();
    await expect(page.getByRole("button",{name:"Новый профиль",exact:true})).toBeDisabled();
-   const s5bProfileRead=page.waitForResponse(r=>responsePathEndsWith(r,"/GetProviderProfile")&&r.request().method()==="POST");
+   const s5bProfileRead=page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(EnrichmentConfigurationService.method.getProviderProfile))&&r.request().method()==="POST");
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
    const s5bProfileChecked=await s5bProfileRead;
    assert.equal(s5bProfileChecked.status(),200);
-   const s5bProfileReadId=(await s5bProfileChecked.headers())["x-request-id"];
+   const s5bProfileReadId=string((await s5bProfileChecked.headers())["x-request-id"]);
    await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
-     .toContainText(s5bProfileRequestId);
+     .toContainText(string(s5bProfileRequestId));
    assert.equal(s5bProfileCalls,1,"Enrichment profile recovery must not publish twice");
-   await assertAuditRecovery(s5bProfileRequestId,s5bProfileReadId,"customer_enrichment.profile_publish","enrichment-profile");
+   await assertAuditRecovery(string(s5bProfileRequestId),s5bProfileReadId,"customer_enrichment.profile_publish","enrichment-profile");
    assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.enrichment.profile.pending.v1")),null);
-   ownerRecovery.push({owner:"enrichment-profile",kind:"lookup",original_request_id:s5bProfileRequestId,
+   ownerRecovery.push({owner:"enrichment-profile",kind:"lookup",original_request_id:string(s5bProfileRequestId),
      subsequent_request_id:s5bProfileReadId});
    await page.unroute(s5bProfilePath,loseProfileAck);
    const profileId=await firstId("crm_enrichment_profiles","provider_key",providerKey);
@@ -2256,7 +2244,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const mappingKey="browser_mapping_"+runId;
    const mappingBefore=new Set((await sql("SELECT id FROM crm_enrichment_mappings WHERE tenant='"+tenantSql+"'")).map(x=>x.id));
    let s5bMappingCalls=0,s5bMappingRequestId;
-   const loseMappingAck=async route=>{
+   const loseMappingAck=async (route: Route)=>{
      s5bMappingCalls++;
      const committed=await route.fetch();
      recordResponse(committed);
@@ -2264,7 +2252,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      s5bMappingRequestId=committed.headers()["x-request-id"];
      await route.abort("failed");
    };
-   const s5bMappingPath="**/crm.customer_enrichment.v2.EnrichmentConfigurationService/PublishMapping";
+   const s5bMappingPath="**"+fixtureRpcPath(EnrichmentConfigurationService.method.publishMapping);
    await page.route(s5bMappingPath,loseMappingAck);
    await page.getByRole("button",{name:"Новое сопоставление",exact:true}).click();
    await page.getByLabel("Версия профиля",{exact:true}).selectOption(profileId);
@@ -2273,7 +2261,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await mappingDialog.getByRole("button",{name:"Опубликовать сопоставление",exact:true}).click();
    await mappingDialog.getByRole("heading",{name:/Результат записи не подтверждён/}).waitFor();
    await expect(mappingDialog.getByRole("button",{name:"Опубликовать сопоставление",exact:true})).toBeDisabled();
-   const s5bMappingMarker=await page.evaluate(()=>JSON.parse(sessionStorage.getItem("crm.enrichment.mapping.pending.v1")));
+   const s5bMappingMarker=await pendingMarker("crm.enrichment.mapping.pending.v1");
    assert.deepEqual(Object.keys(s5bMappingMarker).sort(),["expectedVersion","key","resourceId"]);
    assert.equal(s5bMappingMarker.expectedVersion,"0");
    assert.equal(s5bMappingMarker.resourceId,mappingKey);
@@ -2281,22 +2269,22 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      .filter(x=>!mappingBefore.has(x.id));
    assert.equal(s5bMappingCreated.length,1);
    syntheticPrivateProbes.push({kind:"enrichment-mapping-key",request_id:s5bMappingRequestId,value:mappingKey});
-   const acceptMappingReload=dialog=>void dialog.accept();
+   const acceptMappingReload=(dialog: Dialog)=>void dialog.accept();
    page.on("dialog",acceptMappingReload);
    try{await reloadDocument();}finally{page.off("dialog",acceptMappingReload);}
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).waitFor();
    await expect(page.getByRole("button",{name:"Новое сопоставление",exact:true})).toBeDisabled();
-   const s5bMappingRead=page.waitForResponse(r=>responsePathEndsWith(r,"/GetMapping")&&r.request().method()==="POST");
+   const s5bMappingRead=page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(EnrichmentConfigurationService.method.getMapping))&&r.request().method()==="POST");
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
    const s5bMappingChecked=await s5bMappingRead;
    assert.equal(s5bMappingChecked.status(),200);
-   const s5bMappingReadId=(await s5bMappingChecked.headers())["x-request-id"];
+   const s5bMappingReadId=string((await s5bMappingChecked.headers())["x-request-id"]);
    await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
-     .toContainText(s5bMappingRequestId);
+     .toContainText(string(s5bMappingRequestId));
    assert.equal(s5bMappingCalls,1,"Enrichment mapping recovery must not publish twice");
-   await assertAuditRecovery(s5bMappingRequestId,s5bMappingReadId,"customer_enrichment.mapping_publish","enrichment-mapping");
+   await assertAuditRecovery(string(s5bMappingRequestId),s5bMappingReadId,"customer_enrichment.mapping_publish","enrichment-mapping");
    assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.enrichment.mapping.pending.v1")),null);
-   ownerRecovery.push({owner:"enrichment-mapping",kind:"lookup",original_request_id:s5bMappingRequestId,
+   ownerRecovery.push({owner:"enrichment-mapping",kind:"lookup",original_request_id:string(s5bMappingRequestId),
      subsequent_request_id:s5bMappingReadId});
    await page.unroute(s5bMappingPath,loseMappingAck);
    const mappingId=await firstId("crm_enrichment_mappings","mapping_key",mappingKey);
@@ -2308,8 +2296,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      "same-key,invalid,Wrong,0\r\n"+
      "same-key,person,Second,1\r\n"+
      "empty-name,organization,,1\r\n";
-   const n01AuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
-   const n01PartiesBefore=(await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant='"+tenantSql+"'"))[0].n;
+   const n01AuditBefore=record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n;
+   const n01PartiesBefore=record((await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant='"+tenantSql+"'"))[0]).n;
    await page.getByLabel("CSV-файл",{exact:true}).setInputFiles({
      name:"invalid.csv",mimeType:"text/csv",buffer:Buffer.from(brokenCsv)});
    await page.getByRole("button",{name:"Проверить импорт",exact:true}).click();
@@ -2321,8 +2309,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await csvErrors.getByText(/Строка данных 3 · Имя или название: Недопустимое или пустое/).waitFor();
    assert.equal(await page.getByRole("button",{name:"Подтвердить импорт",exact:true}).count(),0,
      "Invalid CSV preview must never offer an Apply action");
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,n01AuditBefore);
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant='"+tenantSql+"'"))[0].n,n01PartiesBefore);
+   assert.equal(record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n,n01AuditBefore);
+   assert.equal(record((await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant='"+tenantSql+"'"))[0]).n,n01PartiesBefore);
    checkpoint("N-01 invalid CSV shows all original row+field reasons, never enables Apply or writes");
    const csv="party_id,kind,display_name,resource_version\r\nbrowser-import,person,Browser Import "+runId+",1\r\n";
    const obsoleteCsv=csv.replace("Browser Import ","Browser Obsolete ");
@@ -2334,7 +2322,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("button",{name:"Подтвердить импорт",exact:true}).waitFor();
    const csvBefore=new Set((await sql("SELECT id FROM crm_party_records WHERE tenant='"+tenantSql+"'")).map(x=>x.id));
    let s5bCsvCalls=0,s5bCsvRequestId;
-   const loseCsvAck=async route=>{
+   const loseCsvAck=async (route: Route)=>{
      s5bCsvCalls++;
      const committed=await route.fetch();
      recordResponse(committed);
@@ -2342,50 +2330,50 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      s5bCsvRequestId=committed.headers()["x-request-id"];
      await route.abort("failed");
    };
-   const s5bCsvPath="**/crm.customer_data_operations.v2.PartyCsvService/ApplyPartyImport";
+   const s5bCsvPath="**"+fixtureRpcPath(PartyCsvService.method.applyPartyImport);
    await page.route(s5bCsvPath,loseCsvAck);
    await page.getByRole("button",{name:"Подтвердить импорт",exact:true}).click();
    await page.getByRole("heading",{name:/Результат записи не подтверждён/}).waitFor();
    await expect(page.getByRole("button",{name:"Подтвердить импорт",exact:true})).toBeDisabled();
-   const s5bCsvMarker=await page.evaluate(()=>JSON.parse(sessionStorage.getItem("crm.data.csv-import.pending.v1")));
+   const s5bCsvMarker=await pendingMarker("crm.data.csv-import.pending.v1");
    assert.deepEqual(Object.keys(s5bCsvMarker).sort(),["expectedVersion","key","resourceId"]);
    assert.equal(s5bCsvMarker.expectedVersion,"0");
    const s5bCsvReceipt=(await sql("SELECT source_sha256,row_count,request_id FROM crm_party_import_receipts WHERE tenant='"+
      tenantSql+"' AND key='"+s5bCsvMarker.key+"'"));
    assert.equal(s5bCsvReceipt.length,1);
-   assert.equal(s5bCsvMarker.resourceId,s5bCsvReceipt[0].source_sha256);
-   assert.equal(s5bCsvReceipt[0].row_count,1);
-   assert.equal(s5bCsvReceipt[0].request_id,s5bCsvRequestId);
+   assert.equal(s5bCsvMarker.resourceId,record(s5bCsvReceipt[0]).source_sha256);
+   assert.equal(record(s5bCsvReceipt[0]).row_count,1);
+   assert.equal(record(s5bCsvReceipt[0]).request_id,s5bCsvRequestId);
    syntheticPrivateProbes.push(
      {kind:"csv-party-name",request_id:s5bCsvRequestId,value:"Browser Import "+runId},
      {kind:"csv-payload",request_id:s5bCsvRequestId,value:csv});
    const csvCreated=(await sql("SELECT id FROM crm_party_records WHERE tenant='"+tenantSql+"'"))
      .filter(x=>!csvBefore.has(x.id));
    assert.equal(csvCreated.length,1);
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant='"+tenantSql+
-     "' AND json_extract(state,'$.display_name')='Browser Obsolete "+runId+"'"))[0].n,0,
+   assert.equal(record((await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant='"+tenantSql+
+     "' AND json_extract(state,'$.display_name')='Browser Obsolete "+runId+"'"))[0]).n,0,
      "A replaced CSV file must never commit its superseded records");
    const storedSession=await page.evaluate(()=>JSON.stringify(
      Object.keys(sessionStorage).sort().map(key=>[key,sessionStorage.getItem(key)])));
    assert.ok(!storedSession.includes("Browser Import "+runId));
    assert.ok(!storedSession.includes("party_id,kind,display_name"));
-   const acceptCsvReload=dialog=>void dialog.accept();
+   const acceptCsvReload=(dialog: Dialog)=>void dialog.accept();
    page.on("dialog",acceptCsvReload);
    try{await reloadDocument();}finally{page.off("dialog",acceptCsvReload);}
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).waitFor();
    assert.equal(await page.getByRole("button",{name:"Подтвердить импорт",exact:true}).count(),0,
      "CSV payload is not restored after reload; only receipt lookup is available");
-   const s5bCsvRead=page.waitForResponse(r=>responsePathEndsWith(r,"/PreviewPartyImport")&&r.request().method()==="POST");
+   const s5bCsvRead=page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(PartyCsvService.method.previewPartyImport))&&r.request().method()==="POST");
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
    const s5bCsvChecked=await s5bCsvRead;
    assert.equal(s5bCsvChecked.status(),200);
-   const s5bCsvReadId=(await s5bCsvChecked.headers())["x-request-id"];
+   const s5bCsvReadId=string((await s5bCsvChecked.headers())["x-request-id"]);
    await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
-     .toContainText(s5bCsvRequestId);
+     .toContainText(string(s5bCsvRequestId));
    assert.equal(s5bCsvCalls,1,"CSV recovery must not apply the import twice");
-   await assertAuditRecovery(s5bCsvRequestId,s5bCsvReadId,"parties.create","party-csv-import");
+   await assertAuditRecovery(string(s5bCsvRequestId),s5bCsvReadId,"parties.create","party-csv-import");
    assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.data.csv-import.pending.v1")),null);
-   ownerRecovery.push({owner:"party-csv-import",kind:"lookup",original_request_id:s5bCsvRequestId,
+   ownerRecovery.push({owner:"party-csv-import",kind:"lookup",original_request_id:string(s5bCsvRequestId),
      subsequent_request_id:s5bCsvReadId});
    await page.unroute(s5bCsvPath,loseCsvAck);
    assert.ok(await firstId("crm_party_records","display_name","Browser Import "+runId));
@@ -2399,22 +2387,22 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.ok((await readFile(await template.path(),"utf8")).startsWith("kind,display_name\r\n"));
    const simpleCsv="kind,display_name\r\nperson,Browser Simple Person "+runId+
      '\r\norganization,"Browser, Simple Organization '+runId+'"\r\n';
-   const simpleAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
-   const simplePartyBefore=(await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant='"+tenantSql+"'"))[0].n;
+   const simpleAuditBefore=number(record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n);
+   const simplePartyBefore=number(record((await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant='"+tenantSql+"'"))[0]).n);
    await page.getByLabel("CSV-файл",{exact:true}).setInputFiles({
      name:"simple-people.csv",mimeType:"text/csv",buffer:Buffer.from(simpleCsv)});
    await page.getByRole("button",{name:"Проверить импорт",exact:true}).click();
    await page.getByText(/записей 2, ранее импортировано 0/).waitFor();
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,simpleAuditBefore,
+   assert.equal(record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n,simpleAuditBefore,
      "Simple CSV preview must not write");
-   await mutation(page.getByRole("button",{name:"Подтвердить импорт",exact:true}),"ApplyPartyImport");
+   await mutation(page.getByRole("button",{name:"Подтвердить импорт",exact:true}),PartyCsvService.method.applyPartyImport);
    assert.ok(await firstId("crm_party_records","display_name","Browser Simple Person "+runId));
    assert.ok(await firstId("crm_party_records","display_name","Browser, Simple Organization "+runId));
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant='"+tenantSql+"'"))[0].n,simplePartyBefore+2);
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,simpleAuditBefore+2);
+   assert.equal(record((await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant='"+tenantSql+"'"))[0]).n,simplePartyBefore+2);
+   assert.equal(record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n,simpleAuditBefore+2);
    checkpoint("Simple two-column CSV template -> original Rust preview -> atomic Party apply / D1 audit");
 
-   const exportReply=page.waitForResponse(r=>responsePathEndsWith(r,"/PreviewPartyExport"));
+   const exportReply=page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(PartyCsvService.method.previewPartyExport)));
    const downloadPending=page.waitForEvent("download");
    await page.getByRole("button",{name:"Скачать CSV",exact:true}).click();
    assert.equal((await exportReply).status(),200);
@@ -2429,16 +2417,16 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await navigate("parties","Люди и организации");
    const stalePage=await context.newPage();
    await stalePage.goto(base+"/#parties");
-   const editParty=async(target)=>{
+   const editParty=async(target: Page)=>{
      await target.locator("section").filter({has:target.getByRole("heading",{name:"Browser Updated "+runId,exact:true})})
        .getByRole("button",{name:"Редактировать",exact:true}).click();
      await target.getByRole("heading",{name:"Изменить участника",exact:true}).waitFor();
    };
    await editParty(stalePage);await editParty(page);
    await page.getByLabel("Имя или название",{exact:true}).fill("Browser Winner "+runId);
-   await mutation(page.getByRole("button",{name:"Сохранить участника",exact:true}),"UpdateParty");
+   await mutation(page.getByRole("button",{name:"Сохранить участника",exact:true}),PartyService.method.updateParty);
    await stalePage.getByLabel("Имя или название",{exact:true}).fill("Browser Lost Update "+runId);
-   const conflict=stalePage.waitForResponse(r=>responsePathEndsWith(r,"/UpdateParty"));
+   const conflict=stalePage.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(PartyService.method.updateParty)));
    await stalePage.getByRole("button",{name:"Сохранить участника",exact:true}).click();
    const conflictResponse=await conflict;
    assert.equal(conflictResponse.status(),409);
@@ -2450,7 +2438,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
     assert.equal(await stalePage.getByRole("heading",{name:new RegExp("Конфликт изменения.*"+conflictRequestId)}).count(),1,
       "a conflict is shown once in the active panel, not behind it");
    assert.equal(await firstId("crm_party_records","display_name","Browser Winner "+runId),partyId);
-   assert.equal((await sql("SELECT version FROM crm_party_records WHERE tenant='"+tenantSql+"' AND id='"+partyId+"'"))[0].version,3);
+   assert.equal(record((await sql("SELECT version FROM crm_party_records WHERE tenant='"+tenantSql+"' AND id='"+partyId+"'"))[0]).version,3);
    await flushHeaderReads();
    await stalePage.close();
    checkpoint("Two browser forms enforce CAS and show generated-client conflict");
@@ -2460,7 +2448,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("button",{name:"Создать участника",exact:true}).click();
    await page.getByLabel("Имя или название",{exact:true}).fill("Browser Retry "+runId);
    let dropped=false;
-   await page.route("**/crm.parties.v3.PartyService/CreateParty",async route=>{
+   await page.route(createPartyRoute,async (route: Route)=>{
      if(dropped){await route.continue();return;}
      dropped=true;
      const committed=await route.fetch();
@@ -2475,37 +2463,37 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const retryId=await firstId("crm_party_records","display_name","Browser Retry "+runId);
    // Only the explicit recovery action may replay the original immutable command.
    await mutation(page.getByRole("dialog").getByRole("button",
-     {name:"Повторить исходную операцию",exact:true}),"CreateParty",{replay:true});
+     {name:"Повторить исходную операцию",exact:true}),PartyService.method.createParty,{replay:true});
    await page.getByRole("heading",{name:/Сохранено ранее/}).waitFor();
    assert.equal(await firstId("crm_party_records","display_name","Browser Retry "+runId),retryId);
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"' AND subject_id='"+retryId+"'"))[0].n,1);
-   await page.unroute("**/crm.parties.v3.PartyService/CreateParty");
+   assert.equal(record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"' AND subject_id='"+retryId+"'"))[0]).n,1);
+   await page.unroute(createPartyRoute);
    checkpoint("Committed response loss and explicit same-key recovery replay without duplicate audit");
 
    // Commit succeeds but only the following list refresh fails.
    await navigate("parties","Люди и организации");
    await page.getByRole("button",{name:"Создать участника",exact:true}).click();
    await page.getByLabel("Имя или название",{exact:true}).fill("Browser Saved Stale "+runId);
-   await page.route("**/crm.parties.v3.PartyService/ListParties",route=>route.abort("failed"));
-   const created=page.waitForResponse(r=>responsePathEndsWith(r,"/CreateParty"));
+   await page.route("**"+fixtureRpcPath(PartyService.method.listParties),(route: Route)=>route.abort("failed"));
+   const created=page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(PartyService.method.createParty)));
    await page.getByRole("button",{name:"Сохранить участника",exact:true}).click();
    await assertMutation(await created,"CreateParty");
    await page.getByRole("heading",{name:/Сохранено.*Список устарел/}).waitFor();
    assert.ok(await firstId("crm_party_records","display_name","Browser Saved Stale "+runId));
-   await page.unroute("**/crm.parties.v3.PartyService/ListParties");
+   await page.unroute("**"+fixtureRpcPath(PartyService.method.listParties));
    checkpoint("Committed write remains successful when refresh fails");
 
-   const navigationAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   const navigationAuditBefore=record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n;
    for(const [link,screen,title,filter,value,method] of [
-     ["Все контакты участника","contacts","Контакты","Фильтр по участнику",partyId,"ListContactPoints"],
-     ["Все связи участника","relationships","Связи","Фильтр по участнику",partyId,"ListPartyRelationships"],
-     ["Все сделки клиента","sales","Сделки","Фильтр по клиенту",accountId,"ListDeals"],
-     ["Все задачи клиента","tasks","Задачи","Фильтр по клиенту",accountId,"ListTasks"],
-   ]){
+     ["Все контакты участника","contacts","Контакты","Фильтр по участнику",partyId,ContactPointService.method.listContactPoints],
+     ["Все связи участника","relationships","Связи","Фильтр по участнику",partyId,PartyRelationshipService.method.listPartyRelationships],
+     ["Все сделки клиента","sales","Сделки","Фильтр по клиенту",accountId,DealService.method.listDeals],
+     ["Все задачи клиента","tasks","Задачи","Фильтр по клиенту",accountId,TaskService.method.listTasks],
+   ] as const){
      await navigate("accounts","Клиенты");
-     await search("Поиск клиентов",accountId,"ListAccounts");
+     await search("Поиск клиентов",accountId,AccountService.method.listAccounts);
      const [overviewResult]=await Promise.all([
-       page.waitForResponse(r=>responsePathEndsWith(r,"/GetAccountOverview")),
+       page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(Customer360Service.method.getAccountOverview))),
        page.locator("section").filter({has:page.getByRole("heading",
          {name:"Browser Account "+runId,level:2,exact:true})})
          .getByRole("button",{name:"Открыть карточку",exact:true}).click(),
@@ -2515,15 +2503,15 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      // tenant pipeline selection. Stage pages are fetched only when a board
      // is explicitly selected.
      const salesBoard=screen==="sales";
-     const pending=page.waitForResponse(r=>responsePathEndsWith(r,"/"+method)&&r.request().method()==="POST");
-     await page.getByRole("link",{name:link,exact:true}).click();
+     const pending=page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(method))&&r.request().method()==="POST");
+     await page.getByRole("link",{name:string(link),exact:true}).click();
      assert.equal((await pending).status(),200);
-     await page.getByRole("heading",{name:title,exact:true}).waitFor();
-     assert.equal(await page.getByLabel(filter,{exact:true}).inputValue(),value);
-     await expect(page.getByLabel(filter,{exact:true}).locator("option:checked"))
+     await page.getByRole("heading",{name:string(title),exact:true}).waitFor();
+     assert.equal(await page.getByLabel(string(filter),{exact:true}).inputValue(),value);
+     await expect(page.getByLabel(string(filter),{exact:true}).locator("option:checked"))
        .toHaveText((screen==="sales"||screen==="tasks"?
          "Browser Account ":"Browser Winner ")+runId);
-     assert.equal(new URL(await page.url()).hash,"#"+screen+"?"+(screen==="sales"||screen==="tasks"?"accountId":"partyId")+"="+encodeURIComponent(value));
+     assert.equal(new URL(await page.url()).hash,"#"+screen+"?"+(screen==="sales"||screen==="tasks"?"accountId":"partyId")+"="+encodeURIComponent(string(value)));
      if(salesBoard){
        assert.equal(await page.getByLabel("Воронка продаж",{exact:true}).inputValue(),"",
          "Customer360 must open the all-pipelines overview by default");
@@ -2531,16 +2519,16 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
        await all.getByRole("heading",{name:"Browser Deal "+runId,exact:true}).waitFor();
        await all.getByRole("heading",{name:"Browser Alternate Deal "+runId,exact:true}).waitFor();
        // Selecting a specific Kanban must not hide Account Deals in other pipelines.
-       const stageRead=page.waitForResponse(r=>responsePathEndsWith(r,"/ListStageDeals")&&
+       const stageRead=page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(DealService.method.listStageDeals))&&
          r.request().method()==="POST");
        await page.getByLabel("Воронка продаж",{exact:true}).selectOption(newPipelineId);
        assert.equal((await stageRead).status(),200);
        await all.getByRole("heading",{name:"Browser Alternate Deal "+runId,exact:true}).waitFor();
      }
-     const reloaded=page.waitForResponse(r=>responsePathEndsWith(r,"/"+method)&&r.request().method()==="POST");
+     const reloaded=page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(method))&&r.request().method()==="POST");
      await reloadDocument();assert.equal((await reloaded).status(),200);
-     assert.equal(await page.getByLabel(filter,{exact:true}).inputValue(),value,"Reload must retain the linked scope");
-     await expect(page.getByLabel(filter,{exact:true}).locator("option:checked"))
+     assert.equal(await page.getByLabel(string(filter),{exact:true}).inputValue(),value,"Reload must retain the linked scope");
+     await expect(page.getByLabel(string(filter),{exact:true}).locator("option:checked"))
        .toHaveText((screen==="sales"||screen==="tasks"?
          "Browser Account ":"Browser Winner ")+runId);
      if(salesBoard){
@@ -2569,12 +2557,12 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
        await action.click();
        await expect(page.getByRole("dialog").getByLabel("Клиент",{exact:true})).toHaveValue(accountId);
        await page.getByRole("dialog").getByRole("button",{name:"Закрыть панель"}).click();
-       assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
+       assert.equal(record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n,
          navigationAuditBefore,"Cancelled scoped create must not commit an operation");
      }
      if(screen==="tasks")await page.getByRole("heading",{name:"Browser Edited Urgent "+runId,exact:true}).waitFor();
    }
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,navigationAuditBefore);
+   assert.equal(record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n,navigationAuditBefore);
    checkpoint("Customer360 links to server-filtered full lists, reload retains scope, no writes");
    // Product-first M1-08: a Deal can share an Account with several other
    // Deals and manual Tasks. Its page must expose its OWN linked Tasks,
@@ -2582,8 +2570,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const dealTaskId=(await sql("SELECT task_id FROM crm_sales_link_delivery_records WHERE tenant='"+
      tenantSql+"' AND deal_id='"+dealId+"' AND disposition='applied' LIMIT 1"))[0]?.task_id;
    assert.ok(dealTaskId,"one original stage-linked Task must exist");
-   const beforeDealTaskNavigation=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+
-     tenantSql+"'"))[0].n;
+   const beforeDealTaskNavigation=record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+
+     tenantSql+"'"))[0]).n;
    await page.goto(base+"/#sales/"+encodeURIComponent(dealId));
    await page.getByRole("heading",{name:"Карточка сделки",exact:true}).waitFor();
    await page.getByRole("link",{name:"Задачи этой сделки",exact:true}).click();
@@ -2595,8 +2583,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await scopedTaskLink.waitFor({state:"visible"});
    assert.equal(await scopedTaskLink.count(),1,
      "The Deal shows only its own linked Task, not all Account Tasks");
-   assert.equal(new URL(await scopedTaskLink.getAttribute("href"),base).hash,
-     "#tasks?accountId="+encodeURIComponent(accountId)+"&taskId="+encodeURIComponent(dealTaskId));
+   assert.equal(new URL(string(await scopedTaskLink.getAttribute("href")),base).hash,
+     "#tasks?accountId="+encodeURIComponent(accountId)+"&taskId="+encodeURIComponent(string(dealTaskId)));
    await reloadDocument();
    await page.getByRole("heading",{name:"Задачи сделки",exact:true}).waitFor();
    await scopedTaskLink.waitFor({state:"visible"});
@@ -2605,8 +2593,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("heading",{name:"Карточка задачи",exact:true}).waitFor();
    await page.getByRole("link",{name:"Открыть сделку",exact:true}).click();
    await page.getByRole("heading",{name:"Карточка сделки",exact:true}).waitFor();
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+
-     tenantSql+"'"))[0].n,beforeDealTaskNavigation,
+   assert.equal(record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+
+     tenantSql+"'"))[0]).n,beforeDealTaskNavigation,
      "Deal→Task→Deal browsing must never create an audit write");
    checkpoint("Deal→original linked Task→Deal uses exact typed owner filter and reload without audit");
 
@@ -2618,12 +2606,12 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const dealTaskForm=page.getByRole("dialog");
    await expect(dealTaskForm.getByLabel("Клиент",{exact:true})).toHaveCount(0);
    await dealTaskForm.getByLabel("Тема задачи",{exact:true}).fill("Browser Manual Deal Task "+runId);
-   await mutation(dealTaskForm.getByRole("button",{name:"Создать задачу",exact:true}),"CreateTask");
+   await mutation(dealTaskForm.getByRole("button",{name:"Создать задачу",exact:true}),TaskService.method.createTask);
    const manualTaskId=await firstId("crm_activity_task_records","subject","Browser Manual Deal Task "+runId);
-   const manualState=(await sql("SELECT account_id,json_extract(state,'$.related_resources') AS refs FROM crm_activity_task_records WHERE tenant='"+
-     tenantSql+"' AND id='"+manualTaskId+"'"))[0];
+   const manualState=record((await sql("SELECT account_id,json_extract(state,'$.related_resources') AS refs FROM crm_activity_task_records WHERE tenant='"+
+     tenantSql+"' AND id='"+manualTaskId+"'"))[0]);
    assert.equal(manualState.account_id,accountId);
-   assert.ok(JSON.parse(manualState.refs).some(ref=>ref.resource_type==="sales.deal"&&ref.resource_id===dealId));
+   assert.ok(records(JSON.parse(string(manualState.refs))).some(ref=>ref.resource_type==="sales.deal"&&ref.resource_id===dealId));
    const manualTaskCard=page.getByRole("heading",{name:"Browser Manual Deal Task "+runId,exact:true});
    await manualTaskCard.waitFor();
    await reloadDocument();
@@ -2638,7 +2626,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
 
    // SK-06: the user sees one due-ordered, tenant-authorized workday,
    // follows the original Task record and returns to the SAME selected date.
-   const workdayReadAudit=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   const workdayReadAudit=record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n;
    await navigate("workday?date=2026-11-23","Рабочий день");
    await expect(page.getByLabel("Дата рабочего дня",{exact:true})).toHaveValue("2026-11-23");
    const workdayPast=page.getByRole("region",{name:"До выбранной даты"});
@@ -2657,16 +2645,16 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await expect(page.getByLabel("Дата рабочего дня",{exact:true})).toHaveValue("2026-11-23");
    await reloadDocument();
    await workdayRecent.getByText(accountNote,{exact:true}).waitFor();
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
+   assert.equal(record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n,
      workdayReadAudit,"SK-06 workday Task/Interaction reads and Back/reload must not write audit");
    await page.screenshot({path:resolve(directory,"crm-workday.png"),fullPage:true});
    checkpoint("SK-06 typed workday: due-before-LIMIT, linked Task/Account/Deal, recent across tenant, Back/reload, read-only");
 
    // SK-07: complete portfolio analysis from existing Sales owner metrics,
    // not the visible first Deal pages. Audited read-only, URL-owned period.
-   const intelligenceAudit=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
-   const portfolioRequests=[];
-   const capturePortfolio=request=>{
+   const intelligenceAudit=record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n;
+   const portfolioRequests: string[]=[];
+   const capturePortfolio=(request: Request)=>{
      if(request.url().includes("/crm.sales.v2.DealService/"))portfolioRequests.push(request.url());
    };
    page.on("request",capturePortfolio);
@@ -2680,9 +2668,9 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await portfolioForecast.getByRole("heading",{name:"Прогноз и категории"}).waitFor();
    await conversion.getByText(/Знаменатель:/).waitFor();
    page.off("request",capturePortfolio);
-   assert.equal(portfolioRequests.filter(url=>url.endsWith("/GetSalesPortfolio")).length,1);
-   assert.equal(portfolioRequests.filter(url=>url.endsWith("/GetPipelineMetrics")).length,0);
-   assert.equal(portfolioRequests.filter(url=>url.endsWith("/ListPipelines")).length,0);
+   assert.equal(portfolioRequests.filter(url=>new URL(url).pathname===fixtureRpcPath(DealService.method.getSalesPortfolio)).length,1);
+   assert.equal(portfolioRequests.filter(url=>new URL(url).pathname===fixtureRpcPath(DealService.method.getPipelineMetrics)).length,0);
+   assert.equal(portfolioRequests.filter(url=>new URL(url).pathname===fixtureRpcPath(DealService.method.listPipelines)).length,0);
    const portfolioLink=page.getByRole("link",{name:"Открыть воронку Browser Pipeline "+runId,exact:true});
    await portfolioLink.waitFor();
    await portfolioLink.click();
@@ -2718,7 +2706,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await conversion.getByText(/Предыдущий период:/).waitFor();
    await page.getByRole("heading",{name:"Аналитика бизнеса",exact:true}).waitFor();
    await expect(page.getByLabel("Конец периода",{exact:true})).toHaveValue("2026-11-30");
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
+   assert.equal(record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n,
      intelligenceAudit,"Portfolio reads/compare/Back/reload must never write audit");
    await navigate("insights?start=2026-02-30&end=2026-03-01","Страница не найдена");
    await page.goBack();
@@ -2747,20 +2735,20 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    // compiled Rust Access + Activities owners. This is signed CI human proof,
    // not a claim that our live service principal is a person.
    const browserStaff="browser-sk07-"+runId+"@example.test";
-   const beforeStaffAudit=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+
-     tenantSql+"'"))[0].n;
+   const beforeStaffAudit=number(record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+
+     tenantSql+"'"))[0]).n);
    await navigate("team","Команда и распределение работы");
    await page.getByRole("heading",{name:"Сотрудники и роли",exact:true}).waitFor();
    await page.getByLabel("Email нового сотрудника",{exact:true}).fill(browserStaff);
    await page.getByLabel("Роль нового сотрудника",{exact:true}).selectOption("1");
-   await mutation(page.getByRole("button",{name:"Добавить участника",exact:true}),"ProvisionMember");
-   const memberDb=(await sql("SELECT role,active,version FROM crm_users WHERE tenant_id='"+
-     tenantSql+"' AND email='"+browserStaff+"'"))[0];
+   await mutation(page.getByRole("button",{name:"Добавить участника",exact:true}),MemberService.method.provisionMember);
+   const memberDb=record((await sql("SELECT role,active,version FROM crm_users WHERE tenant_id='"+
+     tenantSql+"' AND email='"+browserStaff+"'"))[0]);
    assert.deepEqual(memberDb,{role:"viewer",active:1,version:1});
-   assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id='"+
-     tenantSql+"' AND subject_id='"+browserStaff+"' AND action='access.member.provision'"))[0].n,1);
-   assert.ok((await sql("SELECT actor FROM crm_audit WHERE tenant_id='"+
-     tenantSql+"' AND subject_id='"+browserStaff+"'"))[0].actor===adminIdentity);
+   assert.equal(record((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id='"+
+     tenantSql+"' AND subject_id='"+browserStaff+"' AND action='access.member.provision'"))[0]).n,1);
+   assert.ok(record((await sql("SELECT actor FROM crm_audit WHERE tenant_id='"+
+     tenantSql+"' AND subject_id='"+browserStaff+"'"))[0]).actor===adminIdentity);
    await page.getByRole("row").filter({hasText:browserStaff}).waitFor();
    const territoryEditor=page.getByRole("form",{name:"Настройка территории"});
    await page.getByRole("button",{name:"Создать территорию",exact:true}).click();
@@ -2774,11 +2762,11 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByLabel("Тема задачи",{exact:true}).fill(delegatedTitle);
    await selectPagedPicker(page,"Клиент",accountId,"account");
    await page.getByLabel("Назначить сотруднику",{exact:true}).selectOption(browserStaff);
-   await mutation(page.getByRole("button",{name:"Создать задачу",exact:true}),"CreateTask");
+   await mutation(page.getByRole("button",{name:"Создать задачу",exact:true}),TaskService.method.createTask);
    const delegatedId=await firstId("crm_activity_task_records","subject",delegatedTitle);
    assert.ok(delegatedId);
-   assert.equal((await sql("SELECT json_extract(state,'$.owner.actor_id') AS owner "+
-     "FROM crm_activity_task_records WHERE tenant='"+tenantSql+"' AND id='"+delegatedId+"'"))[0].owner,
+   assert.equal(record((await sql("SELECT json_extract(state,'$.owner.actor_id') AS owner "+
+     "FROM crm_activity_task_records WHERE tenant='"+tenantSql+"' AND id='"+delegatedId+"'"))[0]).owner,
      browserStaff,"Original domain state persists the human actor identity");
    const delegatedCard=page.locator("section").filter({has:page.getByRole("heading",
      {name:delegatedTitle,exact:true})});
@@ -2790,9 +2778,9 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await expect(page.getByLabel("Ответственный: фильтр",{exact:true})).toHaveValue(browserStaff);
    await delegatedCard.getByRole("button",{name:"Редактировать задачу",exact:true}).click();
    await page.getByLabel("Переназначить задачу",{exact:true}).selectOption("native-viewer@example.test");
-   await mutation(page.getByRole("button",{name:"Сохранить изменения задачи",exact:true}),"UpdateTask");
-   const delegatedState=(await sql("SELECT version,json_extract(state,'$.owner.actor_id') AS owner "+
-     "FROM crm_activity_task_records WHERE tenant='"+tenantSql+"' AND id='"+delegatedId+"'"))[0];
+   await mutation(page.getByRole("button",{name:"Сохранить изменения задачи",exact:true}),TaskService.method.updateTask);
+   const delegatedState=record((await sql("SELECT version,json_extract(state,'$.owner.actor_id') AS owner "+
+     "FROM crm_activity_task_records WHERE tenant='"+tenantSql+"' AND id='"+delegatedId+"'"))[0]);
    assert.deepEqual(delegatedState,{version:2,owner:"native-viewer@example.test"});
    assert.deepEqual((await sql("SELECT action FROM crm_audit WHERE tenant_id='"+tenantSql+
      "' AND subject_id='"+delegatedId+"' ORDER BY rowid")).map(x=>x.action),
@@ -2804,16 +2792,16 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const staffRow=page.getByRole("row").filter({hasText:browserStaff}).first();
    await staffRow.getByRole("button",{name:"Изменить доступ"}).click();
    await page.getByLabel("Активный доступ",{exact:true}).uncheck();
-   await mutation(page.getByRole("button",{name:"Сохранить доступ",exact:true}),"UpdateMember");
+   await mutation(page.getByRole("button",{name:"Сохранить доступ",exact:true}),MemberService.method.updateMember);
    assert.deepEqual((await sql("SELECT active,version FROM crm_users WHERE tenant_id='"+
      tenantSql+"' AND email='"+browserStaff+"'")),[{active:0,version:2}]);
    await page.getByRole("row").filter({hasText:browserStaff}).getByText("Деактивирован",{exact:true}).waitFor();
-   const workforceReadAudit=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+
-     tenantSql+"'"))[0].n;
+   const workforceReadAudit=number(record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+
+     tenantSql+"'"))[0]).n);
    await reloadDocument();
    await workforce.getByText("native-viewer@example.test",{exact:false}).first().waitFor();
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+
-     tenantSql+"'"))[0].n,workforceReadAudit,"Team/report reload may never create audit");
+   assert.equal(record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+
+     tenantSql+"'"))[0]).n,workforceReadAudit,"Team/report reload may never create audit");
    assert.equal(workforceReadAudit-beforeStaffAudit,4,
      "SK-07 browser: provision + TaskCreate + reassignment + deactivate = four writes");
    await page.setViewportSize({width:390,height:844});
@@ -2835,8 +2823,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      await page.getByLabel("Название команды",{exact:true}).fill(teamName);
      const teamForm=page.getByRole("form",{name:"Настройка команды"});
      await teamForm.getByLabel("native-viewer@example.test",{exact:true}).check();
-     await mutation(teamForm.getByRole("button",{name:"Сохранить команду",exact:true}),"CreateTeam");
-     const teamId=(await sql("SELECT id FROM crm_access_teams WHERE tenant=? AND json_extract(state,'$.name')=?",tenantA,teamName))[0].id;
+     await mutation(teamForm.getByRole("button",{name:"Сохранить команду",exact:true}),MemberService.method.createTeam);
+     const teamId=record((await sql("SELECT id FROM crm_access_teams WHERE tenant=? AND json_extract(state,'$.name')=?",tenantA,teamName))[0]).id;
      const teamRow=page.getByRole("row").filter({hasText:teamName});
      await page.getByRole("button",{name:"Создать территорию",exact:true}).click();
      await territoryEditor.getByLabel("Ответственный территории",{exact:true}).selectOption("team:"+teamId);
@@ -2847,14 +2835,14 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      await page.getByLabel("Тема задачи",{exact:true}).fill(poolName);
      await selectPagedPicker(page,"Клиент",accountId,"account");
      await page.getByLabel("Назначить сотруднику",{exact:true}).selectOption("team:"+teamId);
-     await mutation(page.getByRole("button",{name:"Создать задачу",exact:true}),"CreateTask");
+     await mutation(page.getByRole("button",{name:"Создать задачу",exact:true}),TaskService.method.createTask);
      const poolTask=page.locator("section").filter({has:page.getByRole("heading",{name:poolName,exact:true})});
      await poolTask.getByText("Ответственный: Команда: "+teamName,{exact:true}).waitFor();
      await reloadDocument();
      await poolTask.getByText("Ответственный: Команда: "+teamName,{exact:true}).waitFor();
      await poolTask.getByRole("button",{name:"Редактировать задачу",exact:true}).click();
      await page.getByLabel("Переназначить задачу",{exact:true}).selectOption("native-viewer@example.test");
-     await mutation(page.getByRole("button",{name:"Сохранить изменения задачи",exact:true}),"UpdateTask");
+     await mutation(page.getByRole("button",{name:"Сохранить изменения задачи",exact:true}),TaskService.method.updateTask);
      await poolTask.waitFor({state:"hidden"});
      // Deal owner scope is shared by the list, board, saved views and portfolio.
      await navigate("team","Команда и распределение работы");
@@ -2867,10 +2855,10 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      await page.getByLabel("Ответственный за сделку",{exact:true}).selectOption("team:"+teamId);
      await page.getByLabel("Сумма",{exact:true}).fill("100.01");
      await page.getByLabel("Валюта",{exact:true}).selectOption("EUR");
-     await mutation(page.getByRole("button",{name:"Сохранить сделку",exact:true}),"CreateDeal");
+     await mutation(page.getByRole("button",{name:"Сохранить сделку",exact:true}),DealService.method.createDeal);
      const ownedDealId=await firstId("crm_sales_deal_records","name",ownedDealName);
      assert.ok(ownedDealId);
-     assert.equal((await sql("SELECT json_extract(state,'$.owner.team_id') AS owner FROM crm_sales_deal_records WHERE tenant=? AND id=?",tenantA,ownedDealId))[0].owner,teamId);
+     assert.equal(record((await sql("SELECT json_extract(state,'$.owner.team_id') AS owner FROM crm_sales_deal_records WHERE tenant=? AND id=?",tenantA,ownedDealId))[0]).owner,teamId);
      await expect(page.getByLabel("Ответственный за сделки: фильтр",{exact:true})).toHaveValue("team:"+teamId);
      await reloadDocument();
      await expect(page.getByLabel("Ответственный за сделки: фильтр",{exact:true})).toHaveValue("team:"+teamId);
@@ -2878,7 +2866,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      const ownerViewName="Browser SK07 owner view "+runId;
      await page.getByRole("button",{name:"Сохранить как новое",exact:true}).click();
      await page.getByLabel("Название представления",{exact:true}).fill(ownerViewName);
-     await mutation(page.getByRole("button",{name:"Сохранить новое представление",exact:true}),"CreateSalesView");
+     await mutation(page.getByRole("button",{name:"Сохранить новое представление",exact:true}),DealService.method.createSalesView);
      await reloadDocument();
      await expect(page.getByLabel("Ответственный за сделки: фильтр",{exact:true})).toHaveValue("team:"+teamId);
      await navigate("team","Команда и распределение работы");
@@ -2891,7 +2879,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      await page.getByText("Ответственный: Команда: "+teamName,{exact:true}).waitFor();
      await page.getByRole("button",{name:"Редактировать сделку",exact:true}).click();
      await page.getByLabel("Ответственный за сделку",{exact:true}).selectOption("actor:native-viewer@example.test");
-     await mutation(page.getByRole("button",{name:"Сохранить сделку",exact:true}),"UpdateDeal");
+     await mutation(page.getByRole("button",{name:"Сохранить сделку",exact:true}),DealService.method.updateDeal);
      await page.getByText("Ответственный: native-viewer@example.test",{exact:true}).waitFor();
      await navigate("team","Команда и распределение работы");
      await teamRow.getByRole("link",{name:"Портфель команды",exact:true}).click();
@@ -2902,17 +2890,17 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      await navigate("sales/"+encodeURIComponent(ownedDealId),"Карточка сделки");
      await page.getByRole("button",{name:"Редактировать сделку",exact:true}).click();
      await page.getByLabel("Ответственный за сделку",{exact:true}).selectOption("team:"+teamId);
-     await mutation(page.getByRole("button",{name:"Сохранить сделку",exact:true}),"UpdateDeal");
+     await mutation(page.getByRole("button",{name:"Сохранить сделку",exact:true}),DealService.method.updateDeal);
      await page.getByText("Ответственный: Команда: "+teamName,{exact:true}).waitFor();
      await page.getByRole("button",{name:"Завершить сделку",exact:true}).click();
      await page.getByLabel("Результат сделки",{exact:true}).selectOption("3");
      await page.getByLabel("Причина закрытия",{exact:true}).fill("qa.closed");
-     await mutation(page.locator("dialog").getByRole("button",{name:"Завершить сделку",exact:true}),"CloseDeal");
+     await mutation(page.locator("dialog").getByRole("button",{name:"Завершить сделку",exact:true}),DealService.method.closeDeal);
      await page.getByText("Статус: Проиграна",{exact:true}).waitFor();
      await navigate("team","Команда и распределение работы");
      await teamRow.getByRole("button",{name:"Изменить команду",exact:true}).click();
      await teamForm.getByLabel("Активная команда",{exact:true}).uncheck();
-     await mutation(teamForm.getByRole("button",{name:"Сохранить команду",exact:true}),"UpdateTeam");
+     await mutation(teamForm.getByRole("button",{name:"Сохранить команду",exact:true}),MemberService.method.updateTeam);
      await teamRow.getByText("Архив",{exact:true}).waitFor();
      await page.getByRole("button",{name:"Создать территорию",exact:true}).click();
      await expect(territoryEditor.getByLabel("Ответственный территории",{exact:true}).locator(`option[value="team:${teamId}"]`)).toHaveCount(0);
@@ -2924,7 +2912,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      await page.locator("dialog").getByRole("button",{name:"Открыть повторно",exact:true}).click();
      await page.getByRole("heading",{name:/SALES_REOPEN_OWNER_NOT_ELIGIBLE/}).waitFor();
      await page.getByLabel("Ответственный при повторном открытии",{exact:true}).selectOption("actor:native-viewer@example.test");
-     await mutation(page.locator("dialog").getByRole("button",{name:"Открыть повторно",exact:true}),"ReopenDeal");
+     await mutation(page.locator("dialog").getByRole("button",{name:"Открыть повторно",exact:true}),DealService.method.reopenDeal);
      await reloadDocument();
      await page.getByText("Ответственный: native-viewer@example.test",{exact:true}).waitFor();
      await page.getByText("Статус: Открыта",{exact:true}).waitFor();
@@ -2935,11 +2923,11 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      const opportunity=page.getByRole("region",{name:"Команда сделки",exact:true});
      await opportunity.getByLabel("Участник сделки",{exact:true}).selectOption("native-viewer@example.test");
      await opportunity.getByLabel("Коммерческая роль",{exact:true}).selectOption("3");
-     await mutation(opportunity.getByRole("button",{name:"Назначить роль сделки",exact:true}),"SetOpportunityParticipant");
+     await mutation(opportunity.getByRole("button",{name:"Назначить роль сделки",exact:true}),DealService.method.setOpportunityParticipant);
      await opportunity.getByText(/native-viewer@example.test — Руководитель сделки/).waitFor();
      await reloadDocument();
      await opportunity.getByText(/native-viewer@example.test — Руководитель сделки/).waitFor();
-     assert.equal((await sql("SELECT json_extract(state,'$.opportunity_team[0].role') role FROM crm_sales_deal_records WHERE tenant=? AND id=?",tenantA,ownedDealId))[0].role,"lead");
+     assert.equal(record((await sql("SELECT json_extract(state,'$.opportunity_team[0].role') role FROM crm_sales_deal_records WHERE tenant=? AND id=?",tenantA,ownedDealId))[0]).role,"lead");
      const leadContext=await browser.newContext({extraHTTPHeaders:viewerHeaders});
      watch(leadContext);
      try{
@@ -2949,8 +2937,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
        await searchRegion.getByRole("heading",{name:ownedDealName,exact:true}).waitFor();
        await expect(searchRegion.getByRole("button",{name:"Завершить",exact:true})).toHaveCount(1);
        const boardAccountReads=[];
-       const trackBoardAccountRead=request=>{
-         if(new URL(request.url()).pathname.endsWith("/GetAccount"))boardAccountReads.push(request.url());
+       const trackBoardAccountRead=(request: Request)=>{
+         if(new URL(request.url()).pathname===fixtureRpcPath(AccountService.method.getAccount))boardAccountReads.push(request.url());
        };
        leadPage.on("request",trackBoardAccountRead);
        await leadPage.goto(base+"/#sales?"+new URLSearchParams({pipelineId:newPipelineId}).toString());
@@ -2973,28 +2961,28 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
        await expect(closePanel.getByLabel("Коммерческая территория",{exact:true})).toHaveCount(0);
        await closePanel.getByLabel("Результат сделки",{exact:true}).selectOption("3");
        await closePanel.getByLabel("Причина закрытия",{exact:true}).fill("qa.lead.close");
-       const closed=leadPage.waitForResponse(r=>responsePathEndsWith(r,"/CloseDeal")&&r.request().method()==="POST");
+       const closed=leadPage.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(DealService.method.closeDeal))&&r.request().method()==="POST");
        await closePanel.getByRole("button",{name:"Завершить сделку",exact:true}).click();
        assert.equal((await closed).status(),200);
        await closePanel.waitFor({state:"hidden"});
        await leadPage.reload();
        await leadRecord.getByText("Статус: Проиграна",{exact:true}).waitFor();
        await expect(leadRecord.getByRole("button",{name:"Открыть повторно",exact:true})).toHaveCount(0);
-       assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND actor=? AND action='sales_deals.close'",tenantA,ownedDealId,"native-viewer@example.test"))[0].n,1);
-       assert.equal((await sql("SELECT COUNT(*) n FROM crm_sales_deal_events WHERE tenant=? AND deal_id=? AND action='closed' AND reason_code='qa.lead.close'",tenantA,ownedDealId))[0].n,1);
+       assert.equal(record((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND actor=? AND action='sales_deals.close'",tenantA,ownedDealId,"native-viewer@example.test"))[0]).n,1);
+       assert.equal(record((await sql("SELECT COUNT(*) n FROM crm_sales_deal_events WHERE tenant=? AND deal_id=? AND action='closed' AND reason_code='qa.lead.close'",tenantA,ownedDealId))[0]).n,1);
        checkpoint("SK-07.C6 signed Lead closes through UI, automatic credit, D1 and reload");
      }finally{await flushHeaderReads();await leadContext.close();}
      await reloadDocument();
      await page.getByRole("button",{name:"Открыть повторно",exact:true}).click();
      await page.getByLabel("Причина повторного открытия",{exact:true}).fill("qa.lead.reopen");
-     await mutation(page.locator("dialog").getByRole("button",{name:"Открыть повторно",exact:true}),"ReopenDeal");
+     await mutation(page.locator("dialog").getByRole("button",{name:"Открыть повторно",exact:true}),DealService.method.reopenDeal);
      await reloadDocument();
-     await mutation(opportunity.getByRole("button",{name:"Отозвать доступ native-viewer@example.test",exact:true}),"SetOpportunityParticipant");
+     await mutation(opportunity.getByRole("button",{name:"Отозвать доступ native-viewer@example.test",exact:true}),DealService.method.setOpportunityParticipant);
      await opportunity.getByText("Участники не назначены.",{exact:true}).waitFor();
      const grantEvents=await sql("SELECT opportunity_team_after AS roster FROM crm_sales_deal_events WHERE tenant=? AND deal_id=? AND opportunity_team_after IS NOT NULL ORDER BY deal_version",tenantA,ownedDealId);
      assert.equal(grantEvents.length,2);
-     assert.equal(JSON.parse(grantEvents[0].roster)[0].email,"native-viewer@example.test");
-     assert.deepEqual(JSON.parse(grantEvents[1].roster),[]);
+     assert.equal(records(JSON.parse(string(grantEvents[0]?.roster)))[0]?.email,"native-viewer@example.test");
+     assert.deepEqual(records(JSON.parse(string(grantEvents[1]?.roster))),[]);
      const revokedLeadContext=await browser.newContext({extraHTTPHeaders:viewerHeaders});
      watch(revokedLeadContext);
      try{
@@ -3024,7 +3012,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      await coverage.getByRole("button",{name:"Создать территорию",exact:true}).click();
      await coverage.getByLabel("Название территории",{exact:true}).fill(territoryName);
      await coverage.getByLabel("Ответственный территории",{exact:true}).selectOption("actor:native-a@example.test");
-     await mutation(coverage.getByRole("button",{name:"Сохранить территорию",exact:true}),"CreateTerritory");
+     await mutation(coverage.getByRole("button",{name:"Сохранить территорию",exact:true}),DealService.method.createTerritory);
      const territoryId=await firstId("crm_sales_territory_records","name",territoryName);
      await coverage.getByRole("row").filter({hasText:territoryName}).waitFor();
      await navigate("accounts/"+encodeURIComponent(accountId),"Карточка клиента");
@@ -3034,22 +3022,22 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      await responsibility.getByLabel("Владелец клиентского портфеля",{exact:true}).selectOption("actor:native-a@example.test");
      await responsibility.getByRole("button",{name:"Добавить участника портфеля",exact:true}).click();
      await responsibility.getByLabel("Ответственный участник 1",{exact:true}).selectOption("actor:native-viewer@example.test");
-     await mutation(responsibility.getByRole("button",{name:"Сохранить ответственность",exact:true}),"CreateSalesAccountAssignment");
+     await mutation(responsibility.getByRole("button",{name:"Сохранить ответственность",exact:true}),DealService.method.createSalesAccountAssignment);
      await reloadDocument();
      await responsibility.getByText("Территория: "+territoryName,{exact:true}).waitFor();
      await responsibility.getByText("Специалист: native-viewer@example.test",{exact:true}).waitFor();
-     assert.equal((await sql("SELECT json_extract(state,'$.territory_id') AS territory FROM crm_sales_account_assignment_records WHERE tenant=? AND id=?",tenantA,accountId))[0].territory,territoryId);
+     assert.equal(record((await sql("SELECT json_extract(state,'$.territory_id') AS territory FROM crm_sales_account_assignment_records WHERE tenant=? AND id=?",tenantA,accountId))[0]).territory,territoryId);
      await navigate("team","Команда и распределение работы");
      await coverage.getByRole("row").filter({hasText:territoryName}).getByRole("button",{name:"Клиенты территории",exact:true}).click();
      await coverage.getByRole("link",{name:"Browser Account "+runId,exact:true}).click();
      await responsibility.getByText("Территория: "+territoryName,{exact:true}).waitFor();
      await responsibility.getByRole("button",{name:"Настроить ответственность",exact:true}).click();
      await responsibility.getByLabel("Архивное назначение",{exact:true}).check();
-     await mutation(responsibility.getByRole("button",{name:"Сохранить ответственность",exact:true}),"UpdateSalesAccountAssignment");
+     await mutation(responsibility.getByRole("button",{name:"Сохранить ответственность",exact:true}),DealService.method.updateSalesAccountAssignment);
      await navigate("team","Команда и распределение работы");
      await coverage.getByRole("row").filter({hasText:territoryName}).getByRole("button",{name:"Изменить территорию",exact:true}).click();
      await coverage.getByLabel("Архивная территория",{exact:true}).check();
-     await mutation(coverage.getByRole("button",{name:"Сохранить территорию",exact:true}),"UpdateTerritory");
+     await mutation(coverage.getByRole("button",{name:"Сохранить территорию",exact:true}),DealService.method.updateTerritory);
      await coverage.getByRole("row").filter({hasText:territoryName}).getByText("Архив",{exact:true}).waitFor();
      checkpoint("SK-07.D1 territory and account responsibility UI, overlay, drill-down, reload and archive");
      // D2: real rule creation and preview through the generated client.
@@ -3059,7 +3047,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      await routingRegion.getByLabel("Название правила",{exact:true}).fill(ruleName);
      await routingRegion.getByLabel("Воронка правила",{exact:true}).selectOption(newPipelineId);
      await routingRegion.getByLabel("Получатель правила",{exact:true}).selectOption("actor:native-a@example.test");
-     await mutation(routingRegion.getByRole("button",{name:"Сохранить правило",exact:true}),"CreateSalesRoutingRule");
+     await mutation(routingRegion.getByRole("button",{name:"Сохранить правило",exact:true}),DealService.method.createSalesRoutingRule);
      const ruleId=await firstId("crm_sales_routing_rule_records","name",ruleName);
      await routingRegion.getByRole("row").filter({hasText:ruleName}).waitFor();
      await navigate("sales","Сделки");
@@ -3071,7 +3059,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      await page.getByLabel("Ответственный за сделку",{exact:true}).selectOption("automatic");
      await page.getByRole("button",{name:"Проверить распределение",exact:true}).click();
      await page.getByText("Источник назначения: Правило: "+ruleName+" · версия 1",{exact:true}).waitFor();
-     await mutation(page.getByRole("button",{name:"Сохранить сделку",exact:true}),"CreateDeal");
+     await mutation(page.getByRole("button",{name:"Сохранить сделку",exact:true}),DealService.method.createDeal);
      const autoId=await firstId("crm_sales_deal_records","name",autoName);
      await navigate("sales/"+encodeURIComponent(autoId),"Карточка сделки");
      await page.getByText("Источник назначения: Правило: "+ruleName+" · версия 1",{exact:true}).first().waitFor();
@@ -3081,11 +3069,11 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      await page.getByRole("button",{name:"Завершить сделку",exact:true}).click();
      await page.getByLabel("Результат сделки",{exact:true}).selectOption("3");
      await page.getByLabel("Причина закрытия",{exact:true}).fill("qa.routing");
-     await mutation(page.locator("dialog").getByRole("button",{name:"Завершить сделку",exact:true}),"CloseDeal");
+     await mutation(page.locator("dialog").getByRole("button",{name:"Завершить сделку",exact:true}),DealService.method.closeDeal);
      await navigate("team","Команда и распределение работы");
      await routingRegion.getByRole("row").filter({hasText:ruleName}).getByRole("button",{name:"Изменить правило",exact:true}).click();
      await routingRegion.getByLabel("Архивное правило",{exact:true}).check();
-     await mutation(routingRegion.getByRole("button",{name:"Сохранить правило",exact:true}),"UpdateSalesRoutingRule");
+     await mutation(routingRegion.getByRole("button",{name:"Сохранить правило",exact:true}),DealService.method.updateSalesRoutingRule);
      checkpoint("SK-07.D2 routing administration, automatic preview, atomic Deal attribution, history and archive");
      const quotaRegion=page.getByRole("region",{name:"Коммерческие цели и план-факт",exact:true});
      const quotaName="Browser report quota "+runId,reportName="Browser frozen report "+runId;
@@ -3100,23 +3088,23 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      await quotaForm.getByLabel("Плановая сумма",{exact:true}).fill("10000");
      await quotaForm.getByLabel("Причина версии",{exact:true}).fill("qa.report");
      await quotaForm.getByLabel("Опубликовать цель",{exact:true}).check();
-     await mutation(quotaForm.getByRole("button",{name:"Сохранить цель",exact:true}),"CreateSalesQuota");
+     await mutation(quotaForm.getByRole("button",{name:"Сохранить цель",exact:true}),DealService.method.createSalesQuota);
      await quotaRegion.getByRole("row").filter({hasText:quotaName}).getByRole("button",{name:"План-факт",exact:true}).click();
      const reportRegion=quotaRegion.getByRole("region",{name:"Коммерческие отчёты и прогнозное покрытие"});
      await reportRegion.getByRole("button",{name:"Предпросмотр покрытия цели"}).click();
      await reportRegion.getByRole("region",{name:"Текущий прогноз"}).getByRole("heading",{name:"Прогнозное покрытие остатка цели"}).waitFor();
      await reportRegion.getByLabel("Название отчёта",{exact:true}).fill(reportName);
-     await mutation(reportRegion.getByRole("button",{name:"Сохранить коммерческий отчёт",exact:true}),"SaveSalesPerformanceReport");
+     await mutation(reportRegion.getByRole("button",{name:"Сохранить коммерческий отчёт",exact:true}),DealService.method.saveSalesPerformanceReport);
      const reportDetail=reportRegion.getByRole("region",{name:"Сохранённый коммерческий отчёт"});
      await reportDetail.getByRole("heading",{name:reportName,exact:true}).waitFor();
      await reportDetail.getByRole("link",{name:"Постоянная ссылка на отчёт",exact:true}).click();
      await reloadDocument();
      await reportDetail.getByRole("heading",{name:reportName,exact:true}).waitFor();
-     assert.equal((await sql("SELECT COUNT(*) n FROM crm_sales_performance_reports WHERE tenant=? AND json_extract(state,'$.name')=?",tenantA,reportName))[0].n,1);
+     assert.equal(record((await sql("SELECT COUNT(*) n FROM crm_sales_performance_reports WHERE tenant=? AND json_extract(state,'$.name')=?",tenantA,reportName))[0]).n,1);
      await quotaRegion.getByRole("row").filter({hasText:quotaName}).getByRole("button",{name:"План-факт",exact:true}).click();
      const secondReportName=reportName+" baseline";
      await reportRegion.getByLabel("Название отчёта",{exact:true}).fill(secondReportName);
-     await mutation(reportRegion.getByRole("button",{name:"Сохранить коммерческий отчёт",exact:true}),"SaveSalesPerformanceReport");
+     await mutation(reportRegion.getByRole("button",{name:"Сохранить коммерческий отчёт",exact:true}),DealService.method.saveSalesPerformanceReport);
      await reportDetail.getByRole("heading",{name:secondReportName,exact:true}).waitFor();
      await reportDetail.getByLabel("Сравнить с отчётом этой цели").selectOption({label:reportName});
      const difference=reportDetail.getByRole("region",{name:"Разница коммерческих показателей"});
@@ -3203,35 +3191,35 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      await page.getByRole("button",{name:"Создать команду",exact:true}).click();
      await page.getByLabel("Название команды",{exact:true}).fill(coordinationName);
      await teamForm.getByLabel("native-viewer@example.test",{exact:true}).check();
-     await mutation(teamForm.getByRole("button",{name:"Сохранить команду",exact:true}),"CreateTeam");
-     const coordinationId=(await sql("SELECT id FROM crm_access_teams WHERE tenant=? AND json_extract(state,'$.name')=?",tenantA,coordinationName))[0].id;
+     await mutation(teamForm.getByRole("button",{name:"Сохранить команду",exact:true}),MemberService.method.createTeam);
+     const coordinationId=record((await sql("SELECT id FROM crm_access_teams WHERE tenant=? AND json_extract(state,'$.name')=?",tenantA,coordinationName))[0]).id;
      const coordinationRow=page.getByRole("row").filter({hasText:coordinationName});
      await coordinationRow.getByRole("button",{name:"Полномочия координатора",exact:true}).click();
      const coordinatorForm=page.getByRole("form",{name:"Координатор очереди",exact:true});
      await coordinatorForm.getByLabel("Сотрудник-координатор",{exact:true}).selectOption("native-viewer@example.test");
-     await mutation(coordinatorForm.getByRole("button",{name:"Сохранить полномочия координатора",exact:true}),"UpdateTeam");
+     await mutation(coordinatorForm.getByRole("button",{name:"Сохранить полномочия координатора",exact:true}),MemberService.method.updateTeam);
      await coordinationRow.getByText(/Координатор очереди/).waitFor();
      const coordinationTask=await firstId("crm_activity_task_records","subject",poolName);
      const coordinationTaskRoute="tasks?"+new URLSearchParams({accountId,taskId:coordinationTask}).toString();
      await navigate(coordinationTaskRoute,"Карточка задачи");
      await page.getByRole("button",{name:"Редактировать задачу",exact:true}).click();
      await page.getByLabel("Переназначить задачу",{exact:true}).selectOption("team:"+coordinationId);
-     await mutation(page.getByRole("button",{name:"Сохранить изменения задачи",exact:true}),"UpdateTask");
+     await mutation(page.getByRole("button",{name:"Сохранить изменения задачи",exact:true}),TaskService.method.updateTask);
      await navigate("sales/"+encodeURIComponent(ownedDealId),"Карточка сделки");
      await page.getByRole("button",{name:"Редактировать сделку",exact:true}).click();
      await page.getByLabel("Ответственный за сделку",{exact:true}).selectOption("team:"+coordinationId);
-     await mutation(page.getByRole("button",{name:"Сохранить сделку",exact:true}),"UpdateDeal");
+     await mutation(page.getByRole("button",{name:"Сохранить сделку",exact:true}),DealService.method.updateDeal);
      const coordinatorContext=await browser.newContext({extraHTTPHeaders:viewerHeaders});
      watch(coordinatorContext);
      try {
        for(const [route,id,method,table,editLabel] of [
-         [coordinationTaskRoute,coordinationTask,"UpdateTask","crm_activity_task_records","Редактировать задачу"],
-         ["sales/"+encodeURIComponent(ownedDealId),ownedDealId,"UpdateDeal","crm_sales_deal_records","Редактировать сделку"]
-       ]){
+         [coordinationTaskRoute,coordinationTask,TaskService.method.updateTask,"crm_activity_task_records","Редактировать задачу"],
+         ["sales/"+encodeURIComponent(ownedDealId),ownedDealId,DealService.method.updateDeal,"crm_sales_deal_records","Редактировать сделку"]
+       ] as const){
          // Each deep link starts a fresh document under the same signed identity.
          const coordinatorPage=await coordinatorContext.newPage();
          await coordinatorPage.goto(base+"/#"+route);
-         const isTask=method==="UpdateTask";
+         const isTask=method===TaskService.method.updateTask;
          await coordinatorPage.getByRole("heading",{name:isTask?"Карточка задачи":"Карточка сделки",exact:true}).waitFor();
          const record=isTask
            ?coordinatorPage.locator("section").filter({has:coordinatorPage.getByRole("heading",{name:poolName,exact:true})})
@@ -3242,9 +3230,9 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
          await expect(distribution).toBeVisible();
          if(!isTask)await expect(record.getByRole("region",{name:"История сделки "+id,exact:true})).toHaveCount(1);
          await expect(coordinatorPage.getByRole("form",{name:"Распределение из очереди команды",exact:true})).toHaveCount(1);
-         await expect(record.getByRole("button",{name:editLabel,exact:true})).toHaveCount(0);
+         await expect(record.getByRole("button",{name:string(editLabel),exact:true})).toHaveCount(0);
          await distribution.getByLabel("Назначить сотруднику команды",{exact:true}).selectOption("native-viewer@example.test");
-         const response=coordinatorPage.waitForResponse(r=>responsePathEndsWith(r,"/"+method)&&r.request().method()==="POST");
+         const response=coordinatorPage.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(method))&&r.request().method()==="POST");
          await distribution.getByRole("button",{name:"Распределить из очереди",exact:true}).click();
          assert.equal((await response).status(),200);
          await distribution.waitFor({state:"hidden"});
@@ -3252,7 +3240,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
          await record.getByText("Ответственный: native-viewer@example.test",{exact:true}).waitFor();
          await expect(record.getByRole("form",{name:"Распределение из очереди команды",exact:true})).toHaveCount(0);
          if(!isTask)await expect(record.getByRole("region",{name:"История сделки "+id,exact:true})).toHaveCount(1);
-         assert.equal((await sql("SELECT json_extract(state,'$.owner.actor_id') AS owner FROM "+table+" WHERE tenant=? AND id=?",tenantA,id))[0].owner,"native-viewer@example.test");
+         assert.equal((await sql("SELECT json_extract(state,'$.owner.actor_id') AS owner FROM "+table+" WHERE tenant=? AND id=?",tenantA,string(id)))[0]?.owner,"native-viewer@example.test");
          checkpoint("SK-07 signed coordinator "+method+" exact record, D1 and reload");
          await flushHeaderReads();
          await coordinatorPage.close();
@@ -3262,100 +3250,16 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      await coordinationRow.getByRole("button",{name:"Полномочия координатора",exact:true}).click();
      await coordinatorForm.getByLabel("Сотрудник-координатор",{exact:true}).selectOption("native-viewer@example.test");
      await coordinatorForm.getByLabel("Действие с полномочиями",{exact:true}).selectOption("revoke");
-     await mutation(coordinatorForm.getByRole("button",{name:"Сохранить полномочия координатора",exact:true}),"UpdateTeam");
+     await mutation(coordinatorForm.getByRole("button",{name:"Сохранить полномочия координатора",exact:true}),MemberService.method.updateTeam);
      await expect(coordinationRow.getByText(/Координатор очереди/)).toHaveCount(0);
      checkpoint("SK-07 shared Team coordinator, signed viewer distributes Task and Deal, reload and revoke");
 
    }
 
-   await page.getByLabel("Тема",{exact:true}).selectOption("dark");
-   assert.equal(await page.locator("html").getAttribute("data-theme"),"dark");
-   await reloadDocument();
-   assert.equal(await page.locator("html").getAttribute("data-theme"),"dark");
-   await page.setViewportSize({width:390,height:844});
-   await navigate("sales","Сделки");
-   await page.getByLabel("Воронка продаж",{exact:true}).selectOption(newPipelineId);
-   const mobileKanban=page.getByRole("region",{name:"Kanban — этапы и сделки"});
-   await expect(mobileKanban).toHaveAttribute("tabindex","0");
-   const scrollMetrics=await mobileKanban.evaluate(element=>({
-     clientWidth:element.clientWidth,scrollWidth:element.scrollWidth,
-     clientHeight:element.clientHeight,scrollHeight:element.scrollHeight,
-     viewportWidth:window.innerWidth,
-     documentWidth:document.documentElement.scrollWidth
-   }));
-   assert.ok(scrollMetrics.viewportWidth<=391&&scrollMetrics.documentWidth<=391,
-     "the mobile page itself must remain at 390 px: "+JSON.stringify(scrollMetrics));
-   assert.ok(scrollMetrics.scrollWidth>scrollMetrics.clientWidth,
-     "mobile Kanban must scroll horizontally inside its named region: "+JSON.stringify(scrollMetrics));
-   await mobileKanban.focus();
-   assert.equal(await mobileKanban.evaluate(element=>element===document.activeElement),true,
-     "mobile Kanban scroll region must be keyboard focusable");
-   await page.keyboard.press("ArrowRight");
-   await expect.poll(()=>mobileKanban.evaluate(element=>element.scrollLeft))
-     .toBeGreaterThan(0);
-   await page.screenshot({path:resolve(directory,"crm-mobile-dark.png"),fullPage:true});
-   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),"mobile horizontal overflow");
-   checkpoint("Mobile Kanban: named keyboard-focusable horizontal scroll region without viewport overflow");
-   await navigate("accounts","Клиенты");
-   await page.getByRole("button",{name:"Создать клиента",exact:true}).click();
-   const mobilePanel=page.getByRole("dialog");
-   await mobilePanel.waitFor();
-   const bounds=await mobilePanel.evaluate(element=>({
-     width:element.getBoundingClientRect().width,viewport:window.innerWidth
-   }));
-   assert.ok(bounds.width<=bounds.viewport+1 && bounds.width>=bounds.viewport-2,"record panel fills mobile viewport");
-   await page.keyboard.press("Escape");
-   await mobilePanel.waitFor({state:"hidden"});
-   checkpoint("Theme persistence and mobile layout");
+   await verifyBrowserMobile({page,directory,newPipelineId,navigate,reloadDocument,checkpoint});
 
-   // SK-08A: use the source link, original typed rule editor, and original Task
-   // UI. No browser-created source ID or separate task mutation.
-   await navigate("sales/"+dealId,"Карточка сделки");
-   const automationSource=page.getByRole("region",{name:"История взаимодействий "+dealId})
-     .locator("ol li").filter({hasText:laterCall});
-   const sourceLink=automationSource.getByRole("link",{name:"Правила для взаимодействия"});
-   const sourceHref=await sourceLink.getAttribute("href");
-   assert.ok(sourceHref?.startsWith("#automation?interactionId="));
-   const sourceId=new URLSearchParams(sourceHref.split("?")[1]).get("interactionId");
-   await sourceLink.click();
-   await page.getByRole("heading",{name:"Автоматизация",exact:true}).waitFor();
-   await expect(page.getByLabel("ID существующего взаимодействия")).toHaveValue(sourceId);
-   await reloadDocument();
-   await expect(page.getByLabel("ID существующего взаимодействия")).toHaveValue(sourceId);
-   const autoTitle="Browser SK08A follow-up "+runId;
-   await page.getByLabel("Название новой задачи",{exact:true}).fill(autoTitle);
-   await page.getByLabel("Назначить активному сотруднику",{exact:true}).selectOption("native-viewer@example.test");
-   await page.getByLabel("Срок после выполнения (секунды; 0 — без срока)",{exact:true}).fill("3600");
-   await page.getByLabel("Разрешить ручное исполнение",{exact:true}).check();
-   await mutation(page.getByRole("button",{name:"Опубликовать правило",exact:true}),"PutAutomationRule");
-   const ruleRows=await sql("SELECT id FROM crm_activity_automation_rules WHERE tenant=? AND task_subject=?",tenantA,autoTitle);
-   assert.equal(ruleRows.length,1);
-   const autoRuleId=ruleRows[0].id;
-   // The isolated browser tenant has exactly one published rule.
-   const executeButton=page.getByRole("region",{name:"Правила автоматизации"})
-     .getByRole("button",{name:"Выполнить для взаимодействия",exact:true});
-   await expect(executeButton).toHaveCount(1);
-   await mutation(executeButton,"RunInteractionAutomation");
-   const autoRun=(await sql("SELECT task_id,status,task_request_id FROM crm_activity_automation_runs WHERE tenant=? AND rule_id=? AND interaction_id=?",tenantA,autoRuleId,sourceId))[0];
-   assert.equal(autoRun.status,"committed");
-   assert.equal((await sql("SELECT COUNT(*) n FROM crm_activity_task_receipts WHERE tenant=? AND key=?",tenantA,autoRun.task_id))[0].n,1);
-   assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND action='activity_tasks.create'",tenantA,autoRun.task_id))[0].n,1);
-   await page.getByRole("link",{name:"Открыть созданную задачу",exact:true}).waitFor();
-   await mutation(executeButton,"RunInteractionAutomation",{replay:true});
-   await page.getByRole("heading",{name:"Задача подтверждена",exact:true}).waitFor();
-   await page.getByText("Попыток исполнения: 1 из 5",{exact:true}).waitFor();
-   assert.equal(await page.getByRole("button",{name:"Отменить исходный запуск",exact:true}).count(),0);
-   assert.equal(await page.getByRole("button",{name:"Восстановить исходный запуск",exact:true}).count(),0);
-   await page.getByRole("button",{name:"Обновить историю",exact:true}).click();
-   await page.getByRole("heading",{name:"Задача подтверждена",exact:true}).waitFor();
-   assert.equal((await sql("SELECT COUNT(*) n FROM crm_activity_automation_run_requests WHERE tenant=? AND rule_id=?",tenantA,autoRuleId))[0].n,2);
-   assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND action='activity_tasks.create'",tenantA,autoRun.task_id))[0].n,1);
-   await reloadDocument();
-   const autoTaskLink=page.getByRole("link",{name:"Открыть созданную задачу",exact:true});
-   await autoTaskLink.waitFor();
-   await autoTaskLink.click();
-   await page.getByText(autoTitle,{exact:true}).first().waitFor();
-   checkpoint("SK-08A typed Interaction deep link, rule publication, original Task, D1 receipts and reload");
+   await verifyBrowserAutomation({page,sql,tenantA,dealId,laterCall,runId,navigate,
+     reloadDocument,checkpoint,assertMutation});
 
    restoreViewer=await beforeViewer();
    const denied=await browser.newContext({extraHTTPHeaders:viewerHeaders});
@@ -3366,7 +3270,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await deniedPage.getByLabel("Имя или название",{exact:true}).fill("Browser Denied "+runId);
    await deniedPage.getByRole("button",{name:"Сохранить участника",exact:true}).click();
    await deniedPage.getByRole("heading",{name:/Недостаточно прав/}).waitFor();
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant='"+tenantSql+"' AND json_extract(state,'$.display_name')='Browser Denied "+runId+"'"))[0].n,0);
+   assert.equal(record((await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant='"+tenantSql+"' AND json_extract(state,'$.display_name')='Browser Denied "+runId+"'"))[0]).n,0);
    // Native signed viewer can operate an assigned Task, but cannot delegate
    // or use the administrator-only creation/edit controls.
    if(features.includes("native-ci")){
@@ -3377,14 +3281,14 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      await done.waitFor();
      await expect(deniedPage.getByRole("button",{name:"Новая задача",exact:true})).toHaveCount(0);
      await expect(mine.getByRole("button",{name:"Редактировать задачу",exact:true})).toHaveCount(0);
-     const completing=deniedPage.waitForResponse(r=>responsePathEndsWith(r,"/CompleteTask")&&r.request().method()==="POST");
+     const completing=deniedPage.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(TaskService.method.completeTask))&&r.request().method()==="POST");
      await done.click();
      assert.equal((await completing).status(),200);
      await mine.getByText(/Выполнена/).waitFor();
      await deniedPage.reload();
      await mine.getByText(/Выполнена/).waitFor();
-     assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND actor=? AND action=?",
-       tenantA,delegatedId,"native-viewer@example.test","activity_tasks.complete"))[0].n,1);
+     assert.equal(record((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND actor=? AND action=?",
+       tenantA,delegatedId,"native-viewer@example.test","activity_tasks.complete"))[0]).n,1);
      checkpoint("SK-07.B signed viewer completes only own Task, no admin controls, reload and D1 audit");
    }
    await flushHeaderReads();
@@ -3401,7 +3305,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const anonymous=await browser.newContext();
    const anonymousPage=await anonymous.newPage();
    if(features.includes("native-ci")){
-     const refused=anonymousPage.waitForResponse(r=>responsePathEndsWith(r,"/ListAccounts"));
+     const refused=anonymousPage.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(AccountService.method.listAccounts)));
      await anonymousPage.goto(base+"/#accounts");
      assert.equal((await refused).status(),401);
      // Both the account list and its Party picker can report expired access.
@@ -3409,7 +3313,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    }else{
      const response=await anonymous.request.get(base+"/api/session",{maxRedirects:0});
      assert.equal(response.status(),302,"Anonymous production request must stop at Access");
-     assert.match(new URL(response.headers().location).hostname,/\.cloudflareaccess\.com$/);
+     assert.match(new URL(string(response.headers().location)).hostname,/\.cloudflareaccess\.com$/);
    }
    await flushHeaderReads();
    await anonymous.close();
@@ -3433,7 +3337,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      const route=document.querySelector("[data-crm-route-kind]");
      return {hash:window.location.hash,
        document_url:new URL(window.location.href).pathname+window.location.hash,
-       navigation_type:performance.getEntriesByType("navigation").at(-1)?.type??null,
+       navigation_type:performance.getEntriesByType("navigation").filter(entry=>entry instanceof PerformanceNavigationTiming).at(-1)?.type??null,
        history_length:history.length,
        history_state:window.history.state,
        rendered_kind:route?.getAttribute("data-crm-route-kind")??null,
@@ -3442,7 +3346,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
        events:window.__crmRouteEvents?.slice(-60)??[]};
    }).catch(e=>({capture_error:String(e)}));
    writeFileSync(resolve(directory,"failure.json"),JSON.stringify({result:"FAIL",source_sha:sourceSha,
-     error:String(error.message),navigation,steps,requests,writes},null,2)+"\n");
+     error:error instanceof Error?error.name:"UnknownError",navigation,steps,requests,writes},null,2)+"\n");
    await page.screenshot({path:resolve(directory,"failure.png"),fullPage:true}).catch(()=>{});
    throw error;
  } finally {

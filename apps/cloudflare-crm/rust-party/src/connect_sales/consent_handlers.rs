@@ -229,7 +229,7 @@ impl consent_wire::ConsentAuthorizationService for ConsentV2Service {
             filter,
         )
         .await
-        .map_err(|_| ConnectError::internal("Original Consent D1 list failed"))?;
+        .map_err(|error| crate::diagnostics::read_error(&self.request_id, &error))?;
         let authorizations = list.iter().map(Self::convert).collect();
         RpcResponse::ok(consent_wire::ListConsentAuthorizationsResponse {
             authorizations,

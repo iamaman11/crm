@@ -5,7 +5,7 @@
   "scripts": {
     "build": "vite build",
     "test": "node scripts/check-web.mts --node-tests \"test/**/*.node.test.mjs\" \"scripts/**/*.node.test.mjs\" && pnpm -w exec vitest run --config apps/cloudflare-crm/vitest.config.mts apps/cloudflare-crm/test/",
-    "architecture:check": "node scripts/architecture-gate.mjs",
+    "architecture:check": "node scripts/architecture-gate.mts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

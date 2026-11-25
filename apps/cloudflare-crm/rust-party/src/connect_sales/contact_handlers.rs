@@ -144,7 +144,7 @@ impl contact_wire::ContactPointService for ContactPointV2Service {
         let db = self.d1()?;
         let item = contact_points::load(&db, &self.actor.tenant, &id)
             .await
-            .map_err(|_| ConnectError::internal("CONTACT_POINT original D1 read failed"))?
+            .map_err(|error| crate::diagnostics::read_error(&self.request_id, &error))?
             .ok_or_else(|| ConnectError::not_found("CONTACT_POINTS_NOT_FOUND"))?;
         let confirmed_mutation = match receipt_key(input.receipt_idempotency_key.as_deref())? {
             None => None,
@@ -237,7 +237,7 @@ impl contact_wire::ContactPointService for ContactPointV2Service {
             },
         )
         .await
-        .map_err(|_| ConnectError::internal("ContactPoint D1 list failed"))?;
+        .map_err(|error| crate::diagnostics::read_error(&self.request_id, &error))?;
         let mut results = Vec::new();
         for point in &list {
             results.push(Self::convert(point)?);

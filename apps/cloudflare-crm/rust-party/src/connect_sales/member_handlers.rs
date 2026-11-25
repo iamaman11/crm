@@ -15,7 +15,7 @@ impl member_wire::MemberService for MemberV2Service {
         let db = self.d1()?;
         let team = access_teams::get_projected(&db, &self.actor.tenant, &id)
             .await
-            .map_err(|_| ConnectError::internal("Team read failed"))?
+            .map_err(|error| crate::diagnostics::read_error(&self.request_id, &error))?
             .ok_or_else(|| ConnectError::not_found("ACCESS_TEAM_NOT_FOUND"))?;
         let evidence = match receipt_key(input.receipt_idempotency_key.as_deref())? {
             None => None,
@@ -61,7 +61,7 @@ impl member_wire::MemberService for MemberV2Service {
             req.include_inactive,
         )
         .await
-        .map_err(|_| ConnectError::internal("Team list failed"))?;
+        .map_err(|error| crate::diagnostics::read_error(&self.request_id, &error))?;
         RpcResponse::ok(member_wire::ListTeamsResponse {
             teams: teams
                 .into_iter()
@@ -166,7 +166,7 @@ impl member_wire::MemberService for MemberV2Service {
     ) -> ServiceResult<member_wire::GetMyMembershipResponse> {
         let member = access_members::get(&self.d1()?, &self.actor.tenant, &self.actor.identity)
             .await
-            .map_err(|_| ConnectError::internal("Access member read failed"))?
+            .map_err(|error| crate::diagnostics::read_error(&self.request_id, &error))?
             .ok_or_else(|| ConnectError::permission_denied("ACCESS_NOT_ENROLLED"))?;
         RpcResponse::ok(member_wire::GetMyMembershipResponse {
             member: Some(Self::wire(&member)?).into(),
@@ -200,7 +200,7 @@ impl member_wire::MemberService for MemberV2Service {
             req.include_inactive,
         )
         .await
-        .map_err(|_| ConnectError::internal("Access roster read failed"))?;
+        .map_err(|error| crate::diagnostics::read_error(&self.request_id, &error))?;
         let mut converted = Vec::with_capacity(members.len());
         for m in &members {
             converted.push(Self::wire(m)?);
@@ -227,7 +227,7 @@ impl member_wire::MemberService for MemberV2Service {
         let db = self.d1()?;
         let member = access_members::get(&db, &self.actor.tenant, &email)
             .await
-            .map_err(|_| ConnectError::internal("Access member read failed"))?
+            .map_err(|error| crate::diagnostics::read_error(&self.request_id, &error))?
             .ok_or_else(|| ConnectError::not_found("ACCESS_MEMBER_NOT_FOUND"))?;
         let evidence = match receipt_key(input.receipt_idempotency_key.as_deref())? {
             None => None,

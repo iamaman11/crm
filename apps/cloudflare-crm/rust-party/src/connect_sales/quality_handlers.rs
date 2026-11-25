@@ -16,7 +16,7 @@ impl quality_wire::DataQualityService for DataQualityV2Service {
             .map_err(|_| ConnectError::internal("D1 unavailable"))?;
         let evaluation = data_quality::evaluate_typed(&db, &self.tenant, id.as_str())
             .await
-            .map_err(|_| ConnectError::internal("DataQuality original owner D1 read failed"))?
+            .map_err(|error| crate::diagnostics::read_error(&self.request_id, &error))?
             .ok_or_else(|| ConnectError::not_found("PARTIES_NOT_FOUND"))?;
         let mut checks = Vec::with_capacity(evaluation.checks.len());
         for check in &evaluation.checks {

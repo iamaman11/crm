@@ -257,7 +257,7 @@ impl privacy_wire::PrivacyCaseService for PrivacyV2Service {
         let id = Self::id(&input.case_id)?;
         let preview = customer_privacy::preview_own_scope(&self.d1()?, &self.actor, id.as_str())
             .await
-            .map_err(|_| ConnectError::internal("Privacy scope D1 read failed"))?
+            .map_err(|error| crate::diagnostics::read_error(&self.request_id, &error))?
             .map_err(|failure| failure.connect("PreviewOwnPrivacyScope", &self.request_id))?;
         let resources = preview
             .contributions
@@ -322,7 +322,7 @@ impl privacy_wire::PrivacyCaseService for PrivacyV2Service {
         let db = self.d1()?;
         let case = customer_privacy::stored(&db, &self.actor.tenant, id.as_str())
             .await
-            .map_err(|_| ConnectError::internal("PrivacyCase D1 read failed"))?
+            .map_err(|error| crate::diagnostics::read_error(&self.request_id, &error))?
             .ok_or_else(|| ConnectError::not_found("PRIVACY_CASE_NOT_FOUND"))?;
         let confirmed_mutation = match receipt_key(input.receipt_idempotency_key.as_deref())? {
             None => None,
@@ -375,7 +375,7 @@ impl privacy_wire::PrivacyCaseService for PrivacyV2Service {
             size as usize,
         )
         .await
-        .map_err(|_| ConnectError::internal("PrivacyCase D1 list failed"))?;
+        .map_err(|error| crate::diagnostics::read_error(&self.request_id, &error))?;
         let cases = cases
             .iter()
             .map(Self::convert)

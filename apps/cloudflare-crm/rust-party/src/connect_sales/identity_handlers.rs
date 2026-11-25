@@ -73,7 +73,7 @@ impl identity_wire::IdentityResolutionService for IdentityV2Service {
             .map_err(|_| ConnectError::internal("D1 unavailable"))?;
         let candidates = match identity_resolution::candidates_typed(&db, &self.actor.tenant)
             .await
-            .map_err(|_| ConnectError::internal("Identity original owner read failed"))?
+            .map_err(|error| crate::diagnostics::read_error(&self.request_id, &error))?
         {
             Ok(items) => items,
             Err(identity_resolution::CandidateError::ScanLimit) => {
@@ -133,7 +133,7 @@ impl identity_wire::IdentityResolutionService for IdentityV2Service {
         let comparison =
             identity_resolution::compare_typed(&db, &self.actor.tenant, &pair, first.as_str())
                 .await
-                .map_err(|_| ConnectError::internal("Identity original Party read failed"))?
+                .map_err(|error| crate::diagnostics::read_error(&self.request_id, &error))?
                 .ok_or_else(|| ConnectError::not_found("PARTIES_NOT_FOUND"))?;
         RpcResponse::ok(identity_wire::ComparePartiesResponse {
             first_party: Some(PartyV3Service::convert(&comparison.first)?).into(),

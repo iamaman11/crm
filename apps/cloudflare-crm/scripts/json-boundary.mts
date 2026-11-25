@@ -19,3 +19,7 @@ export function strings(value: unknown): string[] {
   assert(Array.isArray(value), "Expected JSON string array");
   return value.map(string);
 }
+export function number(value: unknown): number {
+  assert(typeof value === "number" && Number.isFinite(value), "Expected finite JSON number");
+  return value;
+}

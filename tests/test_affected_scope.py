@@ -302,7 +302,7 @@ class AffectedScopeTests(unittest.TestCase):
             )
             cases = (
                 ("apps/cloudflare-crm/migrations/0004.sql", ["d1_migrations"]),
-                ("apps/cloudflare-crm/rust-party/test/native.mjs", ["d1_runtime_acceptance"]),
+                ("apps/cloudflare-crm/rust-party/test/native.mts", ["d1_runtime_acceptance"]),
             )
             for path, expected_scopes in cases:
                 report = build_report(
@@ -450,7 +450,7 @@ class AffectedScopeTests(unittest.TestCase):
             "d1_migrations": ("apps/cloudflare-crm/migrations/0004.sql",),
             "d1_runtime_acceptance": (
                 "apps/cloudflare-crm/rust-party/src/lib.rs",
-                "apps/cloudflare-crm/rust-party/test/native.mjs",
+                "apps/cloudflare-crm/rust-party/test/native.mts",
                 "apps/cloudflare-crm/e2e/live.mjs",
             ),
             "cloudflare_product_plane": (

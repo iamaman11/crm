@@ -142,6 +142,31 @@ export async function waitForExactSourceSha(endpoint: string,expectedSha: string
   log({event:"crm.e2e-version-readback",result:"PASS",source_sha:expectedSha,
     attempts,elapsed_ms:now()-started});
 }
+
+// GET on a signed Connect write route must reach Rust and reject the method.
+// Workers.dev can serve an older signed version while the RPC edge converges.
+export async function waitForPublishedRpc(expectedSha: string,probe: () => Promise<{
+  status: number; runtime: string | null; source: string | null; errorCode: string | null;
+}>,pause=(ms: number)=>new Promise<void>(resolve=>setTimeout(resolve,ms))) {
+  let stable=0;
+  for(let attempt=1;attempt<=20;attempt++){
+    const {status,runtime,source,errorCode}=await probe();
+    const signedRejection=status===501&&runtime==="native-workers-rs"&&errorCode==="unimplemented"&&
+      source!==null&&/^[a-f0-9]{40}$/.test(source);
+    if(signedRejection&&source===expectedSha){
+      stable++;
+      if(stable===3)return;
+    }else if(signedRejection||(status===404&&runtime===null)){
+      stable=0;
+    }else{
+      throw Error("CRM_PUBLISHED_RPC_PREFLIGHT_UNEXPECTED status="+status+
+        " worker="+(runtime==="native-workers-rs")+" expected_protocol_error="+(errorCode==="unimplemented"));
+    }
+    if(attempt<20)await pause(Math.min(attempt*500,2000));
+  }
+  throw Error("CRM_PUBLISHED_RPC_PREFLIGHT_SOURCE_UNSTABLE");
+}
+
 export async function verifyAnonymousDenial(endpoint: string,{
   request=fetch,
   pause=ms=>new Promise(resolve=>setTimeout(resolve,ms)),

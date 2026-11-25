@@ -1,7 +1,6 @@
 import { createClient, ConnectError, Code } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-web";
 import { DomainErrorDetailSchema, MutationCommitOutcome } from "../gen/crm/core/v2/operation_pb";
-import type { FieldViolation } from "../gen/crm/core/v2/operation_pb";
 import { PartyService as PartyV3 } from "../gen/crm/parties/v3/party_pb";
 import { AccountService } from "../gen/crm/accounts/v2/account_pb";
 import { ContactPointService } from "../gen/crm/contact_points/v2/contact_point_pb";
@@ -92,29 +91,39 @@ export type CrmFailure = {
   text: string;
   requestId: string | undefined;
   domainCode: string | undefined;
-  fieldViolations: readonly FieldViolation[];
+  fieldViolations: readonly { fieldPath: string; description: string }[];
 };
 
 export function decodeCrmError(error: unknown): CrmFailure {
   if (!(error instanceof ConnectError)) {
-    return {outcome:"unconfirmed",text:error instanceof Error?error.message:"Не удалось выполнить запрос.",
+    return {outcome:"unconfirmed",text:"Не удалось выполнить запрос.",
       requestId:undefined,domainCode:undefined,fieldViolations:[]};
   }
   const detail = error.findDetails(DomainErrorDetailSchema)[0];
   const requestId = error.metadata.get("x-request-id") ?? undefined;
-  // Only a typed rejection for this attempt can release its idempotency key.
-  const outcome = requestId && detail?.requestId===requestId &&
-    detail.commitOutcome===MutationCommitOutcome.REJECTED ? "rejected" : "unconfirmed";
+  const correlated = !!requestId && detail?.requestId === requestId;
+  const outcome = correlated && detail.commitOutcome===MutationCommitOutcome.REJECTED ? "rejected" : "unconfirmed";
   const explanations: Partial<Record<Code, string>> = {
     [Code.Unauthenticated]: "Сессия завершена. Войдите через Cloudflare Access.",
     [Code.PermissionDenied]: "Недостаточно прав для операции.",
     [Code.NotFound]: "Запись не найдена.",
-    [Code.Aborted]: "Конфликт изменения. Обновите запись и проверьте введённые данные.",
+    [Code.Aborted]: "Конфликт изменения. Обновите запись и проверьте данные.",
     [Code.InvalidArgument]: "Проверьте введённые данные.",
     [Code.FailedPrecondition]: "Операция недоступна в текущем состоянии.",
     [Code.Unavailable]: "Сервис временно недоступен. Повторите тот же запрос.",
   };
-  const text = [explanations[error.code] ?? "Ошибка сервиса.", error.rawMessage,
-    requestId ? "Запрос: " + requestId : ""].filter(Boolean).join(" ");
-  return {outcome,text,requestId,domainCode:detail?.domainCode,fieldViolations:detail?.fieldViolations??[]};
+  // Only locally translated domain and field details reach the UI.
+  const domainExplanations: Readonly<Record<string, string>> = {
+    SALES_DEAL_VERSION_CONFLICT: explanations[Code.Aborted]!,
+    SALES_PIPELINE_VERSION_CONFLICT: explanations[Code.Aborted]!,
+  };
+  const fieldNames: Readonly<Record<string, string>> = {"amount.currency_code":"Валюта"};
+  const domainCode = correlated && Object.hasOwn(domainExplanations, detail.domainCode) ? detail.domainCode : undefined;
+  const fieldViolations = correlated ? detail.fieldViolations.flatMap(field =>
+    Object.hasOwn(fieldNames, field.fieldPath)
+      ? [{fieldPath:fieldNames[field.fieldPath]!,description:"Проверьте значение."}] : []) : [];
+  const text = [domainCode ? domainExplanations[domainCode] : explanations[error.code] ?? "Ошибка сервиса.",
+    requestId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestId)
+      ? "Запрос: " + requestId : ""].filter(Boolean).join(" ");
+  return {outcome,text,requestId,domainCode,fieldViolations};
 }

@@ -125,6 +125,11 @@ function main(): void {
   const production = metadata("native");
   const owners = ownerPlan(report, production, root, worker);
   cargo(["test", "--locked", "--workspace", "--all-targets"]);
+  const diagnosticsStarted=performance.now();
+  cargo(["test", "--locked", "--manifest-path", resolve(worker, "Cargo.toml"),
+    "--target-dir", resolve(root, "target"), "--features", "native", "--lib", "diagnostics::tests"]);
+  console.log(JSON.stringify({event:"crm.worker-diagnostics-tests",
+    elapsed_ms:Math.round(performance.now()-diagnosticsStarted)}));
   cargo(["test", "--locked", "-p", "crm-proto-contracts", "--no-default-features",
     "--features", "sales-activities-link", "--lib"]);
   const generated = verifyContractGraphs(production, metadata("native-ci"));

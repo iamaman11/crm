@@ -1,0 +1,372 @@
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { AutomationService } from "../../../../packages/client/gen/crm/activities/v2/automation_pb.js";
+import { InteractionService } from "../../../../packages/client/gen/crm/activities/v2/interaction_pb.js";
+import { TaskService } from "../../../../packages/client/gen/crm/activities/v2/task_pb.js";
+import { MemberService } from "../../../../packages/client/gen/crm/access/v2/member_pb.js";
+import { binaryAutomationV2, decodeAutomationV2 } from "../../../../packages/client/test/cloudflare-binary-rpc-fixture.ts";
+import { fixtureRpc, fixtureRpcError, fixtureRpcPath } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
+import type { RpcDispatch } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
+import { formatRpcFailure } from "../../scripts/rpc-error-response.mts";
+
+type AutomationFixture = {
+ dispatch: RpcDispatch;
+ sql: (statement: string, ...bindings: (string | number)[]) => Promise<ReadonlyArray<Record<string, unknown>>>;
+ accountId: string; admin: string; viewer: string; tenantB: string;
+};
+export async function verifyAutomation({dispatch,sql,accountId,admin,viewer,tenantB}: AutomationFixture) {
+ const automation=AutomationService.method;
+ const interaction=InteractionService.method;
+ const tasks=TaskService.method;
+ const member=MemberService.method;
+ // SK-08A: the only first executable use case is a signed administrator
+ // explicitly running a published rule for one original Interaction.
+ // The write delegates to the original Task aggregate, never direct SQL.
+ {
+   const suffix=randomUUID(),ruleId="automation-rule-"+suffix;
+   const sourceId="automation-source-"+suffix;
+   const person="automation-person-"+suffix+"@example.test";
+   const rkey=(label: string,version?: bigint)=>({idempotencyKey:"automation-"+label+"-"+suffix,
+     ...(version===undefined?{}:{expectedVersion:version})});
+   assert.equal((await fixtureRpc(dispatch,member.provisionMember,admin,{
+     email:person,role:1,precondition:rkey("provision")
+   })).status,200);
+   const put={ruleId,trigger:1,enabled:true,
+     taskSubject:"SK08A customer follow-up",assigneeEmail:person,
+     dueAfterSeconds:3600n,precondition:rkey("rule")};
+   assert.equal((await fixtureRpcError(dispatch,automation.putAutomationRule,viewer,put)).status,403);
+   assert.equal((await fixtureRpcError(dispatch,automation.putAutomationRule,admin,{
+     ...put,trigger:2,precondition:rkey("unsupported")
+   })).status,400);
+   const created=await fixtureRpc(dispatch,automation.putAutomationRule,admin,put);
+   assert.equal(created.status,200,formatRpcFailure(created));
+   assert.equal(created.body.rule?.version,1n);
+   assert.equal((await fixtureRpc(dispatch,automation.putAutomationRule,admin,put)).body.receipt?.replayed,true);
+   assert.equal((await fixtureRpcError(dispatch,automation.putAutomationRule,admin,{
+     ...put,taskSubject:"Another intent, same key"
+   })).status,409);
+   assert.equal((await fixtureRpcError(dispatch,automation.getAutomationRule,tenantB,{ruleId})).status,404);
+   const read=await fixtureRpc(dispatch,automation.getAutomationRule,viewer,{
+     ruleId,receiptIdempotencyKey:put.precondition.idempotencyKey
+   });
+   assert.equal(read.status,200);
+   assert.deepEqual(read.body.rule,created.body.rule);
+   assert.equal(read.body.confirmedMutation?.resourceVersion,1n);
+   const all=await fixtureRpc(dispatch,automation.listAutomationRules,viewer,{page:{pageSize:100}});
+   assert.equal(all.status,200);
+   assert.ok(all.body.rules.some(value=>value.ruleId===ruleId));
+   assert.equal((await sql(
+     "SELECT COUNT(*) n FROM crm_activity_automation_rule_versions WHERE tenant=? AND rule_id=?",
+     "tenant-a",ruleId))[0]?.n,1);
+   const interactionInput=(id: string,label: string)=>({
+     interactionId:id,accountId,kind:1,text:"Automated interaction "+label,
+     occurredAt:{seconds:1780000000n,nanos:0},
+     precondition:rkey("interaction-"+label)
+   });
+   assert.equal((await fixtureRpc(dispatch,interaction.createInteraction,admin,
+     interactionInput(sourceId,"one"))).status,200);
+   const runInput=(id: string,keyLabel: string)=>({ruleId,interactionId:id,
+     expectedRuleVersion:1n,precondition:rkey(keyLabel)});
+   const runRace=async(input: ReturnType<typeof runInput>)=>{
+     const response=await dispatch(fixtureRpcPath(automation.runInteractionAutomation),{
+       method:"POST",headers:{"content-type":"application/proto","connect-protocol-version":"1","cf-access-jwt-assertion":admin},
+       body:new Uint8Array(binaryAutomationV2("RunInteractionAutomation",input))
+     });
+     const bytes=new Uint8Array(await response.arrayBuffer());
+     if(response.status<400) decodeAutomationV2("RunInteractionAutomation",bytes);
+     return {status:response.status};
+   };
+   const firstRun=runInput(sourceId,"run");
+   assert.equal((await fixtureRpcError(dispatch,automation.runInteractionAutomation,viewer,firstRun)).status,403);
+   assert.equal((await fixtureRpcError(dispatch,automation.runInteractionAutomation,tenantB,firstRun)).status,404);
+   const startCount=(await sql("SELECT COUNT(*) n FROM crm_activity_task_records WHERE tenant=? AND id LIKE 'automation-%'",
+     "tenant-a"))[0]?.n;
+   assert.ok(typeof startCount==="number");
+   const executed=await fixtureRpc(dispatch,automation.runInteractionAutomation,admin,firstRun);
+   assert.equal(executed.status,200,formatRpcFailure(executed));
+   assert.equal(executed.body.receipt?.resourceVersion,1n);
+   assert.equal(executed.body.run?.status,2);
+   assert.equal(executed.body.run?.disposition,1);
+   assert.equal(executed.body.run?.attemptCount,1n);
+   assert.equal(executed.body.run?.canCancel,false);
+   assert.ok(executed.body.run);
+   const taskId=executed.body.run.taskId;
+   const task=(await fixtureRpc(dispatch,tasks.getTask,viewer,{taskId})).body.task;
+   assert.ok(task?.owner?.owner.value && task.dueAt);
+   assert.equal(task.accountId,accountId);
+   assert.equal(task.subject,put.taskSubject);
+   assert.equal(task.owner.owner.value,person);
+   assert.equal(task.status,1);
+   assert.ok(task.dueAt.seconds>0n);
+   const replay=await fixtureRpc(dispatch,automation.runInteractionAutomation,admin,firstRun);
+   assert.equal(replay.status,200,formatRpcFailure(replay));
+   assert.equal(replay.body.receipt?.replayed,true);
+   assert.equal(replay.body.run?.taskId,taskId);
+   assert.equal((await sql(
+     "SELECT COUNT(*) n FROM crm_activity_task_records WHERE tenant=? AND id LIKE 'automation-%'",
+     "tenant-a"))[0]?.n,startCount+1);
+   assert.equal((await sql(
+     "SELECT COUNT(*) n FROM crm_activity_task_receipts WHERE tenant=? AND key=?",
+     "tenant-a",taskId))[0]?.n,1);
+   assert.equal((await sql(
+     "SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND action='activity_tasks.create'",
+     "tenant-a",taskId))[0]?.n,1);
+   const proof=await fixtureRpc(dispatch,automation.getAutomationRun,viewer,{
+     ruleId,interactionId:sourceId,receiptIdempotencyKey:firstRun.precondition.idempotencyKey
+   });
+   assert.equal(proof.status,200);
+   assert.equal(proof.body.confirmedMutation?.resourceVersion,1n);
+   assert.equal((await fixtureRpc(dispatch,automation.getAutomationRun,viewer,{
+     ruleId,interactionId:sourceId,receiptIdempotencyKey:"wrong-request-key"
+   })).body.confirmedMutation,undefined);
+   assert.ok((await fixtureRpc(dispatch,automation.listAutomationRuns,viewer,{ruleId,page:{pageSize:25}}))
+     .body.runs.some(x=>x.taskId===taskId&&x.status===2));
+   assert.equal((await fixtureRpc(dispatch,automation.listAutomationRuns,tenantB,{ruleId,page:{pageSize:25}}))
+     .body.runs.length,0);
+   // A pending run preserves the exact snapshot after human revocation. It
+   // cannot create a Task until that human is reactivated by signed Access.
+   const second="automation-second-"+suffix;
+   assert.equal((await fixtureRpc(dispatch,interaction.createInteraction,admin,
+     interactionInput(second,"two"))).status,200);
+   assert.equal((await fixtureRpc(dispatch,member.updateMember,admin,{
+     email:person,active:false,precondition:rkey("revoke",1n)
+   })).status,200);
+   const alias=runInput(sourceId,"run-alias");
+   const aliasReplay=await fixtureRpc(dispatch,automation.runInteractionAutomation,admin,alias);
+   assert.equal(aliasReplay.status,200,formatRpcFailure(aliasReplay));
+   assert.equal(aliasReplay.body.receipt?.replayed,true);
+   assert.equal(aliasReplay.body.run?.taskId,taskId);
+   assert.equal((await fixtureRpc(dispatch,automation.getAutomationRun,viewer,{
+     ruleId,interactionId:sourceId,receiptIdempotencyKey:alias.precondition.idempotencyKey
+   })).body.confirmedMutation?.resourceVersion,1n);
+   assert.equal((await fixtureRpcError(dispatch,automation.runInteractionAutomation,admin,{
+     ...alias,expectedRuleVersion:2n
+   })).status,409);
+   assert.equal((await fixtureRpcError(dispatch,automation.runInteractionAutomation,admin,{
+     ...firstRun,interactionId:second
+   })).status,409);
+   assert.equal((await fixtureRpcError(dispatch,automation.runInteractionAutomation,admin,{
+     ...alias,interactionId:second
+   })).status,409);
+   assert.equal((await fixtureRpcError(dispatch,automation.getAutomationRun,viewer,{
+     ruleId,interactionId:second
+   })).status,404);
+   const secondInput=runInput(second,"run-two");
+   assert.equal((await fixtureRpcError(dispatch,automation.runInteractionAutomation,admin,secondInput)).status,400);
+   const pending=await fixtureRpc(dispatch,automation.getAutomationRun,viewer,{ruleId,interactionId:second});
+   assert.equal(pending.status,200);
+   assert.equal(pending.body.run?.status,1);
+   assert.equal(pending.body.run?.disposition,3);
+   assert.equal(pending.body.run?.attemptCount,0n);
+   assert.equal(pending.body.run?.canCancel,true);
+   assert.equal(pending.body.confirmedMutation,undefined);
+   const waitingList=await fixtureRpc(dispatch,automation.listAutomationRuns,viewer,{ruleId,page:{pageSize:25}});
+   assert.equal(waitingList.body.runs.find(x=>x.interactionId===second)?.disposition,3);
+   assert.equal((await fixtureRpc(dispatch,member.updateMember,admin,{
+     email:person,active:true,precondition:rkey("reactivate",2n)
+   })).status,200);
+   const ready=await fixtureRpc(dispatch,automation.getAutomationRun,viewer,{ruleId,interactionId:second});
+   assert.equal(ready.body.run?.disposition,2);
+   assert.equal((await fixtureRpcError(dispatch,automation.runInteractionAutomation,admin,{
+     ...runInput(second,"wrong-pinned-version"),expectedRuleVersion:2n
+   })).status,400);
+   const recovered=await fixtureRpc(dispatch,automation.runInteractionAutomation,admin,secondInput);
+   assert.equal(recovered.status,200,formatRpcFailure(recovered));
+   assert.equal(recovered.body.run?.status,2);
+   assert.equal((await fixtureRpc(dispatch,automation.runInteractionAutomation,admin,secondInput))
+     .body.receipt?.replayed,true);
+   // Concurrent distinct sources with a single request key: at most one
+   // claim and one original Task. The losing source must have no run row.
+   const raceA="automation-key-race-a-"+suffix,raceB="automation-key-race-b-"+suffix;
+   for(const [id,label] of [[raceA,"key-a"],[raceB,"key-b"]] as const)
+     assert.equal((await fixtureRpc(dispatch,interaction.createInteraction,admin,interactionInput(id,label))).status,200);
+   const keyRace=await Promise.all([raceA,raceB].map(id=>
+     runRace(runInput(id,"shared-key"))));
+   assert.deepEqual(keyRace.map(x=>x.status).sort((a,b)=>a-b),[200,409]);
+   assert.equal((await sql("SELECT COUNT(*) n FROM crm_activity_automation_runs WHERE tenant=? AND rule_id=? AND interaction_id IN (?,?)",
+     "tenant-a",ruleId,raceA,raceB))[0]?.n,1);
+
+   // Native D1 task-audit failure: actual write rolls back, attempt is
+   // durably bounded and the original intent remains available for recovery.
+   const exhausted="automation-exhausted-"+suffix;
+   assert.equal((await fixtureRpc(dispatch,interaction.createInteraction,admin,interactionInput(exhausted,"exhausted"))).status,200);
+   const exhaustedInput=runInput(exhausted,"exhausted-run");
+   await sql("CREATE TRIGGER fixture_fail_automation_task BEFORE INSERT ON crm_audit "+
+     "WHEN NEW.action='activity_tasks.create' BEGIN SELECT RAISE(ABORT,'fixture task rollback'); END;");
+   let failed: Awaited<ReturnType<typeof getRun>> | undefined;
+   const getRun=async()=>{
+     const result=await fixtureRpc(dispatch,automation.getAutomationRun,viewer,{ruleId,interactionId:exhausted});
+     assert.ok(result.body.run);
+     return result.body.run;
+   };
+   try {
+     for(let i=1;i<=5;i++){
+       assert.equal((await fixtureRpcError(dispatch,automation.runInteractionAutomation,admin,exhaustedInput)).status,503);
+       failed=await getRun();
+       assert.equal(failed.attemptCount,BigInt(i));
+       assert.equal(failed.disposition,i===5?8:7);
+       assert.equal((await fixtureRpcError(dispatch,automation.runInteractionAutomation,admin,exhaustedInput)).status,400);
+       // Seed elapsed backoff in the same native D1; no wall-clock sleeps.
+       if(i<5)await sql("UPDATE crm_activity_automation_runs SET next_attempt_at_unix_millis=0 WHERE tenant=? AND task_id=?","tenant-a",failed.taskId);
+     }
+   }finally{await sql("DROP TRIGGER fixture_fail_automation_task");}
+   assert.ok(failed);
+   assert.equal((await sql("SELECT COUNT(*) n FROM crm_activity_task_records WHERE tenant=? AND id=?","tenant-a",failed.taskId))[0]?.n,0);
+   const cancelInput={ruleId,interactionId:exhausted,expectedRuleVersion:1n,precondition:rkey("cancel-exhausted")};
+   assert.equal((await fixtureRpcError(dispatch,automation.cancelAutomationRun,viewer,cancelInput)).status,403);
+   assert.equal((await fixtureRpcError(dispatch,automation.cancelAutomationRun,tenantB,cancelInput)).status,404);
+   assert.equal((await fixtureRpcError(dispatch,automation.cancelAutomationRun,admin,{
+     ...cancelInput,precondition:exhaustedInput.precondition
+   })).status,409);
+   const cancelled=await fixtureRpc(dispatch,automation.cancelAutomationRun,admin,cancelInput);
+   assert.equal(cancelled.status,200,formatRpcFailure(cancelled));
+   assert.equal(cancelled.body.run?.status,3);
+   assert.equal(cancelled.body.run?.disposition,9);
+   assert.equal(cancelled.body.run?.canCancel,false);
+   assert.equal((await fixtureRpc(dispatch,automation.cancelAutomationRun,admin,cancelInput)).body.receipt?.replayed,true);
+   assert.equal((await fixtureRpc(dispatch,automation.getAutomationRun,viewer,{
+     ruleId,interactionId:exhausted,receiptIdempotencyKey:cancelInput.precondition.idempotencyKey
+   })).body.confirmedMutation?.originalRequestId,cancelled.body.receipt?.originalRequestId);
+   assert.equal((await fixtureRpc(dispatch,automation.getAutomationRun,viewer,{
+     ruleId,interactionId:exhausted,receiptIdempotencyKey:exhaustedInput.precondition.idempotencyKey
+   })).body.confirmedMutation,undefined);
+   assert.equal((await fixtureRpcError(dispatch,automation.runInteractionAutomation,admin,exhaustedInput)).status,400);
+   await assert.rejects(()=>sql(
+     "INSERT INTO crm_activity_task_records(tenant,id,account_id,state,version,idem_key,idem_digest,request_id,actor) "+
+     "SELECT tenant,?,account_id,state,version,?,idem_digest,request_id,actor FROM crm_activity_task_records WHERE tenant=? AND id=?",
+     failed.taskId,failed.taskId,"tenant-a",taskId),/AUTOMATION_TASK_LEASE_REQUIRED/);
+   assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND action='activities.automation.run.cancel'","tenant-a",failed.taskId))[0]?.n,1);
+   assert.equal((await fixtureRpcError(dispatch,automation.cancelAutomationRun,admin,{
+     ruleId,interactionId:sourceId,expectedRuleVersion:1n,precondition:rkey("cancel-committed")
+   })).status,400);
+   // Two real signed calls to one run may return a replay or contention.
+   // Neither can create a second Task or consume another successful attempt.
+   const leaseRace="automation-lease-race-"+suffix;
+   assert.equal((await fixtureRpc(dispatch,interaction.createInteraction,admin,interactionInput(leaseRace,"lease-race"))).status,200);
+   const leaseResults=await Promise.all(["lease-a","lease-b"].map(key=>
+     runRace(runInput(leaseRace,key))));
+   assert.ok(leaseResults.some(x=>x.status===200));
+   assert.ok(leaseResults.every(x=>[200,409].includes(x.status)));
+   const leaseRun=(await fixtureRpc(dispatch,automation.getAutomationRun,viewer,{ruleId,interactionId:leaseRace})).body.run;
+   assert.ok(leaseRun);
+   assert.equal(leaseRun.attemptCount,1n);
+   assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND action='activity_tasks.create'","tenant-a",leaseRun.taskId))[0]?.n,1);
+   // Keep one durable claim without a Task; test the commit-time D1 guard
+   // against the exact pending row after rule revocation, not a mock.
+   const blocked="automation-blocked-"+suffix;
+   assert.equal((await fixtureRpc(dispatch,interaction.createInteraction,admin,interactionInput(blocked,"blocked"))).status,200);
+   assert.equal((await fixtureRpc(dispatch,member.updateMember,admin,{
+     email:person,active:false,precondition:rkey("revoke-blocked",3n)
+   })).status,200);
+   const blockedInput=runInput(blocked,"blocked-run");
+   assert.equal((await fixtureRpcError(dispatch,automation.runInteractionAutomation,admin,blockedInput)).status,400);
+   assert.equal((await fixtureRpc(dispatch,member.updateMember,admin,{
+     email:person,active:true,precondition:rkey("reactivate-blocked",4n)
+   })).status,200);
+   const blockedRun=(await fixtureRpc(dispatch,automation.getAutomationRun,viewer,{
+     ruleId,interactionId:blocked
+   })).body.run;
+   assert.ok(blockedRun);
+   assert.equal(blockedRun.status,1);
+   // Native durable lease recovery fixture: seed a previously acquired lease
+   // as if its worker stopped; verify the live API and physical write fence.
+   await sql("UPDATE crm_activity_automation_runs SET attempt_count=1,lease_request_id=?,lease_actor=?,lease_until_unix_millis=unixepoch('now')*1000+60000,next_attempt_at_unix_millis=unixepoch('now')*1000+65000 WHERE tenant=? AND task_id=?",
+     "fixture-lease-"+suffix,person,"tenant-a",blockedRun.taskId);
+   assert.equal((await fixtureRpc(dispatch,automation.getAutomationRun,viewer,{ruleId,interactionId:blocked})).body.run?.disposition,6);
+   assert.equal((await fixtureRpcError(dispatch,automation.runInteractionAutomation,admin,blockedInput)).status,409);
+   await assert.rejects(()=>sql(
+     "INSERT INTO crm_activity_task_records(tenant,id,account_id,state,version,idem_key,idem_digest,request_id,actor) "+
+     "SELECT tenant,?,account_id,state,version,?,idem_digest,request_id,actor FROM crm_activity_task_records WHERE tenant=? AND id=?",
+     blockedRun.taskId,blockedRun.taskId,"tenant-a",taskId),/AUTOMATION_TASK_LEASE_REQUIRED/);
+   await sql("UPDATE crm_activity_automation_runs SET lease_until_unix_millis=0,next_attempt_at_unix_millis=0 WHERE tenant=? AND task_id=?",
+     "tenant-a",blockedRun.taskId);
+   assert.equal((await fixtureRpc(dispatch,automation.getAutomationRun,viewer,{ruleId,interactionId:blocked})).body.run?.disposition,2);
+   // Native D1 aborts only the run finalization audit; original Task and
+   // receipt were committed in their own atomic owner statement.
+   const reconcileSource="automation-reconcile-"+suffix;
+   assert.equal((await fixtureRpc(dispatch,interaction.createInteraction,admin,
+     interactionInput(reconcileSource,"reconcile"))).status,200);
+   const reconcileInput=runInput(reconcileSource,"reconcile-run");
+   await sql("CREATE TRIGGER fixture_fail_automation_commit BEFORE INSERT ON crm_audit "+
+     "WHEN NEW.action='activities.automation.run.committed' "+
+     "BEGIN SELECT RAISE(ABORT,'fixture run finalization rollback'); END;");
+   try {
+     assert.equal((await fixtureRpcError(dispatch,automation.runInteractionAutomation,admin,reconcileInput)).status,503);
+   } finally {await sql("DROP TRIGGER fixture_fail_automation_commit");}
+   const unreconciled=await fixtureRpc(dispatch,automation.getAutomationRun,viewer,{
+     ruleId,interactionId:reconcileSource,receiptIdempotencyKey:reconcileInput.precondition.idempotencyKey
+   });
+   assert.equal(unreconciled.body.run?.status,1);
+   assert.equal(unreconciled.body.run?.disposition,5);
+   assert.equal(unreconciled.body.run?.canCancel,false);
+   assert.equal((await fixtureRpcError(dispatch,automation.cancelAutomationRun,admin,{
+     ruleId,interactionId:reconcileSource,expectedRuleVersion:1n,precondition:rkey("cancel-receipt")
+   })).status,400);
+   assert.equal(unreconciled.body.confirmedMutation,undefined);
+   assert.ok(unreconciled.body.run);
+   const reconcileTask=unreconciled.body.run.taskId;
+   assert.equal((await sql("SELECT COUNT(*) n FROM crm_activity_task_receipts WHERE tenant=? AND key=?",
+     "tenant-a",reconcileTask))[0]?.n,1);
+   const disabled=await fixtureRpc(dispatch,automation.putAutomationRule,admin,{
+     ...put,enabled:false,precondition:rkey("disable",1n)
+   });
+   assert.equal(disabled.status,200,formatRpcFailure(disabled));
+   assert.equal(disabled.body.rule?.version,2n);
+   const terminal=await fixtureRpc(dispatch,automation.getAutomationRun,viewer,{ruleId,interactionId:blocked});
+   assert.equal(terminal.body.run?.disposition,4);
+   const reconcileAfterDisable=await fixtureRpc(dispatch,automation.getAutomationRun,viewer,{
+     ruleId,interactionId:reconcileSource
+   });
+   assert.equal(reconcileAfterDisable.body.run?.disposition,5);
+   assert.equal((await fixtureRpcError(dispatch,automation.runInteractionAutomation,viewer,reconcileInput)).status,403);
+   const reconciled=await fixtureRpc(dispatch,automation.runInteractionAutomation,admin,reconcileInput);
+   assert.equal(reconciled.status,200,formatRpcFailure(reconciled));
+   assert.equal(reconciled.body.run?.disposition,1);
+   assert.equal(reconciled.body.receipt?.replayed,true);
+   assert.equal((await fixtureRpc(dispatch,automation.getAutomationRun,viewer,{
+     ruleId,interactionId:reconcileSource,receiptIdempotencyKey:reconcileInput.precondition.idempotencyKey
+   })).body.confirmedMutation?.resourceVersion,1n);
+   assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND action='activity_tasks.create'",
+     "tenant-a",reconcileTask))[0]?.n,1);
+   // Attempt the same physical Task INSERT boundary after disabling the rule.
+   // A real D1 trigger, not the earlier Rust check, must reject it.
+   await assert.rejects(()=>sql(
+     "INSERT INTO crm_activity_task_records(tenant,id,account_id,state,version,idem_key,idem_digest,request_id,actor) "+
+     "SELECT tenant,?,account_id,state,version,?,idem_digest,request_id,actor "+
+     "FROM crm_activity_task_records WHERE tenant=? AND id=?",
+     blockedRun.taskId,blockedRun.taskId,"tenant-a",taskId),/AUTOMATION_RULE_NOT_ENABLED_OR_STALE/);
+   assert.equal((await fixtureRpcError(dispatch,automation.runInteractionAutomation,admin,blockedInput)).status,400);
+   assert.equal((await sql("SELECT COUNT(*) n FROM crm_activity_task_records WHERE tenant=? AND id=?",
+     "tenant-a",blockedRun.taskId))[0]?.n,0);
+   assert.equal((await sql("SELECT COUNT(*) n FROM crm_activity_task_receipts WHERE tenant=? AND key=?",
+     "tenant-a",blockedRun.taskId))[0]?.n,0);
+   assert.equal((await sql(
+     "SELECT COUNT(*) n FROM crm_activity_automation_rule_versions WHERE tenant=? AND rule_id=?",
+     "tenant-a",ruleId))[0]?.n,2);
+   const third="automation-third-"+suffix;
+   assert.equal((await fixtureRpc(dispatch,interaction.createInteraction,admin,
+     interactionInput(third,"three"))).status,200);
+   const countBeforeDenied=(await sql(
+     "SELECT COUNT(*) n FROM crm_activity_task_records WHERE tenant=? AND id LIKE 'automation-%'",
+     "tenant-a"))[0]?.n;
+   assert.equal((await fixtureRpcError(dispatch,automation.runInteractionAutomation,admin,{
+     ...runInput(third,"run-three"),expectedRuleVersion:2n
+   })).status,400);
+   assert.equal((await sql(
+     "SELECT COUNT(*) n FROM crm_activity_task_records WHERE tenant=? AND id LIKE 'automation-%'",
+     "tenant-a"))[0]?.n,countBeforeDenied);
+   assert.equal((await fixtureRpcError(dispatch,automation.getAutomationRun,viewer,{
+     ruleId,interactionId:third
+   })).status,404);
+   console.log(JSON.stringify({event:"crm.native-sk08a-rule-run",result:"PASS",
+     generated_connect:true,signed_access:true,original_task_owner:true,
+     exact_source_receipt:true,tenant_ab:true,viewer_write_denied:true,
+     rule_version_cas:true,single_task_audit:true,exact_replay:true,
+     durable_pending:true,revocation_recovery:true,disabled_fail_closed:true,
+     request_key_conflict:true,concurrent_key_conflict:true,alias_receipt:true,
+     atomic_rule_guard:true,typed_disposition:true,pinned_retry:true,
+     original_receipt_reconciliation_after_disable:true,bounded_attempts:true,backoff:true,
+     cancellation_receipt:true,cancelled_task_fence:true,concurrent_lease:true,
+     expired_lease_readiness:true,stale_writer_fence:true,production_cron_disabled:true}));
+ }
+}

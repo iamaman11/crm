@@ -77,7 +77,7 @@ impl interaction_wire::InteractionService for InteractionV2Service {
         let db = self.d1()?;
         let item = interactions::get(&db, &self.actor.tenant, &input.interaction_id)
             .await
-            .map_err(|_| ConnectError::internal("Interaction D1 read failed"))?
+            .map_err(|error| crate::diagnostics::read_error(&self.request_id, &error))?
             .ok_or_else(|| ConnectError::not_found("ACTIVITIES_INTERACTION_NOT_FOUND"))?;
         let confirmed_mutation = match receipt_key(input.receipt_idempotency_key.as_deref())? {
             None => None,
@@ -156,7 +156,7 @@ impl interaction_wire::InteractionService for InteractionV2Service {
             size as usize,
         )
         .await
-        .map_err(|_| ConnectError::internal("Interaction D1 list failed"))?;
+        .map_err(|error| crate::diagnostics::read_error(&self.request_id, &error))?;
         RpcResponse::ok(interaction_wire::ListInteractionsResponse {
             interactions: items.iter().map(Self::convert).collect(),
             account_names: account_names.into_iter().collect(),
