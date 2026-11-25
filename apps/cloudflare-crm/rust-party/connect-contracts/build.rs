@@ -73,7 +73,7 @@ fn main() {
         // Rust Worker implements the generated Connect servers. The browser uses
         // generated TypeScript clients, so compiling unused Rust clients into
         // every WASM feature/profile adds work without testing another RPC path.
-        // Upstream client code remains available via the crate's opt-in feature.
+        // Generated Rust client types remain optional for a future consumer.
         .gate_client_feature(true)
         .compile()
         .expect("CRM Connect code generation");

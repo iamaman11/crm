@@ -15,9 +15,11 @@ serde_json = "1"
 
 [features]
 default = []
-# Native Rust consumers can opt in to the generated client transport. The
-# deployed Worker needs only the generated server/router and message types.
-client = ["connectrpc/client"]
+# The deployed Worker needs only generated server/router and message types.
+# Generated Rust client stubs are opt-in, without adding transport dependencies
+# to the default graph. A future Rust client consumer must also enable
+# connectrpc/client explicitly in its own dependency graph.
+client = []
 
 [build-dependencies]
 serde = { version = "1", features = ["derive"] }
