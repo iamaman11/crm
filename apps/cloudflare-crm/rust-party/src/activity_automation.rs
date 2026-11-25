@@ -102,7 +102,9 @@ impl RunRow {
             "pending" if self.rule_current != 1 => Ok(RunDisposition::RuleSuperseded),
             "pending" if self.assignee_active != 1 => Ok(RunDisposition::WaitingAssignee),
             "pending" if self.lease_active == 1 => Ok(RunDisposition::Executing),
-            "pending" if self.attempt_count >= MAX_ATTEMPTS => Ok(RunDisposition::AttemptsExhausted),
+            "pending" if self.attempt_count >= MAX_ATTEMPTS => {
+                Ok(RunDisposition::AttemptsExhausted)
+            }
             "pending" if self.backoff_active == 1 => Ok(RunDisposition::Backoff),
             "pending" => Ok(RunDisposition::RetryReady),
             _ => Err(ConnectError::internal(
@@ -684,7 +686,9 @@ pub(super) async fn execute_interaction(
             ));
         }
         RunDisposition::Cancelled => {
-            return Err(ConnectError::failed_precondition("AUTOMATION_RUN_CANCELLED"));
+            return Err(ConnectError::failed_precondition(
+                "AUTOMATION_RUN_CANCELLED",
+            ));
         }
         RunDisposition::RetryReady | RunDisposition::ReconcileReceipt => {}
     }
@@ -903,7 +907,9 @@ pub(super) async fn cancel(
         });
     }
     if row.rule_version != expected_version || !row.can_cancel() {
-        return Err(ConnectError::failed_precondition("AUTOMATION_CANCEL_NOT_ALLOWED"));
+        return Err(ConnectError::failed_precondition(
+            "AUTOMATION_CANCEL_NOT_ALLOWED",
+        ));
     }
     let _write = bind(
         db,
@@ -947,7 +953,9 @@ pub(super) async fn cancel(
         });
     }
     if !fresh.can_cancel() {
-        return Err(ConnectError::failed_precondition("AUTOMATION_CANCEL_NOT_ALLOWED"));
+        return Err(ConnectError::failed_precondition(
+            "AUTOMATION_CANCEL_NOT_ALLOWED",
+        ));
     }
     Err(ConnectError::unavailable("AUTOMATION_CANCEL_UNCONFIRMED"))
 }
