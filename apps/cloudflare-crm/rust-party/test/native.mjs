@@ -28,7 +28,7 @@ import {binaryPartyV3,decodePartyV3,partyV3Path,
   binaryAutomationV2,decodeAutomationV2,automationV2Path,
   binarySalesV2,decodeSalesV2,salesV2Path,
   binaryPrivacyV2,decodePrivacyV2,privacyV2Path,
-  decodeDomainErrorDetail,decodeRpcOutput} from "../../../../scripts/crm-connect-binary-fixture.mjs";
+  decodeDomainErrorDetail,decodeRpcOutput} from "../../../../packages/client/test/cloudflare-binary-rpc-fixture.ts";
 // Each native subtest owns its own harness, fixture D1, signed identity and evidence.
 // The first subtest returns only the compiled policy/denial proof; the second
 // starts clean and requires the same compiled inventory before sealing evidence.
