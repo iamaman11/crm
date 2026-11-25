@@ -21,12 +21,12 @@ export function fixtureRpcPath(method: DescMethod): string {
   return `/${method.parent.typeName}/${method.name}`;
 }
 
-async function dispatchFixtureRpc<I extends DescMessage, O extends DescMessage>(
+export async function dispatchFixtureRpc<I extends DescMessage, O extends DescMessage>(
   dispatch: RpcDispatch,
   method: DescMethodUnary<I, O>,
   jwt: string | null,
   input: MessageInitShape<NoInfer<I>>,
-  extraHeaders: Readonly<Record<string, string>>,
+  extraHeaders: Readonly<Record<string, string>> = {},
 ) {
   return dispatch(fixtureRpcPath(method), {
     method: "POST",

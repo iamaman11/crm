@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
 import {randomUUID} from "node:crypto";
-import {DealService} from "../../../../packages/client/gen/crm/sales/v2/deal_pb.js";
+import {DealService,DealStatus} from "../../../../packages/client/gen/crm/sales/v2/deal_pb.js";
 import type {DealCapabilities, OpportunityTeamRole} from "../../../../packages/client/gen/crm/sales/v2/deal_pb.js";
 import {MemberService} from "../../../../packages/client/gen/crm/access/v2/member_pb.js";
-import {binarySalesV2,salesV2Path} from "../../../../packages/client/test/cloudflare-binary-rpc-fixture.ts";
-import {fixtureRpc,fixtureRpcError} from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
+import {dispatchFixtureRpc,fixtureRpc,fixtureRpcError} from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
 import type {RpcDispatch} from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
 import type {dealCreationInput} from "../../../../packages/client/test/cloudflare-deal-fixture.ts";
 import {formatRpcFailure} from "../../scripts/rpc-error-response.mts";
@@ -21,10 +20,6 @@ type OpportunityFixture = {
 };
 export async function verifySalesOpportunity({dispatch,sql,statement,batch,admin,viewer,tenantB,saleCreate}: OpportunityFixture) {
   const sales=DealService.method;
-  const raw=(path: string,identity: string,body: Uint8Array)=>dispatch(path,{
-    method:"POST",headers:{"content-type":"application/proto","connect-protocol-version":"1",
-      "cf-access-jwt-assertion":identity},body:new Uint8Array(body),
-  });
   const id="opportunity-team-qa-"+randomUUID();
   const email="native-viewer@example.test";
   const creditTeamId="opportunity-credit-team-"+randomUUID();
@@ -45,7 +40,7 @@ export async function verifySalesOpportunity({dispatch,sql,statement,batch,admin
   const edit=(dealId: string,version: bigint,key: string,fields: {probabilityBasisPoints?: number; owner?: {owner: {case: "assigneeIdentity"; value: string}}}={})=>({dealId,
     name:{operation:{case:"set" as const,value:"Opportunity team "+key}},...fields,
     precondition:{expectedVersion:version,idempotencyKey:"opportunity-edit-"+key+"-"+dealId}});
-  const closeInput=(dealId: string,version: bigint,key: string,fields: {creditSelection?: {leaveTeamUnallocated?: boolean}; expectedCreditDecision?: string | undefined}={})=>({dealId,outcome:3 as const,reasonCode:"qa",
+  const closeInput=(dealId: string,version: bigint,key: string,fields: {creditSelection?: {leaveTeamUnallocated?: boolean}; expectedCreditDecision?: string | undefined}={})=>({dealId,outcome:DealStatus.LOST,reasonCode:"qa",
     ...fields,precondition:{expectedVersion:version,idempotencyKey:"opportunity-close-"+key+"-"+dealId}});
   const created=await createQaDeal(id);
   assert.equal(created.status,200,formatRpcFailure(created));
@@ -233,8 +228,8 @@ export async function verifySalesOpportunity({dispatch,sql,statement,batch,admin
   assert.equal(raceGrant.status,200,formatRpcFailure(raceGrant));
   const raceCloseKey="opportunity-close-race-"+raceId;
   const [raceClose,raceRevoke]=await Promise.all([
-    raw(salesV2Path("CloseDeal"),viewer,binarySalesV2("CloseDeal",closeInput(raceId,2n,"race"))),
-    raw(salesV2Path("SetOpportunityParticipant"),admin,binarySalesV2("SetOpportunityParticipant",grant(raceId,undefined,2n,"race-revoke")))
+    dispatchFixtureRpc(dispatch,sales.closeDeal,viewer,closeInput(raceId,2n,"race")),
+    dispatchFixtureRpc(dispatch,sales.setOpportunityParticipant,admin,grant(raceId,undefined,2n,"race-revoke"))
   ]);
   const closeWon=raceClose.status===200;
   const revokeWon=raceRevoke.status===200;

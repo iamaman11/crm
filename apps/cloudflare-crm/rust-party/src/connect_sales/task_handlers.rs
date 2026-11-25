@@ -1,6 +1,7 @@
 //! Generated Connect trait for the existing TaskV2Service Rust domain owner.
 //! Access, tenant, and the single native router are defined by the parent.
 use super::*;
+use crate::diagnostics;
 
 impl task_wire::TaskService for TaskV2Service {
     #[worker::send]
@@ -21,7 +22,13 @@ impl task_wire::TaskService for TaskV2Service {
             &self.request_id,
         )
         .await
-        .map_err(|_| ConnectError::unavailable("ACTIVITIES_CLAIM_FAILED"))?
+        .map_err(|_| {
+            diagnostics::mutation_adapter_error(
+                "ClaimTask",
+                &self.request_id,
+                "ACTIVITIES_CLAIM_FAILED",
+            )
+        })?
         .map_err(|e| e.connect("ClaimTask", &self.request_id))?;
         RpcResponse::ok(task_wire::ClaimTaskResponse {
             task: Some(Self::convert(

@@ -1578,7 +1578,13 @@ impl sale_wire::DealService for SalesV2Service {
             expected,
         )
         .await
-        .map_err(|_| ConnectError::unavailable("SALES_QUOTA_WRITE_FAILED"))?
+        .map_err(|_| {
+            diagnostics::mutation_adapter_error(
+                "CreateSalesQuota",
+                &self.request_id,
+                "SALES_QUOTA_WRITE_FAILED",
+            )
+        })?
         .map_err(|failure| failure.connect("CreateSalesQuota", &self.request_id))?;
         let receipt = self.coverage_receipt(&saved);
         RpcResponse::ok(sale_wire::CreateSalesQuotaResponse {
@@ -1615,7 +1621,13 @@ impl sale_wire::DealService for SalesV2Service {
             expected,
         )
         .await
-        .map_err(|_| ConnectError::unavailable("SALES_QUOTA_WRITE_FAILED"))?
+        .map_err(|_| {
+            diagnostics::mutation_adapter_error(
+                "UpdateSalesQuota",
+                &self.request_id,
+                "SALES_QUOTA_WRITE_FAILED",
+            )
+        })?
         .map_err(|failure| failure.connect("UpdateSalesQuota", &self.request_id))?;
         let receipt = self.coverage_receipt(&saved);
         RpcResponse::ok(sale_wire::UpdateSalesQuotaResponse {
@@ -1889,7 +1901,13 @@ impl sale_wire::DealService for SalesV2Service {
             expected,
         )
         .await
-        .map_err(|_| ConnectError::unavailable("SALES_ROUTING_WRITE_FAILED"))?
+        .map_err(|_| {
+            diagnostics::mutation_adapter_error(
+                "CreateSalesRoutingRule",
+                &self.request_id,
+                "SALES_ROUTING_WRITE_FAILED",
+            )
+        })?
         .map_err(|failure| failure.connect("CreateSalesRoutingRule", &self.request_id))?;
         let receipt = self.coverage_receipt(&saved);
         RpcResponse::ok(sale_wire::CreateSalesRoutingRuleResponse {
@@ -1925,7 +1943,13 @@ impl sale_wire::DealService for SalesV2Service {
             expected,
         )
         .await
-        .map_err(|_| ConnectError::unavailable("SALES_ROUTING_WRITE_FAILED"))?
+        .map_err(|_| {
+            diagnostics::mutation_adapter_error(
+                "UpdateSalesRoutingRule",
+                &self.request_id,
+                "SALES_ROUTING_WRITE_FAILED",
+            )
+        })?
         .map_err(|failure| failure.connect("UpdateSalesRoutingRule", &self.request_id))?;
         let receipt = self.coverage_receipt(&saved);
         RpcResponse::ok(sale_wire::UpdateSalesRoutingRuleResponse {
@@ -2077,7 +2101,13 @@ impl sale_wire::DealService for SalesV2Service {
             expected,
         )
         .await
-        .map_err(|_| ConnectError::unavailable("SALES_COVERAGE_WRITE_FAILED"))?
+        .map_err(|_| {
+            diagnostics::mutation_adapter_error(
+                "CreateTerritory",
+                &self.request_id,
+                "SALES_COVERAGE_WRITE_FAILED",
+            )
+        })?
         .map_err(|failure| failure.connect("CreateTerritory", &self.request_id))?;
         let receipt = self.coverage_receipt(&saved);
         RpcResponse::ok(sale_wire::CreateTerritoryResponse {
@@ -2113,7 +2143,13 @@ impl sale_wire::DealService for SalesV2Service {
             expected,
         )
         .await
-        .map_err(|_| ConnectError::unavailable("SALES_COVERAGE_WRITE_FAILED"))?
+        .map_err(|_| {
+            diagnostics::mutation_adapter_error(
+                "UpdateTerritory",
+                &self.request_id,
+                "SALES_COVERAGE_WRITE_FAILED",
+            )
+        })?
         .map_err(|failure| failure.connect("UpdateTerritory", &self.request_id))?;
         let receipt = self.coverage_receipt(&saved);
         RpcResponse::ok(sale_wire::UpdateTerritoryResponse {
@@ -2228,7 +2264,13 @@ impl sale_wire::DealService for SalesV2Service {
             expected,
         )
         .await
-        .map_err(|_| ConnectError::unavailable("SALES_COVERAGE_WRITE_FAILED"))?
+        .map_err(|_| {
+            diagnostics::mutation_adapter_error(
+                "CreateSalesAccountAssignment",
+                &self.request_id,
+                "SALES_COVERAGE_WRITE_FAILED",
+            )
+        })?
         .map_err(|failure| failure.connect("CreateSalesAccountAssignment", &self.request_id))?;
         let receipt = self.coverage_receipt(&saved);
         RpcResponse::ok(sale_wire::CreateSalesAccountAssignmentResponse {
@@ -2264,7 +2306,13 @@ impl sale_wire::DealService for SalesV2Service {
             expected,
         )
         .await
-        .map_err(|_| ConnectError::unavailable("SALES_COVERAGE_WRITE_FAILED"))?
+        .map_err(|_| {
+            diagnostics::mutation_adapter_error(
+                "UpdateSalesAccountAssignment",
+                &self.request_id,
+                "SALES_COVERAGE_WRITE_FAILED",
+            )
+        })?
         .map_err(|failure| failure.connect("UpdateSalesAccountAssignment", &self.request_id))?;
         let receipt = self.coverage_receipt(&saved);
         RpcResponse::ok(sale_wire::UpdateSalesAccountAssignmentResponse {

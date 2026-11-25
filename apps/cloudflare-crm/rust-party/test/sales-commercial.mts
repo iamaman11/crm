@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { randomUUID, createHash } from "node:crypto";
 import { DealService } from "../../../../packages/client/gen/crm/sales/v2/deal_pb.js";
 import { MemberService } from "../../../../packages/client/gen/crm/access/v2/member_pb.js";
-import { decodeFixtureDetail, fixtureRpc, fixtureRpcError } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
-import { binarySalesV2, salesV2Path, decodeSalesV2 } from "../../../../packages/client/test/cloudflare-binary-rpc-fixture.ts";
+import { decodeFixtureDetail, dispatchFixtureRpc, fixtureRpc, fixtureRpcError } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
+import { decodeSalesV2 } from "../../../../packages/client/test/cloudflare-binary-rpc-fixture.ts";
 import { DomainErrorDetailSchema, MutationCommitOutcome } from "../../../../packages/client/gen/crm/core/v2/operation_pb.js";
 import { record, records, string } from "../../scripts/json-boundary.mts";
 import type { RpcDispatch } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
@@ -19,10 +19,6 @@ type CommercialFixture = {
 };
 export async function verifySalesCommercial({dispatch,sql,statement,batch,accountId,admin,viewer,tenantB}: CommercialFixture) {
  const sales=DealService.method,member=MemberService.method;
- const raw=(path: string,identity: string,body: Uint8Array) => dispatch(path,{
-   method:"POST",headers:{"content-type":"application/proto","connect-protocol-version":"1",
-     "cf-access-jwt-assertion":identity},body:new Uint8Array(body),
- });
  const assertUnconfirmed=(failed: Awaited<ReturnType<typeof fixtureRpcError>>, code: string) => {
    assert.equal(failed.status,503); assert.equal(failed.body.code,"unavailable");
    const detail=decodeFixtureDetail(DomainErrorDetailSchema,records(record(failed.body).details));
@@ -89,7 +85,7 @@ export async function verifySalesCommercial({dispatch,sql,statement,batch,accoun
    const p2=(await fixtureRpc(dispatch,sales.previewSalesRouting,viewer,facts)).body;
    assert.equal(required(required(p2.decision).selectedOwner).owner.value,emailB);
    const race=[deal("race-a",p2.expectedDecision),deal("race-b",p2.expectedDecision)];
-   const results=await Promise.all(race.map(input=>raw(salesV2Path("CreateDeal"),admin,binarySalesV2("CreateDeal",input))));
+   const results=await Promise.all(race.map(input=>dispatchFixtureRpc(dispatch,sales.createDeal,admin,input)));
    assert.equal(results.filter(r=>r.status===200).length,1);
    assert.equal(results.filter(r=>r.status===409).length,1);
    const winner=race[results.findIndex(r=>r.status===200)];
@@ -583,7 +579,7 @@ export async function verifySalesCommercial({dispatch,sql,statement,batch,accoun
      // alter unrelated fixture semantics. Use a single real Deal mutation.
      const raceFence=await revision("tenant-a");
      const [race,mutation]=await Promise.all([
-       raw(salesV2Path("PreviewSalesPerformanceReport"),viewer,binarySalesV2("PreviewSalesPerformanceReport",captureInput)),
+       dispatchFixtureRpc(dispatch,sales.previewSalesPerformanceReport,viewer,captureInput),
        fixtureRpc(dispatch,sales.updateDeal,admin,{dealId:fixtureId(openScale),probabilityBasisPoints:1000,
          precondition:pre("open-scale-race",1n)})
      ]);
@@ -594,7 +590,7 @@ export async function verifySalesCommercial({dispatch,sql,statement,batch,accoun
      const newWeight=weightedAmount-1001n*4000n;
      assert.ok([200,409].includes(race.status));
      if(race.status===200) {
-       const body=decodeSalesV2("PreviewSalesPerformanceReport",new Uint8Array(await race.arrayBuffer()));
+      const body=decodeSalesV2("PreviewSalesPerformanceReport",new Uint8Array(await race.arrayBuffer()));
        assert.ok([String(weightedAmount),String(newWeight)].includes(required(required(body.report).forecast).weightedMinorUnitsTimesBasisPoints),"mixed capture");
      } else assert.match(string(record(await race.json()).message),/SALES_FORECAST_SNAPSHOT_CHANGED/);
      assert.equal(required(required(((await fixtureRpc(dispatch,sales.previewSalesPerformanceReport,viewer,captureInput)).body).report).forecast).weightedMinorUnitsTimesBasisPoints,String(newWeight));

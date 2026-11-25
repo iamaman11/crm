@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { DealService } from "../../../../packages/client/gen/crm/sales/v2/deal_pb.js";
-import { MemberService } from "../../../../packages/client/gen/crm/access/v2/member_pb.js";
-import { binaryMemberV2, memberV2Path, binarySalesV2, salesV2Path } from "../../../../packages/client/test/cloudflare-binary-rpc-fixture.ts";
-import { decodeFixtureDetail, fixtureRpc, fixtureRpcError } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
+import { DealService, SalesOverlayRole } from "../../../../packages/client/gen/crm/sales/v2/deal_pb.js";
+import { MemberRole, MemberService } from "../../../../packages/client/gen/crm/access/v2/member_pb.js";
+import { decodeFixtureDetail, dispatchFixtureRpc, fixtureRpc, fixtureRpcError } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
 import type { RpcDispatch } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
 import { DomainErrorDetailSchema, MutationCommitOutcome } from "../../../../packages/client/gen/crm/core/v2/operation_pb.js";
 import { record, records } from "../../scripts/json-boundary.mts";
@@ -19,17 +18,13 @@ type CoverageFixture = {
 };
 export async function verifySalesCoverage({dispatch,sql,accountId,admin,viewer,tenantB}: CoverageFixture) {
  const sales=DealService.method, member=MemberService.method;
- const raw=(path: string,identity: string,body: Uint8Array) => dispatch(path,{
-   method:"POST",headers:{"content-type":"application/proto","connect-protocol-version":"1",
-     "cf-access-jwt-assertion":identity},body:new Uint8Array(body),
- });
    // SK-07.D1: signed generated RPCs against the original Sales owners.
    const suffix=randomUUID(),root="territory-root-"+suffix,child="territory-child-"+suffix;
    const email="coverage-"+suffix+"@example.test";
    const human={owner:{case:"assigneeIdentity",value:email}} as const;
    const primary={owner:{case:"assigneeIdentity",value:"native-a@example.test"}} as const;
    const pre=(label: string,version?: bigint)=>({idempotencyKey:"coverage-"+label+"-"+suffix,...(version===undefined?{}:{expectedVersion:version})});
-   assert.equal((await fixtureRpc(dispatch,member.provisionMember,admin,{email,role:1,precondition:pre("member")})).status,200);
+   assert.equal((await fixtureRpc(dispatch,member.provisionMember,admin,{email,role:MemberRole.VIEWER,precondition:pre("member")})).status,200);
    const configuration={name:"Coverage root "+suffix,defaultOwner:primary};
    const rootCreate={territoryId:root,configuration,precondition:pre("root")};
    const created=await fixtureRpc(dispatch,sales.createTerritory,admin,rootCreate);
@@ -49,7 +44,7 @@ export async function verifySalesCoverage({dispatch,sql,accountId,admin,viewer,t
      configuration:{...configuration,parentId:child},precondition:pre("cycle",1n)})).status,409);
    assert.equal((await fixtureRpcError(dispatch,sales.updateTerritory,admin,{territoryId:root,
      configuration:{...configuration,archived:true},precondition:pre("blocked-parent",1n)})).status,409);
-   const assignmentConfig={territoryId:child,primaryOwner:human,overlays:[{role:1,owner:primary}]};
+   const assignmentConfig={territoryId:child,primaryOwner:human,overlays:[{role:SalesOverlayRole.SPECIALIST,owner:primary}]};
    const assignmentInput={accountId,configuration:assignmentConfig,precondition:pre("assignment")};
    assert.equal((await fixtureRpc(dispatch,sales.getSalesAccountAssignment,viewer,{accountId})).body.assignment,undefined);
    const assignment=await fixtureRpc(dispatch,sales.createSalesAccountAssignment,admin,assignmentInput);
@@ -67,7 +62,7 @@ export async function verifySalesCoverage({dispatch,sql,accountId,admin,viewer,t
      configuration:{...childConfig,archived:true},precondition:pre("blocked-child",1n)})).status,409);
    assert.equal((await fixtureRpcError(dispatch,member.updateMember,admin,{email,active:false,precondition:pre("blocked-member",1n)})).status,409);
    assert.equal((await fixtureRpcError(dispatch,sales.updateSalesAccountAssignment,admin,{accountId,
-     configuration:{...assignmentConfig,overlays:[{role:1,owner:human}]},precondition:pre("duplicate",1n)})).status,400);
+     configuration:{...assignmentConfig,overlays:[{role:SalesOverlayRole.SPECIALIST,owner:human}]},precondition:pre("duplicate",1n)})).status,400);
    const before=await sql("SELECT state,version FROM crm_sales_account_assignment_records WHERE tenant=? AND id=?","tenant-a",accountId);
    const count=(await sql("SELECT COUNT(*) n FROM crm_sales_account_assignment_receipts WHERE tenant=?","tenant-a"))[0]?.n;
    await sql("CREATE TRIGGER fixture_fail_coverage_audit BEFORE INSERT ON crm_audit WHEN NEW.action='sales.account_assignment.update' BEGIN SELECT RAISE(ABORT,'fixture coverage audit rollback'); END;");
@@ -82,6 +77,24 @@ export async function verifySalesCoverage({dispatch,sql,accountId,admin,viewer,t
      assert.deepEqual(await sql("SELECT state,version FROM crm_sales_account_assignment_records WHERE tenant=? AND id=?","tenant-a",accountId),before);
      assert.equal((await sql("SELECT COUNT(*) n FROM crm_sales_account_assignment_receipts WHERE tenant=?","tenant-a"))[0]?.n,count);
    }finally{await sql("DROP TRIGGER fixture_fail_coverage_audit");}
+  const auditCount=(await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND action LIKE 'sales.account_assignment.%'",
+    "tenant-a",accountId))[0]?.n;
+  assert.equal(auditCount,1,"the existing assignment audit must be present before the adapter-failure probe");
+  await sql("ALTER TABLE crm_sales_account_assignment_receipts RENAME TO fixture_unavailable_assignment_receipts");
+  try{
+    const unavailable=await fixtureRpcError(dispatch,sales.updateSalesAccountAssignment,admin,{accountId,
+      configuration:{...assignmentConfig,archived:true},precondition:pre("unavailable",1n)});
+    assert.equal(unavailable.status,503);
+    assert.equal(unavailable.body.code,"unavailable");
+    const detail=decodeFixtureDetail(DomainErrorDetailSchema,records(record(unavailable.body).details));
+    assert.equal(detail.commitOutcome,MutationCommitOutcome.UNCONFIRMED);
+    assert.equal(detail.domainCode,"SALES_COVERAGE_WRITE_FAILED");
+    assert.equal(detail.requestId,unavailable.headers.get("x-request-id"));
+    assert.deepEqual(await sql("SELECT state,version FROM crm_sales_account_assignment_records WHERE tenant=? AND id=?","tenant-a",accountId),before);
+    assert.equal((await sql("SELECT COUNT(*) n FROM fixture_unavailable_assignment_receipts WHERE tenant=?","tenant-a"))[0]?.n,count);
+    assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND action LIKE 'sales.account_assignment.%'",
+      "tenant-a",accountId))[0]?.n,auditCount);
+  }finally{await sql("ALTER TABLE fixture_unavailable_assignment_receipts RENAME TO crm_sales_account_assignment_receipts");}
    const archived=await fixtureRpc(dispatch,sales.updateSalesAccountAssignment,admin,{accountId,
      configuration:{...assignmentConfig,archived:true},precondition:pre("archive-assignment",1n)});
    assert.equal(archived.status,200,formatRpcFailure(archived));
@@ -106,8 +119,8 @@ export async function verifySalesCoverage({dispatch,sql,accountId,admin,viewer,t
      roster:{memberEmails:["native-a@example.test"]},precondition:pre("race-team")})).status,200);
    const raceConfig={name:"Coverage race "+suffix,defaultOwner:teamOwner};
    const [assigned,teamArchived]=await Promise.all([
-     raw(salesV2Path("CreateTerritory"),admin,binarySalesV2("CreateTerritory",{territoryId:raceTerritory,configuration:raceConfig,precondition:pre("race-territory")})),
-     raw(memberV2Path("UpdateTeam"),admin,binaryMemberV2("UpdateTeam",{teamId:raceTeam,active:false,precondition:pre("race-archive",1n)}))
+     dispatchFixtureRpc(dispatch,sales.createTerritory,admin,{territoryId:raceTerritory,configuration:raceConfig,precondition:pre("race-territory")}),
+     dispatchFixtureRpc(dispatch,member.updateTeam,admin,{teamId:raceTeam,active:false,precondition:pre("race-archive",1n)})
    ]);
    assert.equal(Number(assigned.status===200)+Number(teamArchived.status===200),1);
    if(assigned.status===200){

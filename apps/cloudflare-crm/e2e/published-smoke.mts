@@ -9,6 +9,7 @@ import type {Locator, Page, Route} from "playwright";
 import {string} from "../scripts/json-boundary.mts";
 import {waitForPublishedRpc} from "../scripts/release-readback.mts";
 import {captureBrowserRpcEvidence} from "../rust-party/test/rpc-browser-evidence.mts";
+import {safeBrowserFailure} from "../rust-party/test/browser-boundaries.mts";
 
 type Restore = () => Promise<void>;
 type SmokeOptions = {
@@ -90,6 +91,7 @@ export async function publishedSmoke({base,sourceSha,tenantA,adminIdentity,admin
       return;
     }
   };
+  let primaryFailure: Error|undefined;
   try {
     await open(page,"/#parties","Люди и организации");
     steps.push("signed-access");
@@ -226,15 +228,26 @@ export async function publishedSmoke({base,sourceSha,tenantA,adminIdentity,admin
     writeFileSync(resolve(directory,"published-smoke.json"),JSON.stringify(evidence,null,2)+"\n");
     return evidence;
   }catch(error){
-    await flushHeaders();
-    const {writeFileSync}=await import("node:fs");
-    const {resolve}=await import("node:path");
-    writeFileSync(resolve(directory,"failure.json"),JSON.stringify({
-      result:"FAIL",source_sha:sourceSha,error:error instanceof Error ? error.name : "UnknownError",steps,requests,writes
-    },null,2)+"\n");
-    await page.screenshot({path:resolve(directory,"failure.png"),fullPage:true}).catch(()=>{});
-    throw error;
+    primaryFailure=safeBrowserFailure(error,"published-smoke");
+    try {
+      await flushHeaders();
+      const {writeFileSync}=await import("node:fs");
+      const {resolve}=await import("node:path");
+      writeFileSync(resolve(directory,"failure.json"),JSON.stringify({
+        result:"FAIL",source_sha:sourceSha,error:primaryFailure.name,steps,requests,writes
+      },null,2)+"\n");
+      await page.screenshot({path:resolve(directory,"failure.png"),fullPage:true}).catch(()=>{});
+    } catch {
+      // Keep the primary failure if evidence collection itself fails.
+    }
+    throw primaryFailure;
   }finally{
-    try{await restoreViewer();}finally{await browser.close();}
+    let cleanupFailure: unknown;
+    try{await restoreViewer();}catch(error){cleanupFailure=error;}
+    try{await browser.close();}catch(error){cleanupFailure??=error;}
+    if(cleanupFailure!==undefined){
+      if(!primaryFailure) throw safeBrowserFailure(cleanupFailure,"published-smoke");
+      console.error("published-smoke cleanup failed after browser failure");
+    }
   }
 }

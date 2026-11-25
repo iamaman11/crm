@@ -1,6 +1,7 @@
 //! Typed Access Membership RPCs over the ORIGINAL native Access authority.
 //! This is only a signed staff roster, not a JS identity backend.
 use super::*;
+use crate::diagnostics;
 
 impl member_wire::MemberService for MemberV2Service {
     #[worker::send]
@@ -101,7 +102,13 @@ impl member_wire::MemberService for MemberV2Service {
             &self.request_id,
         )
         .await
-        .map_err(|_| ConnectError::unavailable("ACCESS_TEAM_WRITE_FAILED"))?
+        .map_err(|_| {
+            diagnostics::mutation_adapter_error(
+                "CreateTeam",
+                &self.request_id,
+                "ACCESS_TEAM_WRITE_FAILED",
+            )
+        })?
         .map_err(|e| e.connect("CreateTeam", &self.request_id))?;
         let receipt = team_receipt(&saved, &self.request_id);
         RpcResponse::ok(member_wire::CreateTeamResponse {
@@ -149,7 +156,13 @@ impl member_wire::MemberService for MemberV2Service {
             &self.request_id,
         )
         .await
-        .map_err(|_| ConnectError::unavailable("ACCESS_TEAM_WRITE_FAILED"))?
+        .map_err(|_| {
+            diagnostics::mutation_adapter_error(
+                "UpdateTeam",
+                &self.request_id,
+                "ACCESS_TEAM_WRITE_FAILED",
+            )
+        })?
         .map_err(|e| e.connect("UpdateTeam", &self.request_id))?;
         let receipt = team_receipt(&saved, &self.request_id);
         RpcResponse::ok(member_wire::UpdateTeamResponse {
@@ -264,7 +277,13 @@ impl member_wire::MemberService for MemberV2Service {
         };
         let saved = access_members::provision(&ctx, &input.email, role, &key, &self.request_id)
             .await
-            .map_err(|_| ConnectError::unavailable("ACCESS_MEMBER_WRITE_FAILED"))?
+            .map_err(|_| {
+                diagnostics::mutation_adapter_error(
+                    "ProvisionMember",
+                    &self.request_id,
+                    "ACCESS_MEMBER_WRITE_FAILED",
+                )
+            })?
             .map_err(|e| e.connect("ProvisionMember", &self.request_id))?;
         RpcResponse::ok(member_wire::ProvisionMemberResponse {
             member: Some(Self::wire(&saved.member)?).into(),
@@ -297,7 +316,13 @@ impl member_wire::MemberService for MemberV2Service {
             &self.request_id,
         )
         .await
-        .map_err(|_| ConnectError::unavailable("ACCESS_MEMBER_WRITE_FAILED"))?
+        .map_err(|_| {
+            diagnostics::mutation_adapter_error(
+                "UpdateMember",
+                &self.request_id,
+                "ACCESS_MEMBER_WRITE_FAILED",
+            )
+        })?
         .map_err(|e| e.connect("UpdateMember", &self.request_id))?;
         RpcResponse::ok(member_wire::UpdateMemberResponse {
             member: Some(Self::wire(&saved.member)?).into(),

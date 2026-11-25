@@ -2,9 +2,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { DealService } from "../../../../packages/client/gen/crm/sales/v2/deal_pb.js";
 import { TaskService } from "../../../../packages/client/gen/crm/activities/v2/task_pb.js";
-import { binaryMemberV2, memberV2Path, binarySalesV2, salesV2Path, binaryTaskV2, taskV2Path } from "../../../../packages/client/test/cloudflare-binary-rpc-fixture.ts";
+import { dispatchFixtureRpc, fixtureRpc, fixtureRpcError } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
 import { MemberService } from "../../../../packages/client/gen/crm/access/v2/member_pb.js";
-import { fixtureRpc, fixtureRpcError } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
 import type { RpcDispatch } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
 import { formatRpcFailure } from "../../scripts/rpc-error-response.mts";
 
@@ -20,10 +19,6 @@ type SalesOwnerFixture = {
 
 export async function verifySalesOwner({dispatch,sql,accountId,admin,viewer,tenantB,jwt}: SalesOwnerFixture) {
  const sales=DealService.method, member=MemberService.method, task=TaskService.method;
- const raw=(path: string,identity: string,body: Uint8Array) => dispatch(path,{
-   method:"POST",headers:{"content-type":"application/proto","connect-protocol-version":"1",
-     "cf-access-jwt-assertion":identity},body:new Uint8Array(body),
- });
    const salesTeam="sk07-sales-team-"+randomUUID();
    const salesTeamCreated=await fixtureRpc(dispatch,member.createTeam,admin,{
      teamId:salesTeam,name:"Sales owner QA "+salesTeam,roster:{memberEmails:["native-viewer@example.test"]},
@@ -110,8 +105,8 @@ export async function verifySalesOwner({dispatch,sql,accountId,admin,viewer,tena
    assert.equal((await fixtureRpc(dispatch,sales.createDeal,admin,input(lastDeal,lastOwner,"EUR",12500n))).status,200);
    const claim={taskId:lastTask,precondition:{expectedVersion:1n,idempotencyKey:"claim-"+suffix}};
    const [claimed,revoked]=await Promise.all([
-     raw(taskV2Path("ClaimTask"),lastJwt,binaryTaskV2("ClaimTask",claim)),
-     raw(memberV2Path("UpdateMember"),admin,binaryMemberV2("UpdateMember",deactivate))]);
+     dispatchFixtureRpc(dispatch,task.claimTask,lastJwt,claim),
+     dispatchFixtureRpc(dispatch,member.updateMember,admin,deactivate)]);
    assert.equal(claimed.status,200);
    assert.equal(revoked.status,409,"open Deal still requires an eligible human");
    assert.equal((await fixtureRpc(dispatch,task.completeTask,admin,{taskId:lastTask,
@@ -155,8 +150,8 @@ export async function verifySalesOwner({dispatch,sql,accountId,admin,viewer,tena
    const reopenRace={dealId:raceDeal,reasonCode:"qa.reopen",precondition:{expectedVersion:2n,idempotencyKey:"reopen-"+raceId}};
    const archiveRace={teamId:raceId,active:false,precondition:{expectedVersion:1n,idempotencyKey:"archive-"+raceId}};
    const [rr,ar]=await Promise.all([
-     raw(salesV2Path("ReopenDeal"),admin,binarySalesV2("ReopenDeal",reopenRace)),
-     raw(memberV2Path("UpdateTeam"),admin,binaryMemberV2("UpdateTeam",archiveRace))]);
+     dispatchFixtureRpc(dispatch,sales.reopenDeal,admin,reopenRace),
+     dispatchFixtureRpc(dispatch,member.updateTeam,admin,archiveRace)]);
    assert.equal(Number(rr.status===200)+Number(ar.status===200),1,"reopen and archive cannot both commit");
    assert.equal(rr.status===200?ar.status:rr.status,409);
    if(rr.status===200){

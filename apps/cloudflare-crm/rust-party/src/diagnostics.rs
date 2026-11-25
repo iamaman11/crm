@@ -10,6 +10,7 @@ use serde::Serialize;
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub(super) enum ReceiptUncertainty {
+    AdapterFailed,
     StorageUnavailable,
     #[serde(rename = "RECEIPT_READ_FAILED")]
     ReadFailed,
@@ -61,6 +62,24 @@ pub(super) enum MutationFailure {
         code: &'static str,
         reason: ReceiptUncertainty,
     },
+}
+
+// An outer adapter error does not establish the outcome of an earlier attempt
+// with the same key. Preserve the operation's safe code without guessing the
+// stage or reporting a rejection that would release the pending intent.
+pub(super) fn mutation_adapter_error(
+    operation: &'static str,
+    request_id: &str,
+    code: &'static str,
+) -> ConnectError {
+    mutation_error(
+        operation,
+        request_id,
+        MutationFailure::CommitUnconfirmed {
+            code,
+            reason: ReceiptUncertainty::AdapterFailed,
+        },
+    )
 }
 
 #[derive(Clone, Copy, Serialize)]

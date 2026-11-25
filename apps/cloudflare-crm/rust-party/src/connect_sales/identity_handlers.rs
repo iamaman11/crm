@@ -1,6 +1,7 @@
 //! Generated Connect trait for the existing IdentityV2Service Rust domain owner.
 //! Access, tenant, and the single native router are defined by the parent.
 use super::*;
+use crate::diagnostics;
 
 impl IdentityV2Service {
     fn d1(&self) -> std::result::Result<D1Database, ConnectError> {
@@ -179,7 +180,13 @@ impl identity_wire::IdentityResolutionService for IdentityV2Service {
             &self.request_id,
         )
         .await
-        .map_err(|_| ConnectError::unavailable("IDENTITY_MERGE_WRITE_UNAVAILABLE"))?
+        .map_err(|_| {
+            diagnostics::mutation_adapter_error(
+                "MergeParty",
+                &self.request_id,
+                "IDENTITY_MERGE_WRITE_UNAVAILABLE",
+            )
+        })?
         .map_err(|failure| failure.connect("MergeParty", &self.request_id))?;
         RpcResponse::ok(identity_wire::MergePartyResponse {
             operation: Some(Self::merge_wire(&committed.operation)).into(),
@@ -222,7 +229,13 @@ impl identity_wire::IdentityResolutionService for IdentityV2Service {
             &self.request_id,
         )
         .await
-        .map_err(|_| ConnectError::unavailable("IDENTITY_UNMERGE_WRITE_UNAVAILABLE"))?
+        .map_err(|_| {
+            diagnostics::mutation_adapter_error(
+                "UnmergeParty",
+                &self.request_id,
+                "IDENTITY_UNMERGE_WRITE_UNAVAILABLE",
+            )
+        })?
         .map_err(|failure| failure.connect("UnmergeParty", &self.request_id))?;
         RpcResponse::ok(identity_wire::UnmergePartyResponse {
             operation: Some(Self::merge_wire(&committed.operation)).into(),

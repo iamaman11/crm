@@ -4,8 +4,8 @@ import { AutomationService } from "../../../../packages/client/gen/crm/activitie
 import { InteractionService } from "../../../../packages/client/gen/crm/activities/v2/interaction_pb.js";
 import { TaskService } from "../../../../packages/client/gen/crm/activities/v2/task_pb.js";
 import { MemberService } from "../../../../packages/client/gen/crm/access/v2/member_pb.js";
-import { binaryAutomationV2, decodeAutomationV2 } from "../../../../packages/client/test/cloudflare-binary-rpc-fixture.ts";
-import { fixtureRpc, fixtureRpcError, fixtureRpcPath } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
+import { decodeAutomationV2 } from "../../../../packages/client/test/cloudflare-binary-rpc-fixture.ts";
+import { dispatchFixtureRpc, fixtureRpc, fixtureRpcError } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
 import type { RpcDispatch } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
 import { formatRpcFailure } from "../../scripts/rpc-error-response.mts";
 
@@ -68,10 +68,7 @@ export async function verifyAutomation({dispatch,sql,accountId,admin,viewer,tena
    const runInput=(id: string,keyLabel: string)=>({ruleId,interactionId:id,
      expectedRuleVersion:1n,precondition:rkey(keyLabel)});
    const runRace=async(input: ReturnType<typeof runInput>)=>{
-     const response=await dispatch(fixtureRpcPath(automation.runInteractionAutomation),{
-       method:"POST",headers:{"content-type":"application/proto","connect-protocol-version":"1","cf-access-jwt-assertion":admin},
-       body:new Uint8Array(binaryAutomationV2("RunInteractionAutomation",input))
-     });
+     const response=await dispatchFixtureRpc(dispatch,automation.runInteractionAutomation,admin,input);
      const bytes=new Uint8Array(await response.arrayBuffer());
      if(response.status<400) decodeAutomationV2("RunInteractionAutomation",bytes);
      return {status:response.status};

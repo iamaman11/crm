@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { DealService } from "../../../../packages/client/gen/crm/sales/v2/deal_pb.js";
+import { DealService, OpportunityTeamRole } from "../../../../packages/client/gen/crm/sales/v2/deal_pb.js";
 import { MemberService } from "../../../../packages/client/gen/crm/access/v2/member_pb.js";
 import { TaskService } from "../../../../packages/client/gen/crm/activities/v2/task_pb.js";
-import { binarySalesV2, binaryMemberV2, binaryTaskV2, decodeSalesV2, decodeMemberV2, decodeTaskV2 } from "../../../../packages/client/test/cloudflare-binary-rpc-fixture.ts";
-import { fixtureRpc, fixtureRpcError, fixtureRpcPath } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
+import { dispatchFixtureRpc, fixtureRpc, fixtureRpcError } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
+import { decodeSalesV2, decodeMemberV2, decodeTaskV2 } from "../../../../packages/client/test/cloudflare-binary-rpc-fixture.ts";
 import type { RpcDispatch } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
 import { record } from "../../scripts/json-boundary.mts";
 import { formatRpcFailure } from "../../scripts/rpc-error-response.mts";
@@ -19,8 +19,8 @@ export async function verifyLifecycle({dispatch,sql,jwt,accountId,admin,viewer,t
  const sales=DealService.method;
  const member=MemberService.method;
  const task=TaskService.method;
- const dispatchRace=async<T,>(method: Parameters<typeof fixtureRpcPath>[0], token: string, body: Uint8Array, decode: (bytes: Uint8Array)=>T)=>{
-   const response=await dispatch(fixtureRpcPath(method),{method:"POST",headers:{"content-type":"application/proto","connect-protocol-version":"1","cf-access-jwt-assertion":token},body:new Uint8Array(body)});
+ const dispatchRace=async<T,>(send: ()=>ReturnType<typeof dispatchFixtureRpc>, decode:(bytes:Uint8Array)=>T)=>{
+   const response=await send();
    const bytes=new Uint8Array(await response.arrayBuffer());
    if(response.status>=400){const error: unknown=JSON.parse(new TextDecoder().decode(bytes)); assert.ok(typeof record(error).code==="string"); return {status:response.status,headers:response.headers,body:undefined};}
    return {status:response.status,headers:response.headers,body:decode(bytes)};
@@ -38,9 +38,9 @@ export async function verifyLifecycle({dispatch,sql,jwt,accountId,admin,viewer,t
    const deal=await fixtureRpc(dispatch,sales.createDeal,admin,{dealId:id,name:"Opportunity QA",accountId,
      stage:{pipelineId:pid,stageId:"lead"},precondition:pre("deal")});
    assert.equal(deal.status,200,formatRpcFailure(deal));
-   const grant=(role: number | undefined,version: bigint,key: string)=>({dealId:id,email,...(role===undefined?{}:{role}),precondition:pre(key,version)});
+   const grant=(role: OpportunityTeamRole | undefined,version: bigint,key: string)=>({dealId:id,email,...(role===undefined?{}:{role}),precondition:pre(key,version)});
    const update=(version: bigint,key: string)=>({dealId:id,name:{operation:{case:"set" as const,value:"Opportunity "+key}},precondition:pre(key,version)});
-   const lead=await fixtureRpc(dispatch,sales.setOpportunityParticipant,admin,grant(3,1n,"lead"));
+   const lead=await fixtureRpc(dispatch,sales.setOpportunityParticipant,admin,grant(OpportunityTeamRole.LEAD,1n,"lead"));
    assert.equal(lead.status,200,formatRpcFailure(lead));
    assert.equal(lead.body.deal?.opportunityTeam[0]?.memberVersion,1n);
    const advance={dealId:id,targetStage:{pipelineId:pid,stageId:"qualified"},targetStatus:1,precondition:pre("move",2n)};
@@ -57,12 +57,12 @@ export async function verifyLifecycle({dispatch,sql,jwt,accountId,admin,viewer,t
    assert.equal((await fixtureRpc(dispatch,member.updateMember,admin,{email,active:true,precondition:pre("reactivate",2n)})).status,200);
    assert.equal((await fixtureRpc(dispatch,sales.getDeal,token,{dealId:id})).body.capabilities?.edit,false);
    assert.equal((await fixtureRpcError(dispatch,sales.updateDeal,token,update(3n,"stale-grant"))).status,403);
-   const renewed=await fixtureRpc(dispatch,sales.setOpportunityParticipant,admin,grant(3,3n,"renew"));
+   const renewed=await fixtureRpc(dispatch,sales.setOpportunityParticipant,admin,grant(OpportunityTeamRole.LEAD,3n,"renew"));
    assert.equal(renewed.status,200,formatRpcFailure(renewed));
    assert.equal(renewed.body.deal?.opportunityTeam[0]?.memberVersion,3n);
    const [revoke,write]=await Promise.all([
-     dispatchRace(sales.setOpportunityParticipant,admin,binarySalesV2("SetOpportunityParticipant",grant(undefined,4n,"revoke")),bytes=>decodeSalesV2("SetOpportunityParticipant",bytes)),
-     dispatchRace(sales.updateDeal,token,binarySalesV2("UpdateDeal",update(4n,"race")),bytes=>decodeSalesV2("UpdateDeal",bytes))
+     dispatchRace(()=>dispatchFixtureRpc(dispatch,sales.setOpportunityParticipant,admin,grant(undefined,4n,"revoke")),bytes=>decodeSalesV2("SetOpportunityParticipant",bytes)),
+     dispatchRace(()=>dispatchFixtureRpc(dispatch,sales.updateDeal,token,update(4n,"race")),bytes=>decodeSalesV2("UpdateDeal",bytes))
    ]);
    assert.equal([revoke,write].filter(r=>r.status===200).length,1);
    assert.ok([403,409].includes((revoke.status===200?write:revoke).status));
@@ -164,7 +164,10 @@ export async function verifyLifecycle({dispatch,sql,jwt,accountId,admin,viewer,t
    {const distribution=(await fixtureRpc(dispatch,task.getTask,lead,{taskId:taskRace})).body.teamDistribution;
     assert.ok(distribution?.scope); scope=distribution.scope;}
    const revoke={teamId:tid,queueCoordinator:{email:leadEmail,enabled:false},precondition:pre("revoke",8n)};
-   const [removed,race]=await Promise.all([dispatchRace(member.updateTeam,admin,binaryMemberV2("UpdateTeam",revoke),bytes=>decodeMemberV2("UpdateTeam",bytes)),dispatchRace(task.updateTask,lead,binaryTaskV2("UpdateTask",taskMove(taskRace,"race")),bytes=>decodeTaskV2("UpdateTask",bytes))]);
+   const [removed,race]=await Promise.all([
+     dispatchRace(()=>dispatchFixtureRpc(dispatch,member.updateTeam,admin,revoke),bytes=>decodeMemberV2("UpdateTeam",bytes)),
+     dispatchRace(()=>dispatchFixtureRpc(dispatch,task.updateTask,lead,taskMove(taskRace,"race")),bytes=>decodeTaskV2("UpdateTask",bytes))
+   ]);
    assert.equal(removed.status,200,formatRpcFailure(removed));
    assert.ok([200,403,409].includes(race.status),formatRpcFailure(race));
    assert.equal((await fixtureRpcError(dispatch,task.updateTask,lead,command)).status,403);

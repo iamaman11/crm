@@ -11,7 +11,7 @@ import {readFile} from "node:fs/promises";
 import {fileURLToPath} from "node:url";
 import {installUiDiagnostics,assertUiPanel} from "./ui-diagnostics.mts";
 import {captureBrowserRpcEvidence} from "./rpc-browser-evidence.mts";
-import {browserFirstId,matchesRpcPath} from "./browser-boundaries.mts";
+import {browserFirstId,matchesRpcPath,safeBrowserFailure} from "./browser-boundaries.mts";
 import {browserRecovery} from "./browser-recovery.mts";
 import {verifyBrowserMobile} from "./browser-mobile.mts";
 import {verifyBrowserAutomation} from "./browser-automation.mts";
@@ -269,6 +269,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
  },key));
  const runId=Date.now().toString();
  let partyId: string,accountId: string;
+ let primaryFailure: Error|undefined;
  try {
    await navigate("parties","Люди и организации");
    // Use only synthetic markers; signed browser sends a real Cookie and a
@@ -3337,27 +3338,38 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    writeFileSync(resolve(directory,"typed-browser.json"),JSON.stringify(evidence,null,2)+"\n");
    return evidence;
  } catch(error) {
-   await flushHeaderReads();
-   const navigation=await page.evaluate(()=>{
-     const field=Array.from(document.querySelectorAll("label"))
-       .find(label=>label.textContent?.trim()==="Статус клиента");
-     const select=field?document.getElementById(field.htmlFor):null;
-     const route=document.querySelector("[data-crm-route-kind]");
-     return {hash:window.location.hash,
-       document_url:new URL(window.location.href).pathname+window.location.hash,
-       navigation_type:performance.getEntriesByType("navigation").filter(entry=>entry instanceof PerformanceNavigationTiming).at(-1)?.type??null,
-       history_length:history.length,
-       history_state:window.history.state,
-       rendered_kind:route?.getAttribute("data-crm-route-kind")??null,
-       rendered_account_status:route?.getAttribute("data-crm-account-status")??null,
-       select_status:select instanceof HTMLSelectElement?select.value:null,
-       events:window.__crmRouteEvents?.slice(-60)??[]};
-   }).catch(e=>({capture_error:String(e)}));
-   writeFileSync(resolve(directory,"failure.json"),JSON.stringify({result:"FAIL",source_sha:sourceSha,
-     error:error instanceof Error?error.name:"UnknownError",navigation,steps,requests,writes},null,2)+"\n");
-   await page.screenshot({path:resolve(directory,"failure.png"),fullPage:true}).catch(()=>{});
-   throw error;
+   primaryFailure=safeBrowserFailure(error,"typed-browser");
+   try {
+     await flushHeaderReads();
+     const navigation=await page.evaluate(()=>{
+       const field=Array.from(document.querySelectorAll("label"))
+         .find(label=>label.textContent?.trim()==="Статус клиента");
+       const select=field?document.getElementById(field.htmlFor):null;
+       const route=document.querySelector("[data-crm-route-kind]");
+       return {hash:window.location.hash,
+         document_url:new URL(window.location.href).pathname+window.location.hash,
+         navigation_type:performance.getEntriesByType("navigation").filter(entry=>entry instanceof PerformanceNavigationTiming).at(-1)?.type??null,
+         history_length:history.length,
+         history_state:window.history.state,
+         rendered_kind:route?.getAttribute("data-crm-route-kind")??null,
+         rendered_account_status:route?.getAttribute("data-crm-account-status")??null,
+         select_status:select instanceof HTMLSelectElement?select.value:null,
+         events:window.__crmRouteEvents?.slice(-60)??[]};
+     }).catch(e=>({capture_error:e instanceof Error?e.name:"UnknownError"}));
+     writeFileSync(resolve(directory,"failure.json"),JSON.stringify({result:"FAIL",source_sha:sourceSha,
+       error:primaryFailure.name,navigation,steps,requests,writes},null,2)+"\n");
+     await page.screenshot({path:resolve(directory,"failure.png"),fullPage:true}).catch(()=>{});
+   } catch {
+     // Evidence failures must not replace the original browser failure.
+   }
+   throw primaryFailure;
  } finally {
-   try {await restoreViewer();}finally{await browser.close();}
+   let cleanupFailure: unknown;
+   try {await restoreViewer();}catch(error){cleanupFailure=error;}
+   try {await browser.close();}catch(error){cleanupFailure??=error;}
+   if(cleanupFailure!==undefined){
+     if(!primaryFailure) throw safeBrowserFailure(cleanupFailure,"typed-browser");
+     console.error("typed-browser cleanup failed after browser failure");
+   }
  }
 }

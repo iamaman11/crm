@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { MemberService } from "../../../../packages/client/gen/crm/access/v2/member_pb.js";
-import { TaskService } from "../../../../packages/client/gen/crm/activities/v2/task_pb.js";
+import { TaskPriority, TaskService } from "../../../../packages/client/gen/crm/activities/v2/task_pb.js";
 import { DomainErrorDetailSchema, MutationCommitOutcome } from "../../../../packages/client/gen/crm/core/v2/operation_pb.js";
-import { binaryMemberV2, binaryTaskV2, decodeMemberV2, decodeTaskV2 } from "../../../../packages/client/test/cloudflare-binary-rpc-fixture.ts";
-import { decodeFixtureDetail, fixtureRpc, fixtureRpcError, fixtureRpcPath } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
+import { decodeFixtureDetail, dispatchFixtureRpc, fixtureRpc, fixtureRpcError } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
+import { decodeMemberV2, decodeTaskV2 } from "../../../../packages/client/test/cloudflare-binary-rpc-fixture.ts";
 import type { RpcDispatch } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
 import { record, records } from "../../scripts/json-boundary.mts";
 import { formatRpcFailure } from "../../scripts/rpc-error-response.mts";
@@ -18,8 +18,8 @@ type WorkforceFixture = {
 export async function verifyWorkforce({dispatch,sql,jwt,accountId,admin,viewer,tenantB,knownService}: WorkforceFixture) {
  const member=MemberService.method;
  const task=TaskService.method;
- const race=async<T,>(method: Parameters<typeof fixtureRpcPath>[0], token: string, body: Uint8Array, decode: (bytes: Uint8Array)=>T)=>{
-   const response=await dispatch(fixtureRpcPath(method),{method:"POST",headers:{"content-type":"application/proto","connect-protocol-version":"1","cf-access-jwt-assertion":token},body:new Uint8Array(body)});
+ const race=async<T,>(send: ()=>ReturnType<typeof dispatchFixtureRpc>, decode:(bytes:Uint8Array)=>T)=>{
+   const response=await send();
    const bytes=new Uint8Array(await response.arrayBuffer());
    if(response.status>=400){
      const error: unknown=JSON.parse(new TextDecoder().decode(bytes));
@@ -192,7 +192,7 @@ export async function verifyWorkforce({dispatch,sql,jwt,accountId,admin,viewer,t
  const raceCreateId="sk07-race-create-"+randomUUID();
  const raceUpdateId="sk07-race-update-"+randomUUID();
  const raceBase=await fixtureRpc(dispatch,task.createTask,admin,{
-   taskId:raceUpdateId,accountId,subject:"SK07 race reassignment base",priority:2,
+   taskId:raceUpdateId,accountId,subject:"SK07 race reassignment base",priority:TaskPriority.NORMAL,
    precondition:{idempotencyKey:"sk07-race-base-"+raceUpdateId}
  });
  assert.equal(raceBase.status,200,formatRpcFailure(raceBase));
@@ -201,9 +201,9 @@ export async function verifyWorkforce({dispatch,sql,jwt,accountId,admin,viewer,t
  const raceUpdate={taskId:raceUpdateId,assigneeEmail:assignee,
    precondition:{expectedVersion:1n,idempotencyKey:"sk07-race-assign-"+raceUpdateId}};
  const [createRace,updateRace,deactivate]=await Promise.all([
-   race(task.createTask,admin,binaryTaskV2("CreateTask",raceCreate),bytes=>decodeTaskV2("CreateTask",bytes)),
-   race(task.updateTask,admin,binaryTaskV2("UpdateTask",raceUpdate),bytes=>decodeTaskV2("UpdateTask",bytes)),
-   race(member.updateMember,admin,binaryMemberV2("UpdateMember",{email:assignee,active:false, precondition:{idempotencyKey:"sk07-member-deactivate",expectedVersion:2n}}),bytes=>decodeMemberV2("UpdateMember",bytes))
+   race(()=>dispatchFixtureRpc(dispatch,task.createTask,admin,raceCreate),bytes=>decodeTaskV2("CreateTask",bytes)),
+   race(()=>dispatchFixtureRpc(dispatch,task.updateTask,admin,raceUpdate),bytes=>decodeTaskV2("UpdateTask",bytes)),
+   race(()=>dispatchFixtureRpc(dispatch,member.updateMember,admin,{email:assignee,active:false, precondition:{idempotencyKey:"sk07-member-deactivate",expectedVersion:2n}}),bytes=>decodeMemberV2("UpdateMember",bytes))
  ]);
  assert.equal(deactivate.status,200,formatRpcFailure(deactivate));
  assert.ok(deactivate.body?.receipt);
@@ -291,7 +291,10 @@ export async function verifyWorkforce({dispatch,sql,jwt,accountId,admin,viewer,t
  assert.equal((await fixtureRpcError(dispatch,task.claimTask,knownService,claim)).status,403);
  assert.equal((await fixtureRpcError(dispatch,task.claimTask,tenantB,claim)).status,404);
  const claimOther={...claim,precondition:{...claim.precondition,idempotencyKey:"sk07-other-claim-"+poolId}};
- const claimResults=await Promise.all([race(task.claimTask,viewer,binaryTaskV2("ClaimTask",claim),bytes=>decodeTaskV2("ClaimTask",bytes)),race(task.claimTask,admin,binaryTaskV2("ClaimTask",claimOther),bytes=>decodeTaskV2("ClaimTask",bytes))]);
+ const claimResults=await Promise.all([
+   race(()=>dispatchFixtureRpc(dispatch,task.claimTask,viewer,claim),bytes=>decodeTaskV2("ClaimTask",bytes)),
+   race(()=>dispatchFixtureRpc(dispatch,task.claimTask,admin,claimOther),bytes=>decodeTaskV2("ClaimTask",bytes))
+ ]);
  assert.deepEqual(claimResults.map(r=>r.status).sort(),[200,409]);
  const claimWinner=claimResults[0].status===200?viewer:admin;
  const wonInput=claimResults[0].status===200?claim:claimOther;
@@ -330,7 +333,8 @@ export async function verifyWorkforce({dispatch,sql,jwt,accountId,admin,viewer,t
    const remove={teamId:id,roster:{memberEmails:["native-a@example.test"]},
      precondition:{expectedVersion:2n,idempotencyKey:"remove-"+id}};
    const [claim,removed]=await Promise.all([
-     race(task.claimTask,viewer,binaryTaskV2("ClaimTask",attempt),bytes=>decodeTaskV2("ClaimTask",bytes)),race(member.updateTeam,admin,binaryMemberV2("UpdateTeam",remove),bytes=>decodeMemberV2("UpdateTeam",bytes))
+     race(()=>dispatchFixtureRpc(dispatch,task.claimTask,viewer,attempt),bytes=>decodeTaskV2("ClaimTask",bytes)),
+     race(()=>dispatchFixtureRpc(dispatch,member.updateTeam,admin,remove),bytes=>decodeMemberV2("UpdateTeam",bytes))
    ]);
    assert.equal(removed.status,200,formatRpcFailure(removed));
    assert.ok([200,403,409].includes(claim.status),formatRpcFailure(claim));
@@ -356,10 +360,13 @@ export async function verifyWorkforce({dispatch,sql,jwt,accountId,admin,viewer,t
      precondition:{idempotencyKey:"create-"+raceTeam}};
    assert.equal((await fixtureRpc(dispatch,member.createTeam,admin,raceCreate)).status,200);
    const raceTask="sk07-assignment-task-"+randomUUID();
-   const raceInput={taskId:raceTask,accountId,subject:"Assignment archive QA",priority:2,
+   const raceInput={taskId:raceTask,accountId,subject:"Assignment archive QA",priority:TaskPriority.NORMAL,
      owner:{owner:{case:"teamId" as const,value:raceTeam}},precondition:{idempotencyKey:"create-"+raceTask}};
    const archive={teamId:raceTeam,active:false,precondition:{expectedVersion:1n,idempotencyKey:"archive-"+raceTeam}};
-   const [assigned,archived]=await Promise.all([race(task.createTask,admin,binaryTaskV2("CreateTask",raceInput),bytes=>decodeTaskV2("CreateTask",bytes)),race(member.updateTeam,admin,binaryMemberV2("UpdateTeam",archive),bytes=>decodeMemberV2("UpdateTeam",bytes))]);
+   const [assigned,archived]=await Promise.all([
+     race(()=>dispatchFixtureRpc(dispatch,task.createTask,admin,raceInput),bytes=>decodeTaskV2("CreateTask",bytes)),
+     race(()=>dispatchFixtureRpc(dispatch,member.updateTeam,admin,archive),bytes=>decodeMemberV2("UpdateTeam",bytes))
+   ]);
    assert.equal(Number(assigned.status===200)+Number(archived.status===200),1,
      "assignment and archive cannot both commit");
    if(assigned.status===200){
