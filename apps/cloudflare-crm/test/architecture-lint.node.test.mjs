@@ -84,7 +84,7 @@ test("TypeScript itself rejects disabled strict compiler options",()=>{
   const path=join(directory,"tsconfig.json");
   function verify(options){
    writeFileSync(path,JSON.stringify({extends:"../tsconfig.json",compilerOptions:options})+"\n");
-   const result=spawnSync(process.execPath,["apps/cloudflare-crm/scripts/check-web.mjs","--verify-tsconfig",path],{
+   const result=spawnSync(process.execPath,["apps/cloudflare-crm/scripts/check-web.mts","--verify-tsconfig",path],{
     cwd:root,encoding:"utf8",timeout:30000,
    });
    if(result.error)throw result.error;
@@ -104,4 +104,15 @@ test("TypeScript itself rejects disabled strict compiler options",()=>{
  }finally{
   rmSync(directory,{recursive:true,force:true});
  }
+});
+
+
+test("native Node discovery rejects an empty scope before execution",()=>{
+ const result=spawnSync(process.execPath,["apps/cloudflare-crm/scripts/check-web.mts","--node-tests",
+   "scripts/crm-*.test.mjs","apps/cloudflare-crm/__missing_test_scope__/*.node.test.mjs"],{
+    cwd:root,encoding:"utf8",timeout:30000,
+ });
+ if(result.error)throw result.error;
+ assert.notEqual(result.status,0);
+ assert.ok(result.stderr.includes("CRM_TEST_SCOPE_EMPTY"),result.stderr);
 });
