@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import {captureBrowserRpcEvidence} from "../rust-party/test/rpc-browser-evidence.mts";
 import {readFileSync} from "node:fs";
 import {validateWorkerConfig,validateNativeFixtureSource} from "../scripts/architecture-gate.mjs";
 const config=JSON.parse(readFileSync(new URL("../wrangler.jsonc",import.meta.url),"utf8"));
@@ -30,4 +31,30 @@ test("active D1 fixtures cannot use an independent SQLite connection",()=>{
 test("native integration must never use the production D1 database",()=>{
  assert.throws(()=>validateWorkerConfig(config,{...local,d1_databases:config.d1_databases}),/isolated test D1/);
  assert.throws(()=>validateWorkerConfig(config,{...local,main:"./fixture-worker.js"}),/built Rust Worker/);
+});
+
+test("browser evidence survives teardown only with a complete correlation snapshot", async () => {
+ const source="0123456789abcdef0123456789abcdef01234567";
+ const headers={
+   "x-crm-source-sha":source,
+   "x-crm-runtime":"native-workers-rs",
+   "x-request-id":"561679ff-b6e2-4c5b-bdf4-428278f2e547",
+   "x-crm-error-code":"permission_denied",
+ };
+ const response={
+   url:()=>"https://example.test/crm.parties.v3.PartyService/CreateParty",
+   status:()=>403,
+   headers:()=>headers,
+   allHeaders:async()=>{throw Error("Context closed");},
+ };
+ const complete=captureBrowserRpcEvidence();
+ complete.recordResponse(response);
+ await complete.flushHeaderReads();
+ complete.assertSource(source);
+ assert.equal(complete.requests[0].error_code,"permission_denied");
+
+ const incomplete=captureBrowserRpcEvidence();
+ incomplete.recordResponse({...response,headers:()=>({"x-crm-source-sha":source})});
+ await incomplete.flushHeaderReads();
+ assert.throws(()=>incomplete.assertSource(source),/Complete browser correlation evidence is required/);
 });

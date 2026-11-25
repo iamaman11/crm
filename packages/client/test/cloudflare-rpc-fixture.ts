@@ -58,3 +58,23 @@ export function decodeFixtureDetail<M extends DescMessage>(
   assert.ok(typeof detail?.value === "string", "Missing binary Connect error detail");
   return fromBinary(schema, Buffer.from(detail.value, "base64"));
 }
+
+export async function collectFixturePages<T>(
+  read: (pageToken: string) => Promise<{ items: readonly T[]; nextPageToken: string | undefined }>,
+): Promise<T[]> {
+  const items: T[] = [];
+  const seen = new Set<string>();
+  let token = "";
+  for (let index = 0; index < 256; index++) {
+    const page = await read(token);
+    assert.ok(page.items.length <= 1, "page_size=1 must bound the filtered result");
+    items.push(...page.items);
+    const next = page.nextPageToken;
+    if (!next) return items;
+    assert.equal(page.items.length, 1, "filtered cursor skipped a matching row");
+    assert.ok(!seen.has(next), "cursor cycle in filtered pagination");
+    seen.add(next);
+    token = next;
+  }
+  throw new Error("Filtered pagination never reached its last page");
+}

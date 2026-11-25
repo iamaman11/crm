@@ -11,6 +11,7 @@ import {createFixtureDeal,dealCreationInput,updateFixtureDeal,dealUpdateInput} f
 import {formatRpcFailure,readRpcError} from "../../scripts/rpc-error-response.mts";
 import {verifyPartyNameQuality} from "./data-quality.mts";
 import {verifyIdentityResolution} from "./identity-resolution.mts";
+import {verifyAccountOverview,verifyOverviewReadParity} from "./account-overview.mts";
 import {chromium} from "playwright";
 import {typedBrowser} from "./typed-browser.mjs";
 import {installUiDiagnostics,assertUiPanel} from "./ui-diagnostics.mts";
@@ -27,7 +28,7 @@ import {binaryPartyV3,decodePartyV3,partyV3Path,
   binaryPrivacyV2,decodePrivacyV2,privacyV2Path,
   binaryEnrichmentV2,decodeEnrichmentV2,enrichmentV2Path,
   binaryCsvV2,decodeCsvV2,csvV2Path,
-  binaryOverviewV2,decodeOverviewV2,overviewV2Path,decodeDomainErrorDetail,decodeRpcOutput} from "../../../../scripts/crm-connect-binary-fixture.mjs";
+  decodeDomainErrorDetail,decodeRpcOutput} from "../../../../scripts/crm-connect-binary-fixture.mjs";
 // Each native subtest owns its own harness, fixture D1, signed identity and evidence.
 // The first subtest returns only the compiled policy/denial proof; the second
 // starts clean and requires the same compiled inventory before sealing evidence.
@@ -3902,64 +3903,10 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    page_bounds:true,d1_audit:true,timestamp_precision:true,provider_execution:"NOT_CONNECTED"}));
 
 
- // Account-rooted composition uses the original owner values and never writes.
- const overviewCall=signedReadOnly(overviewV2Path,binaryOverviewV2,decodeOverviewV2);
- const overviewAudit=(await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n;
- assert.equal((await overviewCall("GetAccountOverview",tenantB,{accountId})).body.code,"not_found");
- assert.equal((await overviewCall("GetAccountOverview",viewer,{accountId:"bad/id"})).body.code,"invalid_argument");
- assert.equal((await overviewCall("GetAccountOverview",viewer,{accountId:"missing-account"})).body.code,"not_found");
- const overviewResult=await overviewCall("GetAccountOverview",viewer,{accountId});
- assert.equal(overviewResult.status,200,formatRpcFailure(overviewResult));
- const card=overviewResult.body.overview;
- assert.equal(card.account.accountId,accountId);
- assert.equal(card.primaryParty.partyId,id);
- assert.equal(card.perCollectionLimit,100);
- assert.equal(card.truncated.contactPoints,false);
- assert.equal(card.truncated.relationships,false);
- assert.equal(card.truncated.deals,false);
- assert.equal(card.truncated.tasks,false);
- assert.deepEqual(card.primaryParty,(await v3("GetParty",viewer,{partyId:id})).body.party);
- assert.deepEqual(card.contactPoints,await collectPages(contactV2,"ListContactPoints","contactPoints",{partyId:id}));
- assert.deepEqual(card.relationships,await collectPages(relationV2,"ListPartyRelationships","relationships",{partyId:id}));
- assert.deepEqual(card.deals,(await collectPages(salesV2,"ListDeals","deals")).filter(item=>item.accountId===accountId));
- assert.deepEqual(card.tasks,await collectPages(taskV2,"ListTasks","tasks",{accountId}));
- assert.ok(card.contactPoints.some(item=>item.contactPointId===contactId));
- assert.ok(card.relationships.some(item=>item.relationshipId===rMid));
- assert.ok(card.deals.some(item=>item.dealId===dealId));
- assert.ok(card.tasks.some(item=>item.taskId===taskMid));
- assert.ok(card.tasks.every(item=>item.taskId!==taskOther));
- assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n,overviewAudit);
- // Sales-created tasks retain their original Deal reference, and their D1 Account.
- const linkedTaskId=(await sql("SELECT task_id FROM crm_sales_link_delivery_records WHERE tenant='tenant-a' AND deal_id='"+
-   dealId+"' AND task_id IS NOT NULL ORDER BY task_id LIMIT 1"))[0]?.task_id;
- assert.ok(linkedTaskId,"Sales fixture must create a linked Task");
- const linkedTask=await taskV2("GetTask",viewer,{taskId:linkedTaskId});
- assert.equal(linkedTask.status,200,formatRpcFailure(linkedTask));
- assert.equal(linkedTask.body.task.accountId,accountId);
- assert.ok(card.tasks.some(task=>task.taskId===linkedTaskId));
- assert.equal((await taskV2("GetTask",tenantB,{taskId:linkedTaskId})).status,404);
- const completeLinked=await taskV2("CompleteTask",admin,{taskId:linkedTaskId,
-   precondition:{idempotencyKey:"overview-linked-task-complete",expectedVersion:linkedTask.body.task.version}});
- assert.equal(completeLinked.status,200,formatRpcFailure(completeLinked));
- assert.equal(completeLinked.body.task.accountId,accountId);
- assert.equal(completeLinked.body.task.status,2);
- // Exercise the composition bound with real original ContactPoint mutations.
- for(let index=0;index<101-card.contactPoints.length;index++){
-   const created=await contactV2("CreateContactPoint",admin,{
-     contactPointId:"overview-boundary-"+String(index).padStart(3,"0"),partyId:id,kind:1,
-     value:"overview-"+index+"@example.org",
-     precondition:{idempotencyKey:"overview-contact-"+String(index).padStart(3,"0")}});
-   assert.equal(created.status,200,formatRpcFailure(created));
- }
- const boundedAudit=(await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n;
- const boundedCard=(await overviewCall("GetAccountOverview",viewer,{accountId})).body.overview;
- assert.equal(boundedCard.contactPoints.length,100);
- assert.equal(boundedCard.truncated.contactPoints,true);
- assert.equal(boundedCard.truncated.tasks,false);
- assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n,boundedAudit);
- console.log(JSON.stringify({event:"crm.native-account-overview-v2",result:"PASS",
-   owner:"crm.customer360",account_rooted:true,original_owners:true,
-   tenant_ab:true,read_only:true,bounded:true}));
+ const {linkedTaskId}=await verifyAccountOverview({
+   dispatch:rpcFetch,sql,admin,viewer,tenantB,accountId,partyId:id,contactId,
+   relationshipId:rMid,dealId,taskId:taskMid,otherTaskId:taskOther,
+ });
  // CSV operations use the original parser/Party owner, explicit admin permissions,
  // atomic D1 writes and a per-operation receipt in that same database.
  const csv=signedReadOnly(csvV2Path,binaryCsvV2,decodeCsvV2);
@@ -4241,8 +4188,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    ["ContactPoint",contactV2,"GetContactPoint",{contactPointId:contactId},"contactPoint"],
    ["Relationship",relationV2,"GetPartyRelationship",{relationshipId:rMid},"relationship"],
    ["Deal",salesV2,"GetDeal",{dealId},"deal"],
-   ["Task",taskV2,"GetTask",{taskId:linkedTaskId},"task"],
-   ["Customer360",overviewCall,"GetAccountOverview",{accountId},"overview"]
+   ["Task",taskV2,"GetTask",{taskId:linkedTaskId},"task"]
  ];
  const m1ReadValues=new Map();
  for(const [label,call,method,payload,field] of m1FullReads){
@@ -4257,6 +4203,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    assert.equal((await call(method,tenantB,payload)).status,404,
      label+" must not reveal a cross-tenant record");
  }
+ m1ReadValues.set("Customer360",await verifyOverviewReadParity({dispatch:rpcFetch,admin,viewer,tenantB,accountId}));
  const m1ListReads=[
    ["Party",v3,"ListParties",{page:{pageSize:5}},"parties"],
    ["Account",accountV2,"ListAccounts",{page:{pageSize:5}},"accounts"],
@@ -4311,7 +4258,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    m1AuditBeforeReads,"M1 complete business reads and denied tenant lookups must not write audit");
  console.log(JSON.stringify({event:"crm.native-m1-read-parity-linked-flow",result:"PASS",
    signed_admin_and_viewer:true,full_wire_fields_equal:true,tenant_b_not_found:true,
-   get_owners:m1FullReads.length,list_owners:m1ListReads.length,
+   get_owners:m1ReadValues.size,list_owners:m1ListReads.length,
    party_account_deal_sales_event_task_customer360:true,read_only:true}));
  // SK-05: the SAME binary Connect + signed worker + original Activities D1
  // validates completed calls/meetings/notes independently of Sales stage audit.

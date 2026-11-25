@@ -91,14 +91,6 @@ export const csvV2Path=csvV2.path;
 export const binaryCsvV2=csvV2.binary;
 export const decodeCsvV2=csvV2.decode;
 
-const overviewService=registry.getService("crm.customer_360.v2.Customer360Service");
-if(!overviewService)throw Error("compiled Customer360 v2 service missing");
-const overviewMethod=overviewService.methods.find(item=>item.name==="GetAccountOverview");
-if(!overviewMethod)throw Error("compiled GetAccountOverview missing");
-export const overviewV2Path=()=>"/crm.customer_360.v2.Customer360Service/GetAccountOverview";
-export const binaryOverviewV2=(_name,payload)=>toBinary(overviewMethod.input,create(overviewMethod.input,payload));
-export const decodeOverviewV2=(_name,bytes)=>fromBinary(overviewMethod.output,bytes);
-
 // Decode the real standard Connect detail from the same compiled descriptor.
 export function decodeDomainErrorDetail(detail){
  const schema=registry.getMessage("crm.core.v2.DomainErrorDetail");

@@ -7,6 +7,7 @@ import {resolve} from "node:path";
 import {readFile} from "node:fs/promises";
 import {fileURLToPath} from "node:url";
 import {installUiDiagnostics,assertUiPanel} from "./ui-diagnostics.mts";
+import {captureBrowserRpcEvidence} from "./rpc-browser-evidence.mts";
 
 export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,adminIdentity,
  adminHeaders={"cf-access-jwt-assertion":admin},
@@ -17,7 +18,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
  const tenantSql=tenantA.replaceAll("'","''");
  assert.ok(adminIdentity,"Expected signed actor is required for browser audit assertions");
  const startedAt=Date.now();
- const requests=[],writes=[],recovery=[],ownerRecovery=[],syntheticPrivateProbes=[],pageErrors=[],steps=[];
+ const {requests,recordResponse,flushHeaderReads,assertSource}=captureBrowserRpcEvidence();
+ const writes=[],recovery=[],ownerRecovery=[],syntheticPrivateProbes=[],pageErrors=[],steps=[];
  let lastCheckpointAt=startedAt;
  const checkpoint=label=>{
    const now=Date.now();
@@ -28,38 +30,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      span_ms:now-lastCheckpointAt,elapsed_ms:now-startedAt}));
    lastCheckpointAt=now;
  };
- const headerReads=[];
- const flushHeaderReads=async()=>{
-   // A context may receive one more response while an earlier allHeaders()
-   // read is pending. Drain until the response listener has stopped adding
-   // work, then the caller may safely close that context.
-   let drained=0;
-   while(drained<headerReads.length){
-     const pending=headerReads.slice(drained);
-     drained=headerReads.length;
-     await Promise.all(pending);
-   }
- };
  let restoreViewer=async()=>{};
- const recordResponse=response=>{
-   const path=new URL(response.url()).pathname;
-   if(!path.startsWith("/crm."))return;
-   const entry={path,status:response.status()};
-   requests.push(entry);
-   const capture=headers=>Object.assign(entry,{
-     request_id:headers["x-request-id"],error_code:headers["x-crm-error-code"]??null,
-     source_sha:headers["x-crm-source-sha"],runtime:headers["x-crm-runtime"]});
-   // Worker correlation headers are ordinary HTTP headers. Preserve the
-   // response event's snapshot before a watched page or context can close.
-   capture(response.headers());
-   if(typeof response.allHeaders==="function"){
-     headerReads.push(response.allHeaders().then(capture).catch(()=>{
-       if(!entry.source_sha||!entry.runtime||!entry.request_id||
-         (entry.status>=400&&!entry.error_code))
-         entry.header_error="COMPLETE_CORRELATION_HEADERS_UNAVAILABLE";
-     }));
-   }
- };
  // Match the RPC pathname, not the serialized URL: privacy probes deliberately add query parameters.
  const responsePathEndsWith=(response,suffix)=>new URL(response.url()).pathname.endsWith(suffix);
  const watch=context=>{
@@ -2481,7 +2452,6 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal(await firstId("crm_party_records","display_name","Browser Winner "+runId),partyId);
    assert.equal((await sql("SELECT version FROM crm_party_records WHERE tenant='"+tenantSql+"' AND id='"+partyId+"'"))[0].version,3);
    await flushHeaderReads();
-   await flushHeaderReads();
    await stalePage.close();
    checkpoint("Two browser forms enforce CAS and show generated-client conflict");
 
@@ -3418,7 +3388,6 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      checkpoint("SK-07.B signed viewer completes only own Task, no admin controls, reload and D1 audit");
    }
    await flushHeaderReads();
-   await flushHeaderReads();
    await denied.close();
    await restoreViewer();restoreViewer=async()=>{};
    const other=await browser.newContext({extraHTTPHeaders:tenantBHeaders});
@@ -3427,7 +3396,6 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await otherPage.goto(base+"/#accounts");
    await otherPage.getByText("Клиентов пока нет.",{exact:true}).waitFor();
    assert.equal(await otherPage.getByRole("heading",{name:"Browser Account "+runId,exact:true}).count(),0);
-   await flushHeaderReads();
    await flushHeaderReads();
    await other.close();
    const anonymous=await browser.newContext();
@@ -3449,12 +3417,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.deepEqual(pageErrors,[]);
    assert.ok(writes.length>0);
    await flushHeaderReads();
-   for(const response of requests){
-     assert.equal(response.header_error,undefined,"Complete browser correlation evidence is required");
-     assert.equal(response.source_sha,sourceSha,"Every browser response must use the tested source: "+JSON.stringify(response));
-     assert.equal(response.runtime,"native-workers-rs");
-     assert.match(response.request_id??"",/^[a-f0-9-]{36}$/i);
-   }
+   assertSource(sourceSha);
    const evidence={result:"PASS",source_sha:sourceSha,features,browser:"Chromium",
      started_at:startedAt,finished_at:Date.now(),tenant:tenantA,
      tested:"built React and generated Connect client against Rust Worker/D1",steps,requests,writes,recovery,

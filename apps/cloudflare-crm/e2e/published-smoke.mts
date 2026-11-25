@@ -2,8 +2,9 @@
 // the existing typed-browser.mjs and the independent post-merge Gate B.
 import assert from "node:assert/strict";
 import {chromium} from "playwright";
-import type {Locator, Page, Response, Route} from "playwright";
+import type {Locator, Page, Route} from "playwright";
 import {string} from "../scripts/json-boundary.mts";
+import {captureBrowserRpcEvidence} from "../rust-party/test/rpc-browser-evidence.mts";
 
 type Restore = () => Promise<void>;
 type SmokeOptions = {
@@ -17,51 +18,15 @@ type SmokeOptions = {
   beforeViewer: () => Promise<Restore>;
   directory: string;
 };
-type RpcEvidence = {
-  path: string;
-  status: number;
-  request_id?: string | undefined;
-  error_code?: string | null;
-  source_sha?: string | undefined;
-  runtime?: string | undefined;
-  headerError?: boolean;
-};
-
 export async function publishedSmoke({base,sourceSha,tenantA,adminIdentity,adminHeaders,
   tenantBHeaders,sql,beforeViewer,directory}: SmokeOptions) {
   const startedAt=Date.now(),runId=String(startedAt);
   const name="Browser Party "+runId,accountName="Browser Party Account "+runId;
   const deniedName="Browser Denied "+runId;
-  const requests: RpcEvidence[] = [];
-  const headerReads: Promise<void>[] = [];
+  const {requests,recordResponse: record,flushHeaderReads: flushHeaders,assertSource}=captureBrowserRpcEvidence();
   const pageErrors: string[] = [];
   const writes: Array<{path: string; request_id: string; audit: ReadonlyArray<Record<string, unknown>>}> = [];
   const syntheticPrivateProbes=[],steps=[];
-  let drained = 0;
-  const flushHeaders = async () => {
-    while (drained < headerReads.length) {
-      const pending = headerReads.slice(drained);
-      drained = headerReads.length;
-      await Promise.all(pending);
-    }
-  };
-  const record=(response: Response)=>{
-    const path=new URL(response.url()).pathname;
-    if(!path.startsWith("/crm."))return;
-    const item: RpcEvidence={path,status:response.status()};
-    requests.push(item);
-    const capture = (headers: Record<string, string>) => {
-      item.request_id=headers["x-request-id"];
-      item.error_code=headers["x-crm-error-code"]??null;
-      item.source_sha=headers["x-crm-source-sha"];
-      item.runtime=headers["x-crm-runtime"];
-    };
-    capture(response.headers());
-    headerReads.push(response.allHeaders().then(capture).catch(()=>{
-      if(!item.request_id||!item.source_sha||!item.runtime||(item.status>=400&&!item.error_code))
-        item.headerError=true;
-    }));
-  };
   const browser=await chromium.launch({headless:true});
   let restoreViewer: Restore=async()=>{};
   const context=await browser.newContext({extraHTTPHeaders:adminHeaders,timezoneId:"UTC"});
@@ -249,12 +214,7 @@ export async function publishedSmoke({base,sourceSha,tenantA,adminIdentity,admin
     steps.push("anonymous-denial");
     await flushHeaders();
     assert.deepEqual(pageErrors,[],"Browser page must have no uncaught runtime errors");
-    for(const response of requests){
-      assert.ok(!response.headerError,"Complete browser correlation evidence is required");
-      assert.match(response.request_id??"",/^[a-f0-9-]{36}$/i);
-      assert.equal(response.source_sha,sourceSha);
-      assert.equal(response.runtime,"native-workers-rs");
-    }
+    assertSource(sourceSha);
     assert.ok(requests.some(item=>item.status===403&&item.path.endsWith("/CreateParty")),
       "Real viewer write denial must be observed");
     const evidence={result:"PASS",source_sha:sourceSha,features:["native","published-smoke"],
@@ -266,7 +226,7 @@ export async function publishedSmoke({base,sourceSha,tenantA,adminIdentity,admin
     writeFileSync(resolve(directory,"published-smoke.json"),JSON.stringify(evidence,null,2)+"\n");
     return evidence;
   }catch(error){
-    await Promise.allSettled(headerReads);
+    await flushHeaders();
     const {writeFileSync}=await import("node:fs");
     const {resolve}=await import("node:path");
     writeFileSync(resolve(directory,"failure.json"),JSON.stringify({

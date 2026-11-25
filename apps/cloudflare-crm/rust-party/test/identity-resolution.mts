@@ -4,7 +4,7 @@ import { IdentityResolutionService } from "../../../../packages/client/gen/crm/i
 import { ContactPointKind, ContactPointService } from "../../../../packages/client/gen/crm/contact_points/v2/contact_point_pb.js";
 import { PartyKind, PartyService } from "../../../../packages/client/gen/crm/parties/v3/party_pb.js";
 import { DomainErrorDetailSchema, MutationCommitOutcome } from "../../../../packages/client/gen/crm/core/v2/operation_pb.js";
-import { decodeFixtureDetail, fixtureRpc, sendFixtureRpc } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
+import { collectFixturePages, decodeFixtureDetail, fixtureRpc, sendFixtureRpc } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
 import type { RpcDispatch } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
 import { record, records } from "../../scripts/json-boundary.mts";
 
@@ -46,22 +46,12 @@ export async function verifyIdentityResolution(
    page:{pageSize:1,pageToken:"invalid"}},400);
  assert.equal((await fixtureRpc(dispatch, methods.findSharedEmailCandidates,tenantB,{
    page:{pageSize:1}})).body.candidates.length,0);
- const matches: typeof beforeCandidates.body.candidates = [];
- const cursors = new Set<string>();
- let pageToken = "";
- for (let index = 0; index < 256; index++) {
-   const {body: page} = await fixtureRpc(dispatch, methods.findSharedEmailCandidates, viewer, {
-     page: {pageSize: 1, pageToken},
+ const matches = await collectFixturePages(async pageToken => {
+   const { body } = await fixtureRpc(dispatch, methods.findSharedEmailCandidates, viewer, {
+     page: { pageSize: 1, pageToken },
    });
-   assert.ok(page.candidates.length <= 1, "page_size=1 must bound the filtered result");
-   matches.push(...page.candidates);
-   pageToken = page.pageInfo?.nextPageToken ?? "";
-   if (!pageToken) break;
-   assert.equal(page.candidates.length, 1, "filtered cursor skipped a matching row");
-   assert.ok(!cursors.has(pageToken), "cursor cycle in filtered pagination");
-   cursors.add(pageToken);
- }
- assert.equal(pageToken, "", "filtered pagination never reached its last page");
+   return { items: body.candidates, nextPageToken: body.pageInfo?.nextPageToken };
+ });
  assert.equal(matches.length,3,"three canonical pair observations");
  assert.ok(matches.every(c=>!c.bothContactsVerified));
  const pairs=matches.map(c=>[c.firstParty?.partyId,c.secondParty?.partyId].join("|"));
