@@ -110,6 +110,33 @@ jobs:
             ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}-
             ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}
             ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-
+      # Measure before changing Cargo's native target/build cache layout.
+      - name: Measure restored Cargo cache components
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in \\
+            "$HOME/.cargo/registry/index" \\
+            "$HOME/.cargo/registry/cache" \\
+            "$HOME/.cargo/git/db" \\
+            target \\
+            target/debug/deps \\
+            target/debug/build \\
+            target/debug/incremental \\
+            target/wasm32-unknown-unknown/debug/deps \\
+            target/wasm32-unknown-unknown/debug/build \\
+            target/wasm32-unknown-unknown/release/deps \\
+            target/wasm32-unknown-unknown/release/build \\
+            apps/cloudflare-crm/rust-party/target \\
+            apps/cloudflare-crm/rust-party/target/debug/deps \\
+            apps/cloudflare-crm/rust-party/target/debug/build \\
+            apps/cloudflare-crm/rust-party/target/wasm32-unknown-unknown/debug/deps \\
+            apps/cloudflare-crm/rust-party/target/wasm32-unknown-unknown/release/deps; do
+            if [ -e "$path" ]; then
+              bytes=$(du -sb "$path" | cut -f1)
+              printf '{"event":"crm.cargo-cache-size","path":"%s","bytes":%s}\\n' "$path" "$bytes"
+            fi
+          done
       # The scanner is pinned independently of application dependencies.
       # Cache only its executable, not a security result: every run still
       # evaluates both the root and Worker Cargo.lock files from this SHA.
