@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import {test} from "node:test";
 import {createFixtureDeal,dealCreationInput,updateFixtureDeal,dealUpdateInput} from "../../../../packages/client/test/cloudflare-deal-fixture.ts";
 import {readRpcError} from "../../scripts/rpc-error-response.mts";
+import {verifyPartyNameQuality} from "./data-quality.mts";
 import {chromium} from "playwright";
 import {typedBrowser} from "./typed-browser.mjs";
 import {installUiDiagnostics,assertUiPanel} from "./ui-diagnostics.mts";
@@ -20,7 +21,6 @@ import {binaryPartyV3,decodePartyV3,partyV3Path,
   binaryMemberV2,decodeMemberV2,memberV2Path,
   binaryInteractionV2,decodeInteractionV2,interactionV2Path,
   binaryAutomationV2,decodeAutomationV2,automationV2Path,
-  binaryQualityV2,decodeQualityV2,qualityV2Path,
   binaryIdentityV2,decodeIdentityV2,identityV2Path,
   binaryConsentV2,decodeConsentV2,consentV2Path,
   binarySalesV2,decodeSalesV2,salesV2Path,
@@ -1469,35 +1469,8 @@ console.log(JSON.stringify({event:"crm.native-g3-activities-tasks-v2",
    return {status:r.status,headers:r.headers,
      body:r.status<400?decode(method,new Uint8Array(await r.arrayBuffer())):await r.json()};
  };
- const qualityV2=signedReadOnly(qualityV2Path,binaryQualityV2,decodeQualityV2);
  const identityV2=signedReadOnly(identityV2Path,binaryIdentityV2,decodeIdentityV2);
- assert.equal((await qualityV2("EvaluatePartyName",null,{partyId:id})).status,401);
- assert.equal((await qualityV2("EvaluatePartyName",tenantB,{partyId:id})).status,404);
- assert.equal((await qualityV2("EvaluatePartyName",viewer,{partyId:""})).status,400);
- assert.equal((await qualityV2("EvaluatePartyName",viewer,{partyId:"missing-party"})).status,404);
- const quality=await qualityV2("EvaluatePartyName",viewer,{partyId:id});
- assert.equal(quality.status,200,describeProtobuf(quality.body));
- assert.equal(quality.body.party?.partyId,id);
- assert.ok(quality.body.ruleSetVersion);
- assert.equal(quality.body.checks.length,2);
- assert.equal(quality.body.failedCount,0);
- assert.ok(quality.body.checks.every(c=>c.passed));
- const shortQualityId="quality-short-"+randomUUID();
- const shortCreated=await v3("CreateParty",admin,{
-   partyId:shortQualityId,kind:1,displayName:"A",
-   precondition:{idempotencyKey:"quality-short-create"}});
- assert.equal(shortCreated.status,200,describeProtobuf(shortCreated.body));
- const poorQuality=await qualityV2("EvaluatePartyName",viewer,{partyId:shortQualityId});
- assert.equal(poorQuality.status,200,describeProtobuf(poorQuality.body));
- assert.equal(poorQuality.body.failedCount,1);
- assert.equal(poorQuality.body.checks.filter(x=>!x.passed).length,1);
- assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
-   "AND subject_id='"+shortQualityId+"'"))[0].n,1,
-   "quality read must not append audit or finding");
- console.log(JSON.stringify({event:"crm.native-g3-data-quality-v2",
-   result:"PASS",rpc_methods:["EvaluatePartyName"],generated_binary:true,
-   original_owner:"crm.data-quality",tenant_ab:true,viewer_read:true,
-   no_duplicate_rules:true,no_writes:true,published_active:true}));
+ await verifyPartyNameQuality(rpcFetch,sql,id,admin,viewer,tenantB);
 
  const beforeCandidates=await identityV2("FindSharedEmailCandidates",viewer,{page:{pageSize:1}});
  assert.equal(beforeCandidates.status,200,describeProtobuf(beforeCandidates.body));
