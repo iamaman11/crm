@@ -66,8 +66,7 @@ jobs:
           TIMEFORMAT='crm.governance unit-tests elapsed_seconds=%3R'
           time python -m unittest tests.test_affected_scope tests.test_crm_module_coverage tests.test_module_manifest_validation
           TIMEFORMAT='crm.governance packet-check elapsed_seconds=%3R'
-          time python scripts/repo.py packet-check --base origin/dev --before "$PUSH_BEFORE" --json > /tmp/crm-legacy-packet.json
-          cat /tmp/crm-legacy-packet.json
+          time python scripts/repo.py packet-check --base origin/dev --before "$PUSH_BEFORE"
           TIMEFORMAT='crm.governance module-coverage elapsed_seconds=%3R'
           time python scripts/crm-module-coverage.py --output /tmp/crm-module-coverage.json
           echo "CRM_MODULE_COVERAGE_REPORT=/tmp/crm-module-coverage.json" >> "$GITHUB_ENV"
@@ -179,24 +178,6 @@ jobs:
           npm install --global pnpm@12.21.0
           pnpm --version | grep -Fx '12.21.0'
           pnpm install --frozen-lockfile
-      # Temporary #486 migration parity. The old checks still run, and the
-      # native report replaces their output only after exact equality.
-      - name: Prove native manifest and packet governance parity
-        env:
-          PUSH_BEFORE: ${{ github.event.before }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          pnpm web:typecheck:tools
-          python - <<'PY' > /tmp/crm-legacy-manifest-digests.json
-          import json
-          from pathlib import Path
-          from scripts.validate_module_manifests import canonical_digest, strict_yaml_load
-          paths = sorted(Path("modules").glob("*/module.yaml"))
-          print(json.dumps({p.as_posix(): canonical_digest(strict_yaml_load(p.read_text(encoding="utf8"), str(p))) for p in paths}))
-          PY
-          node apps/cloudflare-crm/scripts/governance-parity.mts "$PUSH_BEFORE" /tmp/crm-legacy-packet.json /tmp/crm-module-coverage.json /tmp/crm-legacy-manifest-digests.json /tmp/crm-production-metadata.json
-          echo "CRM_PRODUCTION_METADATA_FILE=/tmp/crm-production-metadata.json" >> "$GITHUB_ENV"
       # Report actual compiler-cache hits/misses, rather than assuming cache speedup.
       # The Mozilla action also emits end-of-job statistics for the complete job.
       # Clippy checks WASM compilation, so a separate cargo check repeats the work.

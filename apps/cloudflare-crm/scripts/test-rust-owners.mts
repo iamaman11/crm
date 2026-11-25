@@ -122,9 +122,7 @@ function main(): void {
   const report: unknown = JSON.parse(readFileSync(reportPath, "utf8"));
   // Preserve both existing metadata invocations and use the production result
   // for owner planning too, rather than independently parsing Cargo.toml.
-  const metadataPath = process.env.CRM_PRODUCTION_METADATA_FILE;
-  const production: unknown = metadataPath === undefined ? metadata("native") :
-    JSON.parse(readFileSync(metadataPath, "utf8"));
+  const production = metadata("native");
   const owners = ownerPlan(report, production, root, worker);
   cargo(["test", "--locked", "--workspace", "--all-targets"]);
   cargo(["test", "--locked", "-p", "crm-proto-contracts", "--no-default-features",

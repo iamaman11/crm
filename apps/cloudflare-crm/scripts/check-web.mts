@@ -59,9 +59,9 @@ function checkWeb(): void {
           elapsed_ms: Math.round(performance.now() - started)}));
       }
     }
-    // CI provides the validated report once; local development uses the same native producer.
+    // CI provides the canonical report once; local development uses the same producer.
     if (process.env.CRM_MODULE_COVERAGE_REPORT === undefined) {
-      run(node, "apps/cloudflare-crm/scripts/module-coverage.mts", report);
+      run("python", "scripts/crm-module-coverage.py", "--output", report);
     }
     run("pnpm", "web:contract:lint");
     run("pnpm", "exec", "buf", "build", "proto", "-o", image);
