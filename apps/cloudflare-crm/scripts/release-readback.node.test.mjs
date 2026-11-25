@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {verifyAnonymousDenial,verifyTracePrivacySettings,classifySignedSessionReadback,
-  isRetryableReadbackTransportError,waitForExactSourceSha} from "./release-readback.mjs";
+  isRetryableReadbackTransportError,waitForExactSourceSha,waitForNativeTelemetry} from "./release-readback.mjs";
 
 const endpoint="https://example.test/api/version";
 
@@ -219,4 +219,68 @@ test("Cloudflare tracing requires enabled logs, traces and query redaction",()=>
     {...safe,traces:{enabled:true,head_sampling_rate:0}},
     {...safe,traces:{enabled:true}}
   ])assert.throws(()=>verifyTracePrivacySettings(unsafe),/CRM_TRACE_PRIVACY_SETTINGS_UNSAFE/);
+});
+
+const telemetryRequest={request_id:"receipt-1",path:"/crm.example.v1.Owner/Create",status:200};
+const traceId="a".repeat(32),otherTraceId="b".repeat(32),liveVersion="version-1";
+const requestEvent=(overrides={})=>({
+  source:{event:"crm.native.request",request_id:telemetryRequest.request_id,
+    operation:telemetryRequest.path,status:200},
+  $metadata:{traceId},$workers:{scriptVersion:{id:liveVersion}},...overrides
+});
+const dbSpan=(id=traceId)=>({source:{traceId:id,db:{system:"sqlite"}},$metadata:{type:"span"}});
+function telemetryRun(snapshots,{deadlineMs=120000}={}){
+  let clock=0,calls=0;
+  const events=[];
+  const result=waitForNativeTelemetry({
+    requests:new Map([[telemetryRequest.request_id,telemetryRequest]]),
+    mutationIds:new Set([telemetryRequest.request_id]),
+    probes:[{value:"synthetic-secret"}],liveVersion,deadlineMs,
+    readSnapshot:async deadline=>{
+      assert.equal(deadline,deadlineMs);
+      assert.ok(clock<deadline);
+      clock+=400;
+      return snapshots(calls++);
+    },
+    pause:async ms=>{assert.ok(ms<=2000);clock+=ms;},
+    now:()=>clock,log:entry=>events.push(entry)
+  });
+  return {result,events,calls:()=>calls,elapsed:()=>clock};
+}
+test("late native trace after former 30-round cutoff is accepted within the existing deadline",async()=>{
+  const x=telemetryRun(i=>i<35?[]:[requestEvent(),dbSpan()]);
+  assert.deepEqual(await x.result,{verifiedD1:1});
+  assert.equal(x.calls(),36);
+  assert.ok(x.elapsed()>72000&&x.elapsed()<120000);
+});
+test("native request and D1 span may arrive in either order without another polling phase",async()=>{
+  for(const sequence of [[dbSpan(),requestEvent()],[requestEvent(),dbSpan()]]){
+    const x=telemetryRun(i=>[sequence[i]]);
+    assert.deepEqual(await x.result,{verifiedD1:1});
+    assert.equal(x.calls(),2);
+  }
+});
+test("wrong version or mismatched operation/status/error cannot substitute for the exact native request",async()=>{
+  const wrong=[
+    requestEvent({$workers:{scriptVersion:{id:"old"}}}),
+    requestEvent({source:{...requestEvent().source,operation:"/other"}}),
+    requestEvent({source:{...requestEvent().source,status:403}}),
+    requestEvent({source:{...requestEvent().source,error_code:"wrong"}})
+  ];
+  const x=telemetryRun(()=>[...wrong,dbSpan()],{deadlineMs:7200});
+  await assert.rejects(x.result,/Missing native Cloudflare traces/);
+  assert.equal(x.calls(),3);
+});
+test("unrelated D1 spans cannot satisfy the exact signed mutation",async()=>{
+  const x=telemetryRun(()=>[requestEvent(),dbSpan(otherTraceId)],{deadlineMs:7200});
+  await assert.rejects(x.result,/missing exact Cloudflare D1 spans/);
+  assert.equal(x.calls(),3);
+});
+test("privacy is enforced on early and late snapshots, not only the final request snapshot",async()=>{
+  for(const unsafe of [{source:{header:"synthetic-secret"}},{$metadata:{type:"cf-worker-event"}}]){
+    for(const sequence of [[[unsafe],[requestEvent(),dbSpan()]],[[requestEvent()],[dbSpan(),unsafe]]]){
+      const x=telemetryRun(i=>sequence[i]);
+      await assert.rejects(x.result,/Synthetic value leaked|Unsafe automatic invocation log/);
+    }
+  }
 });

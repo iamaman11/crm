@@ -9,6 +9,7 @@ import {
   verifyAnonymousDenial,
   verifyNfcMigrationNames,
   verifyTracePrivacySettings,
+  waitForNativeTelemetry,
   classifySignedSessionReadback,
   parseRetryAfterMs
 } from "./release-readback.mjs";
@@ -538,60 +539,11 @@ async function verifyData(){
     assert.ok(allowedPrivate[probe.kind]?.test(probe.value));
     assert.equal(probe.request_id,evidence.writes[0].request_id);
   }
-  const pending=new Map(requests),requestTraces=new Map();
-  const from=evidence.started_at-1000,traceStarted=Date.now(),traceDeadline=traceStarted+120000;
-  let observedEvents=[];
-  console.log(JSON.stringify({event:"crm.telemetry-readback-scope",
-    requests:pending.size,page_limit:2000,deadline_ms:120000}));
-  for(let attempt=0;attempt<30&&pending.size&&Date.now()<traceDeadline;attempt++){
-    observedEvents=await readTelemetrySnapshot(from,Date.now()+1000,traceDeadline);
-    for(const event of observedEvents){
-      const entry=pending.get(event.source?.request_id);
-      if(!entry||event.source?.event!=="crm.native.request"||
-        event.source?.operation!==entry.path||event.source?.status!==entry.status||
-        (event.source?.error_code??null)!==(entry.error_code??null)||
-        event.$workers?.scriptVersion?.id!==liveVersion)continue;
-      const traceId=event.$metadata?.traceId;
-      assert.match(traceId??"",/^[a-f0-9]{32}$/i);
-      requestTraces.set(entry.request_id,traceId);pending.delete(entry.request_id);
-    }
-    console.log(JSON.stringify({event:"crm.telemetry-readback-progress",
-      round:attempt+1,accepted:requestTraces.size,still_missing:pending.size,
-      elapsed_ms:Date.now()-traceStarted}));
-    if(pending.size&&attempt<29&&Date.now()<traceDeadline)
-      await pause(Math.min(2000,Math.max(0,traceDeadline-Date.now())));
-  }
-  assert.equal(pending.size,0,"Missing native Cloudflare traces: "+
-    [...pending.values()].map(item=>item.path).join(","));
-  // Inspect all returned events for synthetic values, never print those values.
-  const leaked=JSON.stringify(observedEvents);
-  for(const probe of probes)
-    assert.ok(!leaked.includes(probe.value),"Synthetic value leaked to native Cloudflare telemetry");
-  assert.ok(!observedEvents.some(event=>event.$metadata?.type==="cf-worker-event"),
-    "Unsafe automatic invocation log in CRM telemetry");
-  // D1 span must belong to the exact signed committed request, not an
-  // unrelated Worker operation or a matching payload in application logs.
-  let verifiedD1=0,missing=[...mutationIds];
-  for(let attempt=0;attempt<30&&missing.length&&Date.now()<traceDeadline;attempt++){
-    if(attempt>0)observedEvents=await readTelemetrySnapshot(from,Date.now()+1000,traceDeadline);
-    const byTrace=new Map();
-    for(const event of observedEvents){
-      const traceId=event.source?.traceId??event.$metadata?.traceId;
-      if(typeof traceId!=="string")continue;
-      const list=byTrace.get(traceId)??[];
-      list.push(event);byTrace.set(traceId,list);
-    }
-    missing=missing.filter(id=>{
-      const trace=requestTraces.get(id);
-      const found=(byTrace.get(trace)??[]).some(event=>
-        event.$metadata?.type==="span"&&event.source?.db);
-      if(found)verifiedD1++;
-      return !found;
-    });
-    if(missing.length&&attempt<29&&Date.now()<traceDeadline)
-      await pause(Math.min(2000,Math.max(0,traceDeadline-Date.now())));
-  }
-  assert.equal(missing.length,0,"Published mutations missing exact Cloudflare D1 spans");
+  const from=evidence.started_at-1000;
+  const {verifiedD1}=await waitForNativeTelemetry({
+    requests,mutationIds,probes,liveVersion,
+    readSnapshot:deadline=>readTelemetrySnapshot(from,Date.now()+1000,deadline)
+  });
   assert.equal(verifiedD1,2,"Both published mutations require native D1 spans");
   assert.equal(await version(),liveVersion,"Deployment changed during release smoke");
   assert.deepEqual(await bindings(liveVersion),{sha,db:database});
