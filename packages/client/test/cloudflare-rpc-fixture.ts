@@ -17,23 +17,35 @@ type FixtureResponse = {
 
 export type RpcDispatch = (path: string, options: FixtureRequest) => Promise<FixtureResponse>;
 
-export async function sendFixtureRpc<I extends DescMessage, O extends DescMessage>(
+async function dispatchFixtureRpc<I extends DescMessage, O extends DescMessage>(
   dispatch: RpcDispatch,
   method: DescMethodUnary<I, O>,
   jwt: string | null,
   input: MessageInitShape<NoInfer<I>>,
-  expectedStatus: number,
+  extraHeaders: Readonly<Record<string, string>>,
 ) {
   const path = `/${method.parent.typeName}/${method.name}`;
-  const response = await dispatch(path, {
+  return dispatch(path, {
     method: "POST",
     headers: {
+      ...extraHeaders,
       "content-type": "application/proto",
       "connect-protocol-version": "1",
       ...(jwt ? { "cf-access-jwt-assertion": jwt } : {}),
     },
     body: new Uint8Array(toBinary(method.input, create(method.input, input))),
   });
+}
+
+export async function sendFixtureRpc<I extends DescMessage, O extends DescMessage>(
+  dispatch: RpcDispatch,
+  method: DescMethodUnary<I, O>,
+  jwt: string | null,
+  input: MessageInitShape<NoInfer<I>>,
+  expectedStatus: number,
+  extraHeaders: Readonly<Record<string, string>> = {},
+) {
+  const response = await dispatchFixtureRpc(dispatch, method, jwt, input, extraHeaders);
   const requestId = response.headers.get("x-request-id");
   assert.equal(response.status, expectedStatus, `${method.name} request_id=${requestId ?? "missing"}`);
   return response;
@@ -44,10 +56,25 @@ export async function fixtureRpc<I extends DescMessage, O extends DescMessage>(
   method: DescMethodUnary<I, O>,
   jwt: string | null,
   input: MessageInitShape<NoInfer<I>>,
+  extraHeaders: Readonly<Record<string, string>> = {},
 ) {
-  const response = await sendFixtureRpc(dispatch, method, jwt, input, 200);
+  const response = await sendFixtureRpc(dispatch, method, jwt, input, 200, extraHeaders);
   const body = fromBinary(method.output, new Uint8Array(await response.arrayBuffer()));
   return { status: response.status, headers: response.headers, body };
+}
+
+export async function fixtureRpcError<I extends DescMessage, O extends DescMessage>(
+  dispatch: RpcDispatch,
+  method: DescMethodUnary<I, O>,
+  jwt: string | null,
+  input: MessageInitShape<NoInfer<I>>,
+) {
+  const response = await dispatchFixtureRpc(dispatch, method, jwt, input, {});
+  assert.ok(response.status >= 400, `${method.name} must reject the request`);
+  const body: unknown = await response.json();
+  assert.ok(body && typeof body === "object" && "code" in body && typeof body.code === "string",
+    `${method.name} must return a Connect error`);
+  return {status: response.status, headers: response.headers, body};
 }
 
 export function decodeFixtureDetail<M extends DescMessage>(
