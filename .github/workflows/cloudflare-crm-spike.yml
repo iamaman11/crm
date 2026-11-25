@@ -91,9 +91,8 @@ jobs:
           echo 'SCCACHE_GHA_ENABLED=true' >> "$GITHUB_ENV"
           echo "RUSTC_WRAPPER=$SCCACHE_PATH" >> "$GITHUB_ENV"
           "$SCCACHE_PATH" --version
-      # Measure a smaller native cache: the restored root target was 1.49 GB,
-      # almost entirely debug/build. Host owner tests still run in full; sccache
-      # remains enabled. Preserve the complete Worker target and registry cache.
+      # Cargo unpacks registry/cache and git/db on demand. Keep compiled dependencies
+      # and fingerprints, but avoid transferring a second copy of dependency sources.
       - name: Restore Cargo compilation cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -101,15 +100,16 @@ jobs:
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git/db
+            target
             apps/cloudflare-crm/rust-party/target
           # Cache entries are immutable. Refresh when manifests or codegen inputs
           # change; ordinary source edits still use Cargo fingerprints and sccache.
-          key: ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v5-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}-${{ hashFiles('Cargo.toml', 'apps/cloudflare-crm/rust-party/Cargo.toml', 'apps/cloudflare-crm/rust-party/connect-contracts/Cargo.toml', 'crates/*/Cargo.toml', 'modules/*/Cargo.toml') }}-${{ hashFiles('proto/**/*.proto', 'apps/cloudflare-crm/active-proto-versions.json', 'apps/cloudflare-crm/rust-party/connect-contracts/build.rs', 'crates/crm-proto-contracts/build.rs') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}-${{ hashFiles('Cargo.toml', 'apps/cloudflare-crm/rust-party/Cargo.toml', 'apps/cloudflare-crm/rust-party/connect-contracts/Cargo.toml', 'crates/*/Cargo.toml', 'modules/*/Cargo.toml') }}-${{ hashFiles('proto/**/*.proto', 'apps/cloudflare-crm/active-proto-versions.json', 'apps/cloudflare-crm/rust-party/connect-contracts/build.rs', 'crates/crm-proto-contracts/build.rs') }}
           restore-keys: |
-            ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v5-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}-${{ hashFiles('Cargo.toml', 'apps/cloudflare-crm/rust-party/Cargo.toml', 'apps/cloudflare-crm/rust-party/connect-contracts/Cargo.toml', 'crates/*/Cargo.toml', 'modules/*/Cargo.toml') }}-
-            ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v5-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}-
-            ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v5-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}
-            ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v5-${{ hashFiles('rust-toolchain.toml') }}-
+            ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}-${{ hashFiles('Cargo.toml', 'apps/cloudflare-crm/rust-party/Cargo.toml', 'apps/cloudflare-crm/rust-party/connect-contracts/Cargo.toml', 'crates/*/Cargo.toml', 'modules/*/Cargo.toml') }}-
+            ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}-
+            ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}
+            ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-
       # Measure before changing Cargo's native target/build cache layout.
       - name: Measure restored Cargo cache components
         shell: bash
