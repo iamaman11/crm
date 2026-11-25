@@ -9,8 +9,11 @@ import {fileURLToPath} from "node:url";
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const worker = resolve(root, "apps/cloudflare-crm/rust-party");
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
 function record(value: unknown): Record<string, unknown> {
-  assert(value !== null && typeof value === "object" && !Array.isArray(value), "Expected JSON object");
+  assert(isRecord(value), "Expected JSON object");
   return value;
 }
 function records(value: unknown): Record<string, unknown>[] {
@@ -53,7 +56,7 @@ export function ownerPlan(report: unknown, metadata: unknown, repository: string
   const dependencies = new Map<string, Record<string, unknown>>();
   for (const dep of records(workerPackage.dependencies)) {
     // Match the former direct [dependencies] path inventory, not build/dev or target-specific edges.
-    if (dep.path === null || dep.kind !== null || dep.target !== null) continue;
+    if (dep.path === null || dep.path === undefined || dep.kind !== null || dep.target !== null) continue;
     const path = resolve(repository, string(dep.path));
     assert(!dependencies.has(path), "Duplicate normal Worker path dependency: " + path);
     dependencies.set(path, dep);
