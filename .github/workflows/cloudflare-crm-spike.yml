@@ -56,13 +56,15 @@ jobs:
         run: |
           set -euo pipefail
           TIMEFORMAT='crm.governance pip-install elapsed_seconds=%3R'
-          time python -m pip install --disable-pip-version-check --requirement requirements-dev.txt
+          # Install only active governance dependencies; keep the existing pinned
+          # versions as constraints. Historical Python tools retain their dev requirements.
+          time python -m pip install --disable-pip-version-check --constraint requirements-dev.txt jsonschema ruamel.yaml
           TIMEFORMAT='crm.governance pip-check elapsed_seconds=%3R'
           time python -m pip check
           # Machine-readable policies, executable schemas, contracts and owners.
           # Product documentation and status live in GitHub Issues, not .md.
           TIMEFORMAT='crm.governance unit-tests elapsed_seconds=%3R'
-          time python -m unittest tests.test_affected_scope tests.test_crm_module_coverage
+          time python -m unittest tests.test_affected_scope tests.test_crm_module_coverage tests.test_module_manifest_validation
           TIMEFORMAT='crm.governance packet-check elapsed_seconds=%3R'
           time python scripts/repo.py packet-check --base origin/dev --before "$PUSH_BEFORE"
           TIMEFORMAT='crm.governance module-coverage elapsed_seconds=%3R'
