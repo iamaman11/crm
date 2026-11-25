@@ -84,7 +84,7 @@ test("TypeScript itself rejects disabled strict compiler options",()=>{
   const path=join(directory,"tsconfig.json");
   function verify(options){
    writeFileSync(path,JSON.stringify({extends:"../tsconfig.json",compilerOptions:options})+"\n");
-   const result=spawnSync("python",["apps/cloudflare-crm/scripts/check-web.py","--verify-tsconfig",path],{
+   const result=spawnSync(process.execPath,["apps/cloudflare-crm/scripts/check-web.mjs","--verify-tsconfig",path],{
     cwd:root,encoding:"utf8",timeout:30000,
    });
    if(result.error)throw result.error;

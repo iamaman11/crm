@@ -63,20 +63,8 @@ jobs:
           # Product documentation and status live in GitHub Issues, not .md.
           TIMEFORMAT='crm.governance unit-tests elapsed_seconds=%3R'
           time python -m unittest tests.test_affected_scope tests.test_crm_module_coverage
-          # Temporary native profiling of the existing entry point. Explicitly
-          # preserve its exit status; the cProfile CLI can swallow SystemExit.
           TIMEFORMAT='crm.governance packet-check elapsed_seconds=%3R'
-          time python - "$PUSH_BEFORE" <<'PY'
-          import cProfile
-          import pstats
-          import sys
-          sys.path.insert(0, "scripts")
-          import repo
-          with cProfile.Profile() as profile:
-              result = repo.main(["packet-check", "--base", "origin/dev", "--before", sys.argv[1]])
-          pstats.Stats(profile, stream=sys.stderr).sort_stats("cumulative").print_stats(25)
-          raise SystemExit(result)
-          PY
+          time python scripts/repo.py packet-check --base origin/dev --before "$PUSH_BEFORE"
           TIMEFORMAT='crm.governance module-coverage elapsed_seconds=%3R'
           time python scripts/crm-module-coverage.py --output /tmp/crm-module-coverage.json
           echo "CRM_MODULE_COVERAGE_REPORT=/tmp/crm-module-coverage.json" >> "$GITHUB_ENV"
