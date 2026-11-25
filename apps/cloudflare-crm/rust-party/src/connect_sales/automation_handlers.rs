@@ -299,8 +299,8 @@ impl AutomationV2Service {
                 ));
             }
         };
-        use automation::RunDisposition;
         use auto_wire::AutomationRunDisposition as WireDisposition;
+        use automation::RunDisposition;
         let disposition = match row.disposition()? {
             RunDisposition::Committed => WireDisposition::AUTOMATION_RUN_DISPOSITION_COMMITTED,
             RunDisposition::RetryReady => WireDisposition::AUTOMATION_RUN_DISPOSITION_RETRY_READY,
