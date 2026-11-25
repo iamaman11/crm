@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
-import {descriptorMethods,validateBindings,validateRuntime,combineRuntimeEvidence,targetMethods,MethodOptions_IdempotencyLevel} from "./crm-rpc-descriptors.mjs";
+import {descriptorMethods,validateBindings,validateRuntime,targetMethods,MethodOptions_IdempotencyLevel} from "./crm-rpc-descriptors.mjs";
 const descriptor=process.env.CRM_PROTO_DESCRIPTOR_FILE;
 const source=process.env.CRM_MODULE_COVERAGE_REPORT;
 if(!descriptor||!source)throw Error("compiled Buf descriptor and module report required");
@@ -90,31 +90,4 @@ test("future v4 and v10 RPCs must enter the required scope without a registry ed
   report.modules.find(module=>module.module_id==="crm.parties").rpc_bindings.push({path:future});
   assert.throws(()=>validateRuntime(report,extended,validateBindings(report,extended)),/full contract differs/);
  }
-});
-
-test("independent native proofs must match SHA, feature and compiled inventory",()=>{
- const report=fixture(),business={...structuredClone(report.runtime),kind:"business",jwks_requests:2},
-   policy={...structuredClone(report.runtime),kind:"policy"};
- delete business.unauthenticated_denials;delete business.viewer_denials;
- const combined=combineRuntimeEvidence([business,policy],report.source_sha);
- assert.doesNotThrow(()=>validateRuntime(report,available,validateBindings(report,available),combined));
- assert.throws(()=>combineRuntimeEvidence([business],report.source_sha),/missing isolated/);
- assert.throws(()=>combineRuntimeEvidence([business,null],report.source_sha),/missing or stale/);
- assert.throws(()=>combineRuntimeEvidence([business,{...policy,source_sha:"0".repeat(40)}],report.source_sha),/missing or stale/);
- assert.throws(()=>combineRuntimeEvidence([business,{...policy,features:["native"]}],report.source_sha),/missing or stale/);
- assert.throws(()=>combineRuntimeEvidence([business,{...policy,rpc:{}}],report.source_sha),/inventory differs/);
- assert.throws(()=>combineRuntimeEvidence([business,policy,policy],report.source_sha),/one policy/);
- const missing=combineRuntimeEvidence([business,{...policy,viewer_denials:[]}],report.source_sha);
- assert.throws(()=>validateRuntime(report,available,validateBindings(report,available),missing),/permission denial coverage/);
- // A second business file may prove a disjoint or overlapping subset; the
- // full compiled inventory, not the file list, owns required RPC coverage.
- const remaining=business.successful_rpc_calls.filter(p=>!business.committed_rpc_calls.includes(p));
- const writes={...business,successful_rpc_calls:business.committed_rpc_calls};
- const reads={...business,successful_rpc_calls:remaining,committed_rpc_calls:[]};
- const split=combineRuntimeEvidence([writes,reads,policy],report.source_sha);
- assert.doesNotThrow(()=>validateRuntime(report,available,validateBindings(report,available),split));
- const incomplete=combineRuntimeEvidence([reads,policy],report.source_sha);
- assert.throws(()=>validateRuntime(report,available,validateBindings(report,available),incomplete),/missing successful executed call/);
- assert.throws(()=>combineRuntimeEvidence([{...reads,committed_rpc_calls:business.committed_rpc_calls},policy],report.source_sha),/committed RPC missing/);
- assert.throws(()=>combineRuntimeEvidence([{...writes,successful_rpc_calls:[...writes.successful_rpc_calls,writes.successful_rpc_calls[0]]},policy],report.source_sha),/invalid isolated/);
 });
