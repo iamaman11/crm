@@ -75,7 +75,7 @@ export async function verifyPartyAccountSearch({
  const searchIds=["zzz-search-first","zzz-search-gap","zzz-search-last"] as const;
  for(const [index,target] of searchIds.entries()){
    const name=index===1?"Nonmatching gap":"Поиск 100%_ O'Neil "+index;
-   assert.equal((await fixtureRpc(dispatch,parties.createParty,admin,{partyId:target,kind:2,displayName:name,
+   assert.equal((await fixtureRpc(dispatch,parties.createParty,admin,{partyId:target,kind:PartyKind.PERSON,displayName:name,
      precondition:{idempotencyKey:"search-party-"+index}})).status,200);
    assert.equal((await fixtureRpc(dispatch,accounts.createAccount,admin,{accountId:target,name,primaryPartyId:id,
      precondition:{idempotencyKey:"search-account-"+index}})).status,200);
