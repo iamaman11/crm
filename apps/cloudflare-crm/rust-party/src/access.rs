@@ -13,7 +13,7 @@ use worker::{D1Database, Date, Env, Fetch, Request, Result};
 
 const ISSUER: &str = "https://royal-limit-ea43.cloudflareaccess.com";
 const AUDIENCE: &str = "e0a664cf4f46f0d13d0ac0d8dd621c718c70842a377bf6738d1a24f0d16cedc7";
- 
+
 // Access rotates signing keys on a multi-week schedule and retains the previous
 // key for seven days. Cache only public key material; unknown kid forces refresh.
 const ACCESS_JWKS_CACHE_TTL_MS: f64 = 300_000.0;
@@ -90,9 +90,8 @@ fn remember_imported_key(kid: &str, key: JsValue, now_ms: f64) {
                 .get("keys")
                 .and_then(Value::as_array)
                 .is_some_and(|keys| {
-                    keys.iter().any(|jwk| {
-                        jwk.get("kid").and_then(Value::as_str) == Some(kid)
-                    })
+                    keys.iter()
+                        .any(|jwk| jwk.get("kid").and_then(Value::as_str) == Some(kid))
                 });
             if present {
                 entry.imported_keys.insert(kid.to_owned(), key);
@@ -117,12 +116,17 @@ fn matching_access_jwk<'a>(jwks: &'a Value, kid: &str) -> Option<&'a Value> {
                 && key.get("kty").and_then(Value::as_str) == Some("RSA")
                 && key.get("n").and_then(Value::as_str).is_some()
                 && key.get("e").and_then(Value::as_str).is_some()
-                && key.get("use").and_then(Value::as_str).is_none_or(|usage| usage == "sig")
-                && key.get("alg").and_then(Value::as_str).is_none_or(|algorithm| algorithm == "RS256")
+                && key
+                    .get("use")
+                    .and_then(Value::as_str)
+                    .is_none_or(|usage| usage == "sig")
+                && key
+                    .get("alg")
+                    .and_then(Value::as_str)
+                    .is_none_or(|algorithm| algorithm == "RS256")
         })
     })
 }
-
 
 fn invalid(message: &str) -> worker::Error {
     worker::Error::RustError(format!("Access verification: {message}"))
@@ -542,5 +546,4 @@ mod tests {
         assert!(!access_jwks_cache_is_fresh(1_000.0, 301_000.0));
         assert!(!access_jwks_cache_is_fresh(1_000.0, 999.0));
     }
-
 }
