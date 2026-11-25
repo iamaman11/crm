@@ -2918,7 +2918,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      await page.getByRole("button",{name:"Открыть повторно",exact:true}).click();
      await page.getByLabel("Причина повторного открытия",{exact:true}).fill("qa.revisit");
      await page.locator("dialog").getByRole("button",{name:"Открыть повторно",exact:true}).click();
-     await page.getByRole("heading",{name:/SALES_REOPEN_OWNER_NOT_ELIGIBLE/}).waitFor();
+     await page.getByRole("heading",{name:/Выберите действующего ответственного для повторного открытия сделки/}).waitFor();
      await page.getByLabel("Ответственный при повторном открытии",{exact:true}).selectOption("actor:native-viewer@example.test");
      await mutation(page.locator("dialog").getByRole("button",{name:"Открыть повторно",exact:true}),DealService.method.reopenDeal);
      await reloadDocument();

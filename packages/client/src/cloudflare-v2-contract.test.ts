@@ -107,6 +107,20 @@ describe("S1 generated mutation outcomes and correlation",()=>{
    expect(failure.text).toContain("Введите название сделки.");
    expect(JSON.stringify(failure)).not.toContain("secret");
  });
+ it("explains an archived owner on Deal reopen from correlated typed code",()=>{
+   const detail=create(DomainErrorDetailSchema,{
+     domainCode:"SALES_REOPEN_OWNER_NOT_ELIGIBLE",requestId:"attempt-id",
+     commitOutcome:MutationCommitOutcome.REJECTED});
+   const failure=decodeCrmError(new ConnectError("secret",Code.Aborted,meta,
+     [{desc:DomainErrorDetailSchema,value:detail}]));
+   expect(failure).toMatchObject({outcome:"rejected",domainCode:"SALES_REOPEN_OWNER_NOT_ELIGIBLE"});
+   expect(failure.text).toContain("Выберите действующего ответственного");
+   expect(failure.text).not.toContain("secret");
+   const uncorrelated=decodeCrmError(new ConnectError("secret",Code.Aborted,
+     {"x-request-id":"different"},[{desc:DomainErrorDetailSchema,value:detail}]));
+   expect(uncorrelated.domainCode).toBeUndefined();
+   expect(uncorrelated.outcome).toBe("unconfirmed");
+ });
  it("does not expose untrusted messages or field details",()=>{
    const detail=create(DomainErrorDetailSchema,{domainCode:"PRIVATE_VALUE",requestId:"attempt-id",
      commitOutcome:MutationCommitOutcome.REJECTED,

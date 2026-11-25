@@ -115,6 +115,7 @@ export function decodeCrmError(error: unknown): CrmFailure {
   // Only locally translated domain and field details reach the UI.
   const domainExplanations: Readonly<Record<string, string>> = {
     SALES_DEAL_NAME_INVALID: "Введите название сделки.",
+    SALES_REOPEN_OWNER_NOT_ELIGIBLE: "Ответственный недоступен. Выберите действующего ответственного для повторного открытия сделки.",
     SALES_DEAL_VERSION_CONFLICT: explanations[Code.Aborted]!,
     SALES_PIPELINE_VERSION_CONFLICT: explanations[Code.Aborted]!,
   };
