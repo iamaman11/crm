@@ -71,6 +71,18 @@ enum AutomationRunStatus {
   AUTOMATION_RUN_STATUS_PENDING = 1;
   AUTOMATION_RUN_STATUS_COMMITTED = 2;
 }
+// Current server-derived disposition of the immutable claimed intent.
+// A pending ledger entry is not itself proof that the Task did not commit.
+enum AutomationRunDisposition {
+  AUTOMATION_RUN_DISPOSITION_UNSPECIFIED = 0;
+  AUTOMATION_RUN_DISPOSITION_COMMITTED = 1;
+  AUTOMATION_RUN_DISPOSITION_RETRY_READY = 2;
+  AUTOMATION_RUN_DISPOSITION_WAITING_ASSIGNEE = 3;
+  // Terminal for the pinned rule version; revision numbers cannot return.
+  AUTOMATION_RUN_DISPOSITION_RULE_SUPERSEDED = 4;
+  // A candidate Task receipt exists; the original Task owner must validate it.
+  AUTOMATION_RUN_DISPOSITION_RECONCILE_RECEIPT = 5;
+}
 message AutomationRun {
   string rule_id = 1;
   int64 rule_version = 2;
@@ -83,6 +95,7 @@ message AutomationRun {
   string task_request_id = 9;
   int64 created_at_unix_millis = 10;
   int64 completed_at_unix_millis = 11;
+  AutomationRunDisposition disposition = 12;
 }
 message RunInteractionAutomationResponse {
   AutomationRun run = 1;

@@ -28,7 +28,7 @@ export type { Task } from "../gen/crm/activities/v2/task_pb";
 export type { Member, Team } from "../gen/crm/access/v2/member_pb";
 export type { Interaction } from "../gen/crm/activities/v2/interaction_pb";
 export type { AutomationRule, AutomationRun } from "../gen/crm/activities/v2/automation_pb";
-export { AutomationTrigger, AutomationRunStatus } from "../gen/crm/activities/v2/automation_pb";
+export { AutomationTrigger, AutomationRunStatus, AutomationRunDisposition } from "../gen/crm/activities/v2/automation_pb";
 export type { Deal, DealCapabilities, OpportunityParticipant } from "../gen/crm/sales/v2/deal_pb";
 export { OpportunityTeamRole } from "../gen/crm/sales/v2/deal_pb";
 export type { SalesQuota, SalesQuotaConfiguration, SalesQuotaScope, SalesQuotaFactCursor, GetSalesQuotaPerformanceResponse } from "../gen/crm/sales/v2/deal_pb";

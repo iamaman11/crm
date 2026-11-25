@@ -6892,6 +6892,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    assert.equal(executed.status,200,describeProtobuf(executed.body));
    assert.equal(executed.body.receipt.resourceVersion,1n);
    assert.equal(executed.body.run.status,2);
+   assert.equal(executed.body.run.disposition,1);
    const taskId=executed.body.run.taskId;
    const task=(await taskV2("GetTask",viewer,{taskId})).body.task;
    assert.equal(task.accountId,accountId);
@@ -6957,10 +6958,18 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    const pending=await automationV2("GetAutomationRun",viewer,{ruleId,interactionId:second});
    assert.equal(pending.status,200);
    assert.equal(pending.body.run.status,1);
+   assert.equal(pending.body.run.disposition,3);
    assert.equal(pending.body.confirmedMutation,undefined);
+   const waitingList=await automationV2("ListAutomationRuns",viewer,{ruleId,page:{pageSize:25}});
+   assert.equal(waitingList.body.runs.find(x=>x.interactionId===second).disposition,3);
    assert.equal((await memberV2("UpdateMember",admin,{
      email:person,active:true,precondition:rkey("reactivate",2n)
    })).status,200);
+   const ready=await automationV2("GetAutomationRun",viewer,{ruleId,interactionId:second});
+   assert.equal(ready.body.run.disposition,2);
+   assert.equal((await automationV2("RunInteractionAutomation",admin,{
+     ...runInput(second,"wrong-pinned-version"),expectedRuleVersion:2n
+   })).status,400);
    const recovered=await automationV2("RunInteractionAutomation",admin,secondInput);
    assert.equal(recovered.status,200,describeProtobuf(recovered.body));
    assert.equal(recovered.body.run.status,2);
@@ -6993,11 +7002,48 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      ruleId,interactionId:blocked
    })).body.run;
    assert.equal(blockedRun.status,1);
+   // Native D1 aborts only the run finalization audit; original Task and
+   // receipt were committed in their own atomic owner statement.
+   const reconcileSource="automation-reconcile-"+suffix;
+   assert.equal((await interactionV2("CreateInteraction",admin,
+     interaction(reconcileSource,"reconcile"))).status,200);
+   const reconcileInput=runInput(reconcileSource,"reconcile-run");
+   await sql("CREATE TRIGGER fixture_fail_automation_commit BEFORE INSERT ON crm_audit "+
+     "WHEN NEW.action='activities.automation.run.committed' "+
+     "BEGIN SELECT RAISE(ABORT,'fixture run finalization rollback'); END;");
+   try {
+     assert.equal((await automationV2("RunInteractionAutomation",admin,reconcileInput)).status,503);
+   } finally {await sql("DROP TRIGGER fixture_fail_automation_commit");}
+   const unreconciled=await automationV2("GetAutomationRun",viewer,{
+     ruleId,interactionId:reconcileSource,receiptIdempotencyKey:reconcileInput.precondition.idempotencyKey
+   });
+   assert.equal(unreconciled.body.run.status,1);
+   assert.equal(unreconciled.body.run.disposition,5);
+   assert.equal(unreconciled.body.confirmedMutation,undefined);
+   const reconcileTask=unreconciled.body.run.taskId;
+   assert.equal((await sql("SELECT COUNT(*) n FROM crm_activity_task_receipts WHERE tenant=? AND key=?",
+     "tenant-a",reconcileTask))[0].n,1);
    const disabled=await automationV2("PutAutomationRule",admin,{
      ...put,enabled:false,precondition:rkey("disable",1n)
    });
    assert.equal(disabled.status,200,describeProtobuf(disabled.body));
    assert.equal(disabled.body.rule.version,2n);
+   const terminal=await automationV2("GetAutomationRun",viewer,{ruleId,interactionId:blocked});
+   assert.equal(terminal.body.run.disposition,4);
+   const reconcileAfterDisable=await automationV2("GetAutomationRun",viewer,{
+     ruleId,interactionId:reconcileSource
+   });
+   assert.equal(reconcileAfterDisable.body.run.disposition,5);
+   assert.equal((await automationV2("RunInteractionAutomation",viewer,reconcileInput)).status,403);
+   const reconciled=await automationV2("RunInteractionAutomation",admin,reconcileInput);
+   assert.equal(reconciled.status,200,describeProtobuf(reconciled.body));
+   assert.equal(reconciled.body.run.disposition,1);
+   assert.equal(reconciled.body.receipt.replayed,true);
+   assert.equal((await automationV2("GetAutomationRun",viewer,{
+     ruleId,interactionId:reconcileSource,receiptIdempotencyKey:reconcileInput.precondition.idempotencyKey
+   })).body.confirmedMutation.resourceVersion,1n);
+   assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND action='activity_tasks.create'",
+     "tenant-a",reconcileTask))[0].n,1);
    // Attempt the same physical Task INSERT boundary after disabling the rule.
    // A real D1 trigger, not the earlier Rust check, must reject it.
    await assert.rejects(()=>sql(
@@ -7034,7 +7080,8 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      rule_version_cas:true,single_task_audit:true,exact_replay:true,
      durable_pending:true,revocation_recovery:true,disabled_fail_closed:true,
      request_key_conflict:true,concurrent_key_conflict:true,alias_receipt:true,
-     atomic_rule_guard:true,production_cron_disabled:true}));
+     atomic_rule_guard:true,typed_disposition:true,pinned_retry:true,
+     original_receipt_reconciliation_after_disable:true,production_cron_disabled:true}));
  }
  assert.deepEqual([...writesWithReceipt].sort(),[...mutationPaths].sort(),
    "every write method must exercise a committed response with a typed receipt");

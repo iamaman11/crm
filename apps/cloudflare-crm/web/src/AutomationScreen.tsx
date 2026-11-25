@@ -1,11 +1,29 @@
 import {useCallback,useState} from "react";
-import {AutomationRunStatus,AutomationTrigger,MemberRole} from "@ultimate-crm/client/cloudflare";
+import {AutomationRunDisposition,AutomationRunStatus,AutomationTrigger,MemberRole} from "@ultimate-crm/client/cloudflare";
 import type {AutomationRule} from "@ultimate-crm/client/cloudflare";
 import {Button,Card,PageHeader,SelectField,TextField} from "@ultimate-crm/ui";
 import {api,newId} from "./api";
 import {useQuery,useMutation,prepareMutation,MutationNotice,QueryNotice,Paging} from "./hooks";
 import {taskHref} from "./routes";
 import {allMembers,humanMember} from "./memberCatalog";
+
+// Exhaustive presentation of the server's typed disposition, not a rule engine.
+function runDisposition(value:AutomationRunDisposition) {
+  switch(value) {
+    case AutomationRunDisposition.COMMITTED:
+      return {title:"Задача подтверждена",detail:"",retry:false};
+    case AutomationRunDisposition.RETRY_READY:
+      return {title:"Готово к повтору",detail:"Повторяется только сохранённое намерение.",retry:true};
+    case AutomationRunDisposition.WAITING_ASSIGNEE:
+      return {title:"Ожидает ответственного",detail:"Ответственный неактивен. Восстановите доступ и обновите историю.",retry:false};
+    case AutomationRunDisposition.RULE_SUPERSEDED:
+      return {title:"Исполнение прекращено",detail:"Версия правила отключена или заменена. Новая задача по этому запуску запрещена.",retry:false};
+    case AutomationRunDisposition.RECONCILE_RECEIPT:
+      return {title:"Требуется сверка подтверждения",detail:"Найдено возможное подтверждение Task. Rust сверит исходное намерение без новой задачи.",retry:true};
+    default:
+      return {title:"Состояние неизвестно",detail:"Обновите историю перед продолжением.",retry:false};
+  }
+}
 
 // The screen is ONLY a generated Connect/Rust projection. No browser rule
 // interpreter, callback that mutates Tasks, tenant field, or stored second state.
@@ -71,6 +89,14 @@ export function AutomationScreen({initialInteractionId=""}:{initialInteractionId
     setEnabled(rule.enabled);ruleMutation.changed();
   };
   const pending=ruleMutation.busy||ruleMutation.pending||runMutation.busy||runMutation.pending;
+  const executeRun=(ruleId:string,sourceId:string,version:bigint)=>
+    runMutation.runIntent(()=>prepareMutation(api.automations.runInteractionAutomation,{
+      ruleId,interactionId:sourceId,expectedRuleVersion:version,
+      precondition:{idempotencyKey:runMutation.key}
+    },ruleId+"/"+sourceId),async()=>{
+      if(runFilter===ruleId&&runCursor==="")await runs.reload();
+      else {setRunFilter(ruleId);setRunCursor("");}
+    });
   return <>
     <PageHeader title="Автоматизация"
       description="Типизированные правила Activities, подписанная публикация и восстановимая история. Источник — Rust и D1; браузер не исполняет правила."/>
@@ -89,18 +115,7 @@ export function AutomationScreen({initialInteractionId=""}:{initialInteractionId
           <Button variant="secondary" disabled={pending}
             onClick={()=>beginEdit(rule)}>Редактировать</Button>{" "}
           <Button disabled={pending||!rule.enabled||!interactionId.trim()}
-            onClick={()=>void runMutation.runIntent(()=>prepareMutation(
-              api.automations.runInteractionAutomation,{
-                ruleId:rule.ruleId,interactionId:interactionId.trim(),
-                expectedRuleVersion:rule.version,
-                precondition:{idempotencyKey:runMutation.key}
-              },rule.ruleId+"/"+interactionId.trim()
-            ),async()=>{
-                // A changed filter installs a new query loader; reloading the
-                // obsolete one races cancellation after the Task already committed.
-                if(runFilter===rule.ruleId&&runCursor==="")await runs.reload();
-                else {setRunFilter(rule.ruleId);setRunCursor("");}
-              })}>
+            onClick={()=>void executeRun(rule.ruleId,interactionId.trim(),rule.version)}>
             Выполнить для взаимодействия
           </Button>
         </>}
@@ -173,17 +188,23 @@ export function AutomationScreen({initialInteractionId=""}:{initialInteractionId
         <Button variant="secondary" onClick={()=>{setRunFilter("");setRunCursor("");}}>
           Сбросить</Button></p>}
       <QueryNotice query={runs}/>
-      {runs.data?.runs.map(run=><Card key={run.ruleId+"/"+run.sourceEventId}
-        title={run.status===AutomationRunStatus.COMMITTED?"Задача подтверждена":"Ожидает подтверждения"}>
+      <Button variant="secondary" disabled={runs.busy}
+        onClick={()=>void runs.reload().catch(()=>{})}>Обновить историю</Button>
+      {runs.data?.runs.map(run=>{
+        const state=runDisposition(run.disposition);
+        return <Card key={run.ruleId+"/"+run.sourceEventId} title={state.title}>
         <p>Правило: {run.ruleId} · Версия: {run.ruleVersion.toString()}</p>
         <p>Источник Interaction: {run.interactionId}</p>
         <p>Оригинальный запрос: {run.originalRequestId}</p>
         {run.status===AutomationRunStatus.COMMITTED?
           <p><a href={taskHref(run.taskId,"")}>Открыть созданную задачу</a> ·
             Task receipt: {run.taskRequestId}</p>:
-          <p>Task не подтверждён. Требуется повторная проверка/исполнение того же намерения,
-            новая задача не предполагается.</p>}
-      </Card>)}
+          <><p>{state.detail}</p>
+            {isAdmin&&state.retry&&<Button disabled={pending}
+              onClick={()=>void executeRun(run.ruleId,run.interactionId,run.ruleVersion)}>
+              Восстановить исходный запуск
+            </Button>}</>}
+      </Card>})}
       {!runs.busy&&runs.data?.runs.length===0&&<p>Запусков пока нет.</p>}
       <Paging next={runs.data?.pageInfo?.nextPageToken??""} busy={runs.busy}
         onFirst={()=>setRunCursor("")}

@@ -299,6 +299,21 @@ impl AutomationV2Service {
                 ));
             }
         };
+        use automation::RunDisposition;
+        use auto_wire::AutomationRunDisposition as WireDisposition;
+        let disposition = match row.disposition()? {
+            RunDisposition::Committed => WireDisposition::AUTOMATION_RUN_DISPOSITION_COMMITTED,
+            RunDisposition::RetryReady => WireDisposition::AUTOMATION_RUN_DISPOSITION_RETRY_READY,
+            RunDisposition::WaitingAssignee => {
+                WireDisposition::AUTOMATION_RUN_DISPOSITION_WAITING_ASSIGNEE
+            }
+            RunDisposition::RuleSuperseded => {
+                WireDisposition::AUTOMATION_RUN_DISPOSITION_RULE_SUPERSEDED
+            }
+            RunDisposition::ReconcileReceipt => {
+                WireDisposition::AUTOMATION_RUN_DISPOSITION_RECONCILE_RECEIPT
+            }
+        };
         Ok(auto_wire::AutomationRun {
             rule_id: row.rule_id.clone(),
             rule_version: row.rule_version,
@@ -311,6 +326,7 @@ impl AutomationV2Service {
             task_request_id: row.task_request_id.clone().unwrap_or_default(),
             created_at_unix_millis: row.created_at_unix_millis,
             completed_at_unix_millis: row.completed_at_unix_millis.unwrap_or_default(),
+            disposition: disposition.into(),
             ..Default::default()
         })
     }

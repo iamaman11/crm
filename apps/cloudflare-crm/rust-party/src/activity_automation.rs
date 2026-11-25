@@ -57,6 +57,31 @@ pub(super) struct RunRow {
     pub task_request_id: Option<String>,
     pub created_at_unix_millis: i64,
     pub completed_at_unix_millis: Option<i64>,
+    receipt_exists: i64,
+    rule_current: i64,
+    assignee_active: i64,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum RunDisposition {
+    Committed,
+    RetryReady,
+    WaitingAssignee,
+    RuleSuperseded,
+    ReconcileReceipt,
+}
+impl RunRow {
+    pub(super) fn disposition(&self) -> Result<RunDisposition, ConnectError> {
+        match self.status.as_str() {
+            "committed" => Ok(RunDisposition::Committed),
+            "pending" if self.receipt_exists == 1 => Ok(RunDisposition::ReconcileReceipt),
+            "pending" if self.rule_current != 1 => Ok(RunDisposition::RuleSuperseded),
+            "pending" if self.assignee_active != 1 => Ok(RunDisposition::WaitingAssignee),
+            "pending" => Ok(RunDisposition::RetryReady),
+            _ => Err(ConnectError::internal(
+                "ACTIVITIES_AUTOMATION_RUN_STATUS_INVALID",
+            )),
+        }
+    }
 }
 pub(super) struct RunSaved {
     pub run: RunRow,
@@ -316,6 +341,22 @@ async fn source(
     .map_err(|_| storage())?
     .ok_or_else(|| ConnectError::not_found("ACTIVITIES_AUTOMATION_SOURCE_NOT_FOUND"))
 }
+// One indexed D1 statement projects current facts for each claimed run.
+// A receipt candidate takes precedence over revoked authority; only the
+// original Task owner may validate its digest and reconcile the actual commit.
+const RUN_SELECT: &str = concat!(
+    "SELECT a.seq,a.rule_id,a.rule_version,a.source_event_id,a.interaction_id,a.task_id,",
+    "a.task_intent,a.status,a.requested_by,a.original_request_id,a.task_request_id,",
+    "a.created_at_unix_millis,a.completed_at_unix_millis,",
+    "EXISTS(SELECT 1 FROM crm_activity_task_receipts t WHERE t.tenant=a.tenant",
+    " AND t.key=a.task_id) AS receipt_exists,",
+    "EXISTS(SELECT 1 FROM crm_activity_automation_rules r WHERE r.tenant=a.tenant",
+    " AND r.id=a.rule_id AND r.version=a.rule_version AND r.enabled=1) AS rule_current,",
+    "EXISTS(SELECT 1 FROM crm_users u WHERE u.tenant_id=a.tenant",
+    " AND u.email=json_extract(a.task_intent,'$.assignee_email') AND u.active=1)",
+    " AS assignee_active FROM crm_activity_automation_runs a"
+);
+
 async fn read_run(
     db: &D1Database,
     tenant: &str,
@@ -324,12 +365,7 @@ async fn read_run(
 ) -> Result<Option<RunRow>, ConnectError> {
     bind(
         db,
-        concat!(
-            "SELECT seq,rule_id,rule_version,source_event_id,interaction_id,task_id,",
-            "task_intent,status,requested_by,original_request_id,task_request_id,",
-            "created_at_unix_millis,completed_at_unix_millis FROM crm_activity_automation_runs",
-            " WHERE tenant=? AND rule_id=? AND source_event_id=?"
-        ),
+        &format!("{RUN_SELECT} WHERE a.tenant=? AND a.rule_id=? AND a.source_event_id=?"),
         &[
             JsValue::from_str(tenant),
             JsValue::from_str(rule_id),
@@ -350,11 +386,8 @@ pub(super) async fn list_runs(
 ) -> Result<Vec<RunRow>, ConnectError> {
     bind(
         db,
-        concat!(
-            "SELECT seq,rule_id,rule_version,source_event_id,interaction_id,task_id,",
-            "task_intent,status,requested_by,original_request_id,task_request_id,",
-            "created_at_unix_millis,completed_at_unix_millis FROM crm_activity_automation_runs",
-            " WHERE tenant=? AND (?='' OR rule_id=?) AND seq>? ORDER BY seq LIMIT ?"
+        &format!(
+            "{RUN_SELECT} WHERE a.tenant=? AND (?='' OR a.rule_id=?) AND a.seq>? ORDER BY a.seq LIMIT ?"
         ),
         &[
             JsValue::from_str(tenant),
@@ -540,6 +573,11 @@ pub(super) async fn execute_interaction(
         }
     }
     let row = existing.ok_or_else(storage)?;
+    if row.status == "pending" && expected_version != row.rule_version {
+        return Err(ConnectError::failed_precondition(
+            "ACTIVITIES_AUTOMATION_PINNED_RULE_VERSION_REQUIRED",
+        ));
+    }
     // A new key may replay the logical run, but must durably bind to
     // this exact request before any Task execution or success response.
     if !verify_run_request(
@@ -581,15 +619,25 @@ pub(super) async fn execute_interaction(
             ));
         }
     }
-    if row.status == "committed" {
-        return Ok(RunSaved {
-            task_original_request_id: row.task_request_id.clone(),
-            run: row,
-            replayed: true,
-        });
-    }
-    if row.status != "pending" {
-        return Err(storage());
+    match row.disposition()? {
+        RunDisposition::Committed => {
+            return Ok(RunSaved {
+                task_original_request_id: row.task_request_id.clone(),
+                run: row,
+                replayed: true,
+            });
+        }
+        RunDisposition::RuleSuperseded => {
+            return Err(ConnectError::failed_precondition(
+                "AUTOMATION_RULE_DISABLED",
+            ));
+        }
+        RunDisposition::WaitingAssignee => {
+            return Err(ConnectError::invalid_argument(
+                "ACTIVITIES_ASSIGNEE_NOT_ENROLLED",
+            ));
+        }
+        RunDisposition::RetryReady | RunDisposition::ReconcileReceipt => {}
     }
     let input: activity_tasks::CreateInput =
         serde_json::from_str(&row.task_intent).map_err(|_| storage())?;

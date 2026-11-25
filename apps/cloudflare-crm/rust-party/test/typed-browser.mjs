@@ -3356,6 +3356,10 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND action='activity_tasks.create'",tenantA,autoRun.task_id))[0].n,1);
    await page.getByRole("link",{name:"Открыть созданную задачу",exact:true}).waitFor();
    await mutation(executeButton,"RunInteractionAutomation",{replay:true});
+   await page.getByRole("heading",{name:"Задача подтверждена",exact:true}).waitFor();
+   assert.equal(await page.getByRole("button",{name:"Восстановить исходный запуск",exact:true}).count(),0);
+   await page.getByRole("button",{name:"Обновить историю",exact:true}).click();
+   await page.getByRole("heading",{name:"Задача подтверждена",exact:true}).waitFor();
    assert.equal((await sql("SELECT COUNT(*) n FROM crm_activity_automation_run_requests WHERE tenant=? AND rule_id=?",tenantA,autoRuleId))[0].n,2);
    assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND action='activity_tasks.create'",tenantA,autoRun.task_id))[0].n,1);
    await reloadDocument();
