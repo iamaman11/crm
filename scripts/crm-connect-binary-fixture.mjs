@@ -78,10 +78,6 @@ const privacyV2=serviceWire("crm.customer_privacy.v2.PrivacyCaseService");
 export const privacyV2Path=privacyV2.path;
 export const binaryPrivacyV2=privacyV2.binary;
 export const decodePrivacyV2=privacyV2.decode;
-const csvV2=serviceWire("crm.customer_data_operations.v2.PartyCsvService");
-export const csvV2Path=csvV2.path;
-export const binaryCsvV2=csvV2.binary;
-export const decodeCsvV2=csvV2.decode;
 
 // Decode the real standard Connect detail from the same compiled descriptor.
 export function decodeDomainErrorDetail(detail){

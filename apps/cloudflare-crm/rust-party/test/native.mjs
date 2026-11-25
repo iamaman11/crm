@@ -12,6 +12,7 @@ import {formatRpcFailure,readRpcError} from "../../scripts/rpc-error-response.mt
 import {verifyPartyNameQuality} from "./data-quality.mts";
 import {verifyConsent} from "./consent.mts";
 import {verifyEnrichment} from "./enrichment.mts";
+import {importNfcPartyFixture,verifyPartyCsv} from "./party-csv.mts";
 import {verifyIdentityResolution} from "./identity-resolution.mts";
 import {verifyAccountOverview,verifyOverviewReadParity} from "./account-overview.mts";
 import {chromium} from "playwright";
@@ -27,7 +28,6 @@ import {binaryPartyV3,decodePartyV3,partyV3Path,
   binaryAutomationV2,decodeAutomationV2,automationV2Path,
   binarySalesV2,decodeSalesV2,salesV2Path,
   binaryPrivacyV2,decodePrivacyV2,privacyV2Path,
-  binaryCsvV2,decodeCsvV2,csvV2Path,
   decodeDomainErrorDetail,decodeRpcOutput} from "../../../../scripts/crm-connect-binary-fixture.mjs";
 // Each native subtest owns its own harness, fixture D1, signed identity and evidence.
 // The first subtest returns only the compiled policy/denial proof; the second
@@ -3415,276 +3415,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    dispatch:rpcFetch,sql,admin,viewer,tenantB,accountId,partyId:id,contactId,
    relationshipId:rMid,dealId,taskId:taskMid,otherTaskId:taskOther,
  });
- // CSV operations use the original parser/Party owner, explicit admin permissions,
- // atomic D1 writes and a per-operation receipt in that same database.
- const csv=signedReadOnly(csvV2Path,binaryCsvV2,decodeCsvV2);
- const csvBytes=new TextEncoder().encode(
-   'party_id,kind,display_name,resource_version\r\nexternal-one,person,CSV One,1\r\nexternal-two,organization,CSV Two,1\r\n');
- const importAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n;
- const importPreview=await csv("PreviewPartyImport",admin,{csv:csvBytes});
- assert.equal(importPreview.status,200,formatRpcFailure(importPreview));
- assert.equal(importPreview.body.count,2);
- assert.equal(importPreview.body.previouslyImported,0);
- assert.equal(importPreview.body.csvSha256Hex,createHash("sha256").update(csvBytes).digest("hex"));
- assert.equal(new Set(importPreview.body.targetPartyIds).size,2);
- assert.ok(importPreview.body.targetPartyIds.every(id=>!id.startsWith("external-")));
- const otherPreview=await csv("PreviewPartyImport",tenantB,{csv:csvBytes});
- assert.equal(otherPreview.status,200,formatRpcFailure(otherPreview));
- assert.ok(otherPreview.body.targetPartyIds.every(id=>!importPreview.body.targetPartyIds.includes(id)));
- const applyInput={csv:csvBytes,expectedSha256Hex:importPreview.body.csvSha256Hex,
-   precondition:{idempotencyKey:"csv-import-operation-main"}};
- assert.equal((await csv("ApplyPartyImport",admin,{...applyInput,expectedSha256Hex:"0".repeat(64)})).body.code,"aborted");
- assert.equal((await csv("ApplyPartyImport",admin,{...applyInput,
-   precondition:{idempotencyKey:"csv-import-invalid-version",expectedVersion:1n}})).body.code,"invalid_argument");
- assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n,importAuditBefore,"previews and invalid input are read-only");
- const applied=await csv("ApplyPartyImport",admin,applyInput);
- assert.equal(applied.status,200,formatRpcFailure(applied));
- assert.equal(applied.body.createdCount,2);assert.equal(applied.body.replayedCount,0);
- assert.equal(applied.body.receipt.replayed,false);
- assert.equal(applied.body.receipt.requestId,applied.headers.get("x-request-id"));
- assert.equal(applied.body.receipt.resourceVersion,1n);
- const importReplay=await csv("ApplyPartyImport",knownService,applyInput);
- assert.equal(importReplay.body.createdCount,0);assert.equal(importReplay.body.replayedCount,2);
- assert.equal(importReplay.body.receipt.replayed,true);
-
- const csvReceiptAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n;
- const csvReceiptInput={csv:new Uint8Array(),receiptIdempotencyKey:applyInput.precondition.idempotencyKey};
- const csvReceiptRead=await csv("PreviewPartyImport",admin,csvReceiptInput);
- assert.equal(csvReceiptRead.status,200,formatRpcFailure(csvReceiptRead));
- assert.equal(csvReceiptRead.body.csvSha256Hex,applyInput.expectedSha256Hex);
- assert.equal(csvReceiptRead.body.count,2);
- assert.equal(csvReceiptRead.body.previouslyImported,2);
- assert.deepEqual(csvReceiptRead.body.targetPartyIds,[]);
- assert.equal(csvReceiptRead.body.confirmedMutation?.originalRequestId,applied.headers.get("x-request-id"));
- assert.equal(csvReceiptRead.body.confirmedMutation?.resourceVersion,1n);
- assert.equal(csvReceiptRead.body.confirmedMutation?.requestId,csvReceiptRead.headers.get("x-request-id"));
- assert.equal((await csv("PreviewPartyImport",tenantB,csvReceiptInput)).body.code,"not_found");
- assert.equal((await csv("PreviewPartyImport",viewer,csvReceiptInput)).status,403,
-   "CSV receipt lookup must preserve the existing admin-only permission");
- assert.equal((await csv("PreviewPartyImport",admin,{csv:new Uint8Array()})).body.code,"invalid_argument");
- assert.equal((await csv("PreviewPartyImport",admin,{
-   csv:new Uint8Array(),receiptIdempotencyKey:"short"})).body.code,"invalid_argument");
- assert.equal((await csv("PreviewPartyImport",admin,{
-   csv:new Uint8Array(),receiptIdempotencyKey:"csv-import-missing-key"})).body.code,"not_found");
- assert.equal((await csv("PreviewPartyImport",admin,{
-   csv:csvBytes,receiptIdempotencyKey:applyInput.precondition.idempotencyKey})).body.code,"invalid_argument");
- assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n,csvReceiptAuditBefore,
-   "CSV receipt lookup must not append audit");
- await sql("ALTER TABLE crm_party_import_receipts RENAME TO fixture_unavailable_party_import_receipts");
- try {
-   assert.equal((await csv("PreviewPartyImport",admin,csvReceiptInput)).status,503,
-     "an unavailable batch receipt must remain unconfirmed");
- } finally {
-   await sql("ALTER TABLE fixture_unavailable_party_import_receipts RENAME TO crm_party_import_receipts");
- }
- assert.equal((await csv("ApplyPartyImport",admin,{...applyInput,
-   precondition:{idempotencyKey:"csv-import-another-operation"}})).body.replayedCount,2);
- assert.equal((await csv("PreviewPartyImport",admin,{csv:csvBytes})).body.previouslyImported,2);
- for(const target of importPreview.body.targetPartyIds){
-   assert.equal((await v3("GetParty",viewer,{partyId:target})).status,200);
-   assert.equal((await v3("GetParty",tenantB,{partyId:target})).body.code,"not_found");
-   assert.deepEqual((await sql("SELECT action,tenant_id,actor,request_id FROM crm_audit WHERE subject_id='"+target+"'")),[
-     {action:"parties.create",tenant_id:"tenant-a",actor:"native-a@example.test",request_id:applied.headers.get("x-request-id")},
-   ],"Import replay by another actor must retain the original attribution");
- }
- assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n,importAuditBefore+2,"replays never duplicate Party audit");
- assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_party_import_receipts WHERE tenant='tenant-a'"))[0].n,2);
- const changedBytes=new TextEncoder().encode(new TextDecoder().decode(csvBytes).replace("CSV One","CSV Changed"));
- assert.equal((await csv("ApplyPartyImport",admin,{...applyInput,csv:changedBytes,
-   expectedSha256Hex:createHash("sha256").update(changedBytes).digest("hex")})).body.code,"aborted");
- // Structural file failures remain fail-closed Connect errors.
- for(const invalid of [
-   new Uint8Array(),new Uint8Array(16385),new TextEncoder().encode("invalid,csv"),
-   new TextEncoder().encode("party_id,kind,display_name,resource_version\r\n"),
-   new TextEncoder().encode("party_id,kind,display_name,resource_version\r\n"+
-     Array.from({length:21},(_,i)=>"source-"+i+",person,Name "+i+",1\r\n").join(""))
- ]){
-   assert.equal((await csv("PreviewPartyImport",admin,{csv:invalid})).body.code,
-     "invalid_argument","Malformed header/size/count must never return a commit-ready preview");
- }
- // Row semantic errors become typed, NON-COMMITTABLE previews, not generic 400s.
- const semanticCases=[
-   ["x,invalid,Name,1",[[1,"kind","IMPORT_KIND_INVALID"]]],
-   ["x,person,Name,0",[[1,"resource_version","IMPORT_SOURCE_VERSION_INVALID"]]],
-   ["x,person,One,1\r\nx,person,Two,1",[[2,"party_id","IMPORT_DUPLICATE_OR_EMPTY_SOURCE_ID"]]]
- ];
- for(const [rows,expectedIssues] of semanticCases){
-   const invalid=new TextEncoder().encode(
-     "party_id,kind,display_name,resource_version\r\n"+rows+"\r\n");
-   const response=await csv("PreviewPartyImport",admin,{csv:invalid});
-   assert.equal(response.status,200,formatRpcFailure(response));
-   assert.deepEqual(response.body.targetPartyIds,[]);
-   assert.deepEqual(response.body.rowIssues.map(x=>[x.rowPosition,x.field,x.code]),
-     expectedIssues);
-   assert.equal((await csv("ApplyPartyImport",admin,{
-     csv:invalid,expectedSha256Hex:response.body.csvSha256Hex,
-     precondition:{idempotencyKey:"csv-reject-semantic-"+createHash("sha256").update(invalid).digest("hex").slice(0,16)}
-   })).status,400,"A typed invalid preview must still be rejected by the owner");
- }
- // The same original CSV parser reports ALL row/field diagnostics, not the
- // first unrelated error code. No target or audit can be created by preview.
- const invalidRowsCsv=new TextEncoder().encode(
-   "party_id,kind,display_name,resource_version\r\n"+
-   "duplicate-one,invalid,First,0\r\n"+
-   "duplicate-one,person,Second,1\r\n"+
-   "empty-name,person,,1\r\n"+
-   "valid-last,organization,Valid,1\r\n");
- const invalidAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n;
- const invalidPartyBefore=(await sql("SELECT COUNT(*) AS n FROM crm_party_records"))[0].n;
- const invalidReceiptBefore=(await sql("SELECT COUNT(*) AS n FROM crm_party_import_receipts"))[0].n;
- const invalidPreview=await csv("PreviewPartyImport",admin,{csv:invalidRowsCsv});
- assert.equal(invalidPreview.status,200,formatRpcFailure(invalidPreview));
- assert.equal(invalidPreview.body.count,4);
- assert.equal(invalidPreview.body.csvSha256Hex,createHash("sha256").update(invalidRowsCsv).digest("hex"));
- assert.deepEqual(invalidPreview.body.targetPartyIds,[],"No ID from invalid preview is actionable");
- assert.deepEqual(invalidPreview.body.rowIssues.map(issue=>[
-   issue.rowPosition,issue.field,issue.code
- ]),[
-   [1,"resource_version","IMPORT_SOURCE_VERSION_INVALID"],
-   [1,"kind","IMPORT_KIND_INVALID"],
-   [2,"party_id","IMPORT_DUPLICATE_OR_EMPTY_SOURCE_ID"],
-   [3,"display_name","IMPORT_PARTY_INVALID"]
- ]);
- const invalidApply=await csv("ApplyPartyImport",admin,{
-   csv:invalidRowsCsv,expectedSha256Hex:invalidPreview.body.csvSha256Hex,
-   precondition:{idempotencyKey:"csv-import-invalid-rows-denied"}
- });
- assert.equal(invalidApply.status,400,"Apply must revalidate even an advertised digest");
- assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n,invalidAuditBefore);
- assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_party_records"))[0].n,invalidPartyBefore);
- assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_party_import_receipts"))[0].n,invalidReceiptBefore);
- console.log(JSON.stringify({event:"crm.native-n01-csv-row-issues",result:"PASS",
-   per_row:true,multiple_errors:true,field_codes:true,sha256:true,apply_denied:true,
-   no_partial_write:true}));
-
- // A conflict on the second target must leave the first target absent.
- const conflictBytes=new TextEncoder().encode(
-   "party_id,kind,display_name,resource_version\r\nconflict-one,person,First,1\r\nconflict-two,person,Second,1\r\n");
- const conflictPreview=await csv("PreviewPartyImport",admin,{csv:conflictBytes});
- assert.equal(conflictPreview.status,200,formatRpcFailure(conflictPreview));
- const [firstTarget,secondTarget]=conflictPreview.body.targetPartyIds;
- assert.equal((await v3("CreateParty",admin,{partyId:secondTarget,kind:1,displayName:"Existing target",
-   precondition:{idempotencyKey:"csv-target-conflict-create"}})).status,200);
- const conflictRepreview=await csv("PreviewPartyImport",admin,{csv:conflictBytes});
- assert.equal(conflictRepreview.status,200);
- assert.deepEqual(conflictRepreview.body.targetPartyIds,[]);
- assert.deepEqual(conflictRepreview.body.rowIssues.map(issue=>[
-   issue.rowPosition,issue.field,issue.code
- ]),[[2,"party_id","IMPORT_TARGET_PARTY_CONFLICT"]]);
- const failedImport=await csv("ApplyPartyImport",admin,{csv:conflictBytes,
-   expectedSha256Hex:conflictPreview.body.csvSha256Hex,precondition:{idempotencyKey:"csv-conflict-operation"}});
- assert.equal(failedImport.body.code,"aborted");
- assert.equal((await v3("GetParty",viewer,{partyId:firstTarget})).body.code,"not_found");
- assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_party_import_receipts WHERE key='csv-conflict-operation'"))[0].n,0);
- assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n,importAuditBefore+3);
- // Unlike the preflight target conflict above, this fails inside the second SQL
- // audit INSERT, after the first row has executed in the same D1 batch.
- const rollbackBytes=new TextEncoder().encode(
-   "party_id,kind,display_name,resource_version\r\nrollback-one,person,First,1\r\nrollback-two,person,Second,1\r\n");
- const rollbackPreview=await csv("PreviewPartyImport",admin,{csv:rollbackBytes});
- assert.equal(rollbackPreview.status,200);
- const rollbackInput={csv:rollbackBytes,expectedSha256Hex:rollbackPreview.body.csvSha256Hex,
-   precondition:{idempotencyKey:"csv-audit-rollback"}};
- const beforeRollback=(await partySnapshot());
- for(const token of [null,viewer,unknownService])assert.ok((await csv("ApplyPartyImport",token,rollbackInput)).status>=400);
- (await sql("CREATE TRIGGER fixture_fail_import_audit BEFORE INSERT ON crm_audit "+
-   "WHEN NEW.subject_id='"+rollbackPreview.body.targetPartyIds[1]+"' "+
-   "BEGIN SELECT RAISE(ABORT,'fixture late import audit failure'); END;"));
- try{
-   assertUnconfirmed(await csv("ApplyPartyImport",knownService,rollbackInput),"IMPORT_WRITE_UNCONFIRMED");
-   assert.deepEqual((await partySnapshot()),beforeRollback,"Late batch failure must remove every state, receipt and audit");
- }finally{await sql("DROP TRIGGER fixture_fail_import_audit");}
- const retryImport=await csv("ApplyPartyImport",knownService,rollbackInput);
- assert.equal(retryImport.status,200,formatRpcFailure(retryImport));
- assert.equal(retryImport.body.createdCount,2,"Failed batch must not reserve its idempotency key");
- for(const target of rollbackPreview.body.targetPartyIds){
-   assert.deepEqual((await sql("SELECT actor,request_id FROM crm_audit WHERE subject_id='"+target+"'")),[
-     {actor:"service:ci-fixture.access",request_id:retryImport.headers.get("x-request-id")},
-   ]);
- }
- // Product-first simple source: the ORIGINAL CSV ReaderBuilder, optional
- // source identity and position-derived ImportRow, not a second parser/owner.
- const simpleCsv=new TextEncoder().encode(
-   'kind,display_name\r\nperson,"Simple, CSV Person"\r\norganization,"Simple ""Quoted"" Org"\r\n');
- const simplePreview=await csv("PreviewPartyImport",admin,{csv:simpleCsv});
- assert.equal(simplePreview.status,200,formatRpcFailure(simplePreview));
- assert.equal(simplePreview.body.count,2);
- assert.equal(simplePreview.body.previouslyImported,0);
- assert.equal(simplePreview.body.rowIssues.length,0);
- assert.equal(new Set(simplePreview.body.targetPartyIds).size,2);
- assert.ok(simplePreview.body.targetPartyIds.every(id=>!id.includes("external-one")));
- const simpleTenantB=await csv("PreviewPartyImport",tenantB,{csv:simpleCsv});
- assert.equal(simpleTenantB.status,200);
- assert.ok(simpleTenantB.body.targetPartyIds.every(id=>!simplePreview.body.targetPartyIds.includes(id)));
- assert.equal((await csv("PreviewPartyImport",viewer,{csv:simpleCsv})).status,403);
- const brokenSimple=new TextEncoder().encode(
-   "kind,display_name\r\nperson,Valid Name\r\norganization,\r\n");
- const invalidSimple=await csv("PreviewPartyImport",admin,{csv:brokenSimple});
- assert.equal(invalidSimple.status,200,formatRpcFailure(invalidSimple));
- assert.deepEqual(invalidSimple.body.targetPartyIds,[]);
- assert.deepEqual(invalidSimple.body.rowIssues.map(x=>[x.rowPosition,x.field,x.code]),[
-   [2,"display_name","IMPORT_PARTY_INVALID"]]);
- const simpleBeforeAudit=(await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n;
- const simpleBeforeParties=(await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant='tenant-a'"))[0].n;
- assert.equal((await csv("ApplyPartyImport",admin,{
-   csv:brokenSimple,expectedSha256Hex:invalidSimple.body.csvSha256Hex,
-   precondition:{idempotencyKey:"csv-simple-invalid-denied"}
- })).status,400);
- assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n,simpleBeforeAudit);
- assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant='tenant-a'"))[0].n,simpleBeforeParties);
- const simpleApply={csv:simpleCsv,expectedSha256Hex:simplePreview.body.csvSha256Hex,
-   precondition:{idempotencyKey:"csv-simple-import-original-owner"}};
- const simpleSaved=await csv("ApplyPartyImport",admin,simpleApply);
- assert.equal(simpleSaved.status,200,formatRpcFailure(simpleSaved));
- assert.equal(simpleSaved.body.createdCount,2);
- assert.equal((await csv("ApplyPartyImport",knownService,simpleApply)).body.replayedCount,2);
- assert.equal((await csv("PreviewPartyImport",admin,{csv:simpleCsv})).body.previouslyImported,2);
- for(const target of simplePreview.body.targetPartyIds){
-   const found=await v3("GetParty",viewer,{partyId:target});
-   assert.equal(found.status,200);
-   assert.ok(["Simple, CSV Person",'Simple "Quoted" Org'].includes(found.body.party.displayName));
-   assert.equal((await v3("GetParty",tenantB,{partyId:target})).status,404);
- }
- assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant='tenant-a'"))[0].n,simpleBeforeParties+2);
- assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n,simpleBeforeAudit+2);
- console.log(JSON.stringify({event:"crm.native-simple-csv-original-owner",result:"PASS",
-   native_csv:true,headers_two_or_four:true,tenant:true,original_position_id:true,
-   row_errors:true,atomic:true,replay:true,quoted_values:true,audit:true}));
- assert.equal((await csv("PreviewPartyExport",admin,{kind:0})).body.code,"invalid_argument");
- assert.equal((await csv("PreviewPartyExport",admin,{kind:999})).body.code,"invalid_argument");
- const exportBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n;
- const exported=await csv("PreviewPartyExport",admin,{});
- assert.equal(exported.status,200,formatRpcFailure(exported));
- assert.equal(exported.body.maximumTenantParties,100);
- assert.deepEqual(exported.body.fields,["party_id","kind","display_name","resource_version"]);
- const downloaded=exported.body.csv;
- assert.ok(downloaded instanceof Uint8Array);
- // Original party-export-csv/v1 uses LF records; do not alter canonical bytes.
- assert.match(new TextDecoder().decode(downloaded),/^party_id,kind,display_name,resource_version\n/);
- assert.equal(createHash("sha256").update(downloaded).digest("hex"),exported.body.csvSha256Hex);
- assert.equal((await csv("PreviewPartyExport",null,{})).status,401);
- assert.equal((await csv("PreviewPartyExport",viewer,{})).status,403);
- // Retired business HTTP route must not reappear alongside the typed RPC.
- assert.equal((await rpcFetch("/api/customer-data-operations/parties.csv",{
-   headers:{"cf-access-jwt-assertion":admin}})).status,404);
- const filteredExport=await csv("PreviewPartyExport",admin,{kind:1});
- assert.equal(filteredExport.status,200,formatRpcFailure(filteredExport));
- assert.ok(filteredExport.body.count<exported.body.count);
- assert.equal(createHash("sha256").update(filteredExport.body.csv).digest("hex"),filteredExport.body.csvSha256Hex);
- assert.equal((await csv("PreviewPartyExport",tenantB,{})).body.count,0);
- assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n,exportBefore);
- // Explicit boundary fixture in tenant B: the 101st row must prevent partial export,
- // even when a filter would reduce the returned data below the limit.
- const boundaryRows=Array.from({length:101},(_,i)=>{
-   const state=JSON.stringify({party_id:"csv-boundary-"+i,kind:"person",display_name:"Boundary "+i,
-     created_at_unix_nanos:10,updated_at_unix_nanos:10,version:1});
-   return "('tenant-b','csv-boundary-"+i+"','"+state+"',1,'csv-boundary-key-"+i+"','fixture','fixture','native-b@example.test','Boundary "+i+"')";
- }).join(",");
- await sql("INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id,actor,search_name) VALUES "+boundaryRows);
- assert.equal((await csv("PreviewPartyExport",tenantB,{kind:2})).body.code,"failed_precondition");
- console.log(JSON.stringify({event:"crm.native-party-csv-v2",result:"PASS",admin_read:true,
-   original_owner:"crm.customer-data-operations",party_owner:"crm.parties",
-   tenant_ab:true,atomic:true,replay:true,audit:true,verified_actor:true,sql_failure_rollback:true,csv_bytes_sha256:true,bounded:true}));
+ await verifyPartyCsv({dispatch:rpcFetch,rpcFetch,sql,partySnapshot,admin,viewer,tenantB,knownService,unknownService});
  // M1-10: signed workerd + generated Protobuf prove the actual open-field
  // decision for each primary customer owner. Read the WHOLE returned business
  // object, not a hand-maintained list of fields that could miss future additions.
@@ -4530,15 +4261,10 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  assert.equal((await collectPages(accountV2,"ListAccounts","accounts",{search:canonicalNfcName})).length,0);
  assert.equal((await collectPages(v3,"ListParties","parties",{search:nfcUpdateCanonical}))[0]?.displayName,nfcUpdateName);
  assert.equal((await collectPages(accountV2,"ListAccounts","accounts",{search:nfcUpdateCanonical}))[0]?.name,nfcUpdateName);
- const nfcCsvBytes=new TextEncoder().encode("party_id,kind,display_name,resource_version\r\nnfc-import,person,Imported Cafe\u0301,1\r\n");
- const nfcPreview=await csv("PreviewPartyImport",admin,{csv:nfcCsvBytes});
- assert.equal(nfcPreview.status,200,formatRpcFailure(nfcPreview));
- const nfcApplied=await csv("ApplyPartyImport",admin,{csv:nfcCsvBytes,
-   expectedSha256Hex:nfcPreview.body.csvSha256Hex,precondition:{idempotencyKey:"nfc-import-operation"}});
- assert.equal(nfcApplied.status,200,formatRpcFailure(nfcApplied));
+ const nfcImportedPartyId=await importNfcPartyFixture(rpcFetch,admin);
  const importedNfc=await collectPages(v3,"ListParties","parties",{search:"Imported Café"});
  assert.equal(importedNfc.length,1);
- assert.equal(importedNfc[0].partyId,nfcPreview.body.targetPartyIds[0]);
+ assert.equal(importedNfc[0].partyId,nfcImportedPartyId);
  assert.equal(importedNfc[0].displayName,"Imported Cafe\u0301");
  const searchSnapshot=async()=>({party:(await partySnapshot()),
    accounts:(await sql("SELECT id,state,version FROM crm_account_records ORDER BY tenant,id")),
