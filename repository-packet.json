@@ -79,6 +79,7 @@
     "modules/*/Cargo.toml",
     "modules/*/module.yaml",
     "modules/*/src/**",
+    "modules/*/tests/**",
     "package.json",
     "packages/client/package.json",
     "packages/client/src/cloudflare-*.test.ts",
