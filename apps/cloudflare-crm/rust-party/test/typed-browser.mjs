@@ -29,6 +29,17 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    lastCheckpointAt=now;
  };
  const headerReads=[];
+ const flushHeaderReads=async()=>{
+   // A context may receive one more response while an earlier allHeaders()
+   // read is pending. Drain until the response listener has stopped adding
+   // work, then the caller may safely close that context.
+   let drained=0;
+   while(drained<headerReads.length){
+     const pending=headerReads.slice(drained);
+     drained=headerReads.length;
+     await Promise.all(pending);
+   }
+ };
  let restoreViewer=async()=>{};
  const recordResponse=response=>{
    const path=new URL(response.url()).pathname;
@@ -360,7 +371,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      catch(error){
        const notice=page.getByRole("heading",{name:"Ошибка сервиса. HTTP 404",exact:true});
        if(!await notice.isVisible())throw error;
-       await Promise.all(headerReads);
+       await flushHeaderReads();
        const last=requests.findLast(entry=>entry.path.endsWith("/ListParties"));
        if(last?.status!==404||last.source_sha||last.runtime)
          throw Error("ListParties failed inside CRM; no edge-only recovery allowed: "+
@@ -2466,7 +2477,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
       "a conflict is shown once in the active panel, not behind it");
    assert.equal(await firstId("crm_party_records","display_name","Browser Winner "+runId),partyId);
    assert.equal((await sql("SELECT version FROM crm_party_records WHERE tenant='"+tenantSql+"' AND id='"+partyId+"'"))[0].version,3);
-   await Promise.all(headerReads);
+   await flushHeaderReads();
    await stalePage.close();
    checkpoint("Two browser forms enforce CAS and show generated-client conflict");
 
@@ -2998,7 +3009,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
        assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND actor=? AND action='sales_deals.close'",tenantA,ownedDealId,"native-viewer@example.test"))[0].n,1);
        assert.equal((await sql("SELECT COUNT(*) n FROM crm_sales_deal_events WHERE tenant=? AND deal_id=? AND action='closed' AND reason_code='qa.lead.close'",tenantA,ownedDealId))[0].n,1);
        checkpoint("SK-07.C6 signed Lead closes through UI, automatic credit, D1 and reload");
-     }finally{await leadContext.close();}
+     }finally{await flushHeaderReads();await leadContext.close();}
      await reloadDocument();
      await page.getByRole("button",{name:"Открыть повторно",exact:true}).click();
      await page.getByLabel("Причина повторного открытия",{exact:true}).fill("qa.lead.reopen");
@@ -3029,7 +3040,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
        await record.getByRole("heading",{name:ownedDealName,exact:true}).waitFor();
        await expect(record.getByRole("button",{name:"Завершить сделку",exact:true})).toHaveCount(0);
        checkpoint("SK-07.C6 revoked Lead loses List, Kanban and record actions");
-     }finally{await revokedLeadContext.close();}
+     }finally{await flushHeaderReads();await revokedLeadContext.close();}
      checkpoint("SK-07 opportunity team grant, immutable history, reload and revoke");
 
      // SK-07.D1: administration and customer card use the same Sales owner.
@@ -3271,7 +3282,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
          checkpoint("SK-07 signed coordinator "+method+" exact record, D1 and reload");
          await coordinatorPage.close();
        }
-     } finally {await coordinatorContext.close();}
+     } finally {await flushHeaderReads();await coordinatorContext.close();}
      await navigate("team","Команда и распределение работы");
      await coordinationRow.getByRole("button",{name:"Полномочия координатора",exact:true}).click();
      await coordinatorForm.getByLabel("Сотрудник-координатор",{exact:true}).selectOption("native-viewer@example.test");
@@ -3401,7 +3412,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
        tenantA,delegatedId,"native-viewer@example.test","activity_tasks.complete"))[0].n,1);
      checkpoint("SK-07.B signed viewer completes only own Task, no admin controls, reload and D1 audit");
    }
-   await Promise.all(headerReads);
+   await flushHeaderReads();
    await denied.close();
    await restoreViewer();restoreViewer=async()=>{};
    const other=await browser.newContext({extraHTTPHeaders:tenantBHeaders});
@@ -3410,7 +3421,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await otherPage.goto(base+"/#accounts");
    await otherPage.getByText("Клиентов пока нет.",{exact:true}).waitFor();
    assert.equal(await otherPage.getByRole("heading",{name:"Browser Account "+runId,exact:true}).count(),0);
-   await Promise.all(headerReads);
+   await flushHeaderReads();
    await other.close();
    const anonymous=await browser.newContext();
    const anonymousPage=await anonymous.newPage();
@@ -3429,7 +3440,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    checkpoint("Generated-client unauthenticated/permission errors and tenant B isolation");
    assert.deepEqual(pageErrors,[]);
    assert.ok(writes.length>0);
-   await Promise.all(headerReads);
+   await flushHeaderReads();
    for(const response of requests){
      assert.equal(response.source_sha,sourceSha,"Every browser response must use the tested source: "+JSON.stringify(response));
      assert.equal(response.runtime,"native-workers-rs");
@@ -3442,7 +3453,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    writeFileSync(resolve(directory,"typed-browser.json"),JSON.stringify(evidence,null,2)+"\n");
    return evidence;
  } catch(error) {
-   await Promise.all(headerReads);
+   await flushHeaderReads();
    const navigation=await page.evaluate(()=>{
      const field=Array.from(document.querySelectorAll("label"))
        .find(label=>label.textContent?.trim()==="Статус клиента");
