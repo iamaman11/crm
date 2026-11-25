@@ -3,7 +3,6 @@ import {randomUUID} from "node:crypto";
 import {readFileSync} from "node:fs";
 import {join} from "node:path";
 import {DealService} from "../../../../packages/client/gen/crm/sales/v2/deal_pb.js";
-import {binarySalesV2,decodeSalesV2,salesV2Path} from "../../../../packages/client/test/cloudflare-binary-rpc-fixture.ts";
 import {fixtureRpc,fixtureRpcError} from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
 import type {RpcDispatch} from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
 import {record,string} from "../../scripts/json-boundary.mts";
@@ -21,10 +20,8 @@ type ScaleFixture = {
 };
 export async function verifySalesScale({dispatch,cwd,accountId,viewer,admin,sql,statement,batch,describeQueryPlan}: ScaleFixture) {
 const sales=DealService.method;
-const metricRead=(filter: {pipelineId: string; status: 1; accountId: string})=>dispatch(salesV2Path("GetPipelineMetrics"),{
-  method:"POST",headers:{"content-type":"application/proto","connect-protocol-version":"1",
-    "cf-access-jwt-assertion":viewer},body:new Uint8Array(binarySalesV2("GetPipelineMetrics",filter)),
-});
+const metricRead=(filter: {pipelineId: string; status: 1; accountId: string})=>
+  fixtureRpc(dispatch,sales.getPipelineMetrics,viewer,filter);
 const number=(value: unknown): number=>{assert.ok(typeof value==="number");return value;};
 const integer=(value: unknown): bigint=>{
   assert.ok(typeof value==="string"||typeof value==="number"||typeof value==="bigint");
@@ -189,7 +186,7 @@ const integer=(value: unknown): bigint=>{
           console.error(JSON.stringify({event:"crm.native-r73d-concurrent-failure",
             attempt,status:snapshot.status,request_id:snapshot.headers.get("x-request-id")}));
         assert.equal(snapshot.status,200,formatRpcFailure(snapshot));
-        const snapshotBody=decodeSalesV2("GetPipelineMetrics",new Uint8Array(await snapshot.arrayBuffer()));
+        const snapshotBody=snapshot.body;
         assert.equal(snapshotBody.totalDealCount,1032n);
         assert.deepEqual(snapshotBody.currencies,baseline,
           "a concurrent atomic balance swap must not create a mixed money snapshot");
