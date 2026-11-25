@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import {test} from "node:test";
-import {writeFileSync} from "node:fs";
-import {withNativeHarness} from "./native.mjs";
+import {withNativeHarness,writeRuntimePart} from "./native.mjs";
 
 test("compiled policy and unknown routes on isolated D1",async context=>{
  const evidence=await withNativeHarness(context,async({sourceSha,partySnapshot,rpc,rpcFetch,viewer,admin,call})=>{
@@ -38,8 +37,8 @@ test("compiled policy and unknown routes on isolated D1",async context=>{
    assert.equal(denied.body.code,"unimplemented");
  }
  assert.deepEqual(await partySnapshot(),beforeDenials,"denied routes must not mutate the fixture");
- return {source_sha:sourceSha,result:"PASS",features:["native-ci"],rpc,
+ return {kind:"policy",source_sha:sourceSha,result:"PASS",features:["native-ci"],rpc,
    unauthenticated_denials:unauthenticatedDenials.sort(),viewer_denials:viewerDenials.sort()};
  });
- writeFileSync(process.env.CRM_RPC_RUNTIME_PROOF+".policy",JSON.stringify(evidence,null,2)+"\n");
+ writeRuntimePart(import.meta.url,evidence);
 });

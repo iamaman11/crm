@@ -264,8 +264,9 @@ jobs:
             cp target/cargo-timings/cargo-timing.html "$RUNNER_TEMP/crm-cargo-timings/native-release.html") &
           release_pid=$!
           status=0
-          rm -f "$CRM_RPC_RUNTIME_PROOF" "$CRM_RPC_RUNTIME_PROOF.policy" "$CRM_RPC_RUNTIME_PROOF.business"
-          node --test --test-concurrency=1 "rust-party/test/native-*.test.mjs" || status=$?
+          rm -f "$CRM_RPC_RUNTIME_PROOF" "$CRM_RPC_RUNTIME_PROOF".native-*.test.mjs
+          # Independently isolated Node processes; measure two test workers against the same release build.
+          node --test --test-concurrency=2 "rust-party/test/native-*.test.mjs" || status=$?
           wait "$release_pid" || status=$?
           exit "$status"
       - name: Preserve Cargo build timing reports

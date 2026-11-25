@@ -1,9 +1,9 @@
 // Protobuf and ownership are parsed by their standard decoders.
 // Runtime evidence is produced only by the completed signed workerd suite.
-import {readFileSync,writeFileSync} from "node:fs";
+import {readFileSync,writeFileSync,globSync} from "node:fs";
 import {isDeepStrictEqual} from "node:util";
 import {execFileSync} from "node:child_process";
-import {resolve,dirname} from "node:path";
+import {resolve,dirname,basename} from "node:path";
 import {createRequire} from "node:module";
 import {fileURLToPath} from "node:url";
 const root=resolve(dirname(fileURLToPath(import.meta.url)),"..");
@@ -106,14 +106,31 @@ export function validateRuntime(report,available,bound,evidence=report.runtime){
 }
 // Join independent native test evidence only after the runner succeeds.
 // The existing descriptor validator remains the authority for every coverage set.
-export function combineRuntimeEvidence(business,policy,sha){
- for(const part of [business,policy]){
+export function combineRuntimeEvidence(parts,sha){
+ if(!Array.isArray(parts)||parts.length<2)fail("missing isolated runtime evidence");
+ for(const part of parts){
   if(part?.result!=="PASS"||part.source_sha!==sha||
      !isDeepStrictEqual(part.features,["native-ci"]))fail("missing or stale isolated runtime evidence");
  }
- if(!isDeepStrictEqual(business.rpc,policy.rpc))fail("isolated compiled RPC inventory differs");
- return {...business,unauthenticated_denials:policy.unauthenticated_denials,
-  viewer_denials:policy.viewer_denials};
+ const policies=parts.filter(part=>part.kind==="policy"),businesses=parts.filter(part=>part.kind==="business");
+ if(policies.length!==1||!businesses.length||policies.length+businesses.length!==parts.length)
+  fail("one policy proof and business proofs required");
+ const policy=policies[0],first=businesses[0];
+ const successful=new Set(),committed=new Set();
+ for(const part of businesses){
+  if(!isDeepStrictEqual(part.rpc,policy.rpc))fail("isolated compiled RPC inventory differs");
+  for(const [field,set] of [["successful_rpc_calls",successful],["committed_rpc_calls",committed]]){
+   const paths=part[field];
+   if(!Array.isArray(paths)||paths.length!==new Set(paths).size)fail("invalid isolated "+field);
+   for(const path of paths)set.add(path);
+  }
+  if(part.committed_rpc_calls.some(path=>!part.successful_rpc_calls.includes(path)))
+   fail("isolated committed RPC missing successful call");
+ }
+ const {kind,...evidence}=first;
+ return {...evidence,successful_rpc_calls:[...successful].sort(),committed_rpc_calls:[...committed].sort(),
+  jwks_requests:businesses.reduce((count,part)=>count+(part.jwks_requests??0),0),
+  unauthenticated_denials:policy.unauthenticated_denials,viewer_denials:policy.viewer_denials};
 }
 export function run(){
  const descriptor=process.argv[2],reportFile=process.env.CRM_MODULE_COVERAGE_REPORT;
@@ -128,8 +145,10 @@ export function run(){
  if(required){
   const proof=process.env.CRM_RPC_RUNTIME_PROOF;
   if(!proof)fail("runtime proof path required");
-  const evidence=combineRuntimeEvidence(JSON.parse(readFileSync(proof+".business","utf8")),
-   JSON.parse(readFileSync(proof+".policy","utf8")),sha);
+  // Every file discovered by the same native runner glob must produce a part.
+  const files=globSync("apps/cloudflare-crm/rust-party/test/native-*.test.mjs",{cwd:root}).sort();
+  const evidence=combineRuntimeEvidence(files.map(file=>
+   JSON.parse(readFileSync(proof+"."+basename(file),"utf8"))),sha);
   runtime=validateRuntime(report,available,bound,evidence);
   writeFileSync(proof,JSON.stringify(evidence,null,2)+"\n");
   console.log(JSON.stringify({event:"crm.signed-connect-acceptance",result:"PASS",admin:true,viewer:true,

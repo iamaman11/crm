@@ -1,12 +1,23 @@
 // Shared native Wrangler fixture: each test file owns a fresh Worker and D1.
 import {execFileSync} from "node:child_process";
 import {generateKeyPairSync,createSign} from "node:crypto";
-import {readFileSync,readdirSync} from "node:fs";
+import {readFileSync,readdirSync,writeFileSync} from "node:fs";
 import {createTestHarness} from "wrangler";
-import {dirname,join} from "node:path";
+import {dirname,join,basename} from "node:path";
 import {fileURLToPath} from "node:url";
 import assert from "node:assert/strict";
 import {decodeDomainErrorDetail,decodeRpcOutput} from "../../../../scripts/crm-connect-binary-fixture.mjs";
+export const signedRpc=(rpcFetch,path,encode,decode)=>async(method,token,payload,extraHeaders={})=>{
+   const r=await rpcFetch(path(method),{method:"POST",headers:{
+     ...extraHeaders,"content-type":"application/proto","connect-protocol-version":"1",
+     ...(token?{"cf-access-jwt-assertion":token}:{})},
+     body:encode(method,payload)});
+   return {status:r.status,headers:r.headers,
+     body:r.status<400?decode(method,new Uint8Array(await r.arrayBuffer())):await r.json()};
+ };
+export function writeRuntimePart(moduleUrl,evidence){
+ writeFileSync(process.env.CRM_RPC_RUNTIME_PROOF+"."+basename(fileURLToPath(moduleUrl)),JSON.stringify(evidence,null,2)+"\n",{flag:"wx"});
+}
 export async function withNativeHarness(context,scenario){
 const cwd=dirname(dirname(fileURLToPath(import.meta.url)));
 let base,fixtureDb;
@@ -233,9 +244,13 @@ try{
  for(const [path,rule] of rpc.policies){
    if(rule.permission==="Write"||rule.permission==="SelfWrite")mutationPaths.add(path);
  }
+ const businessEvidence=()=>({kind:"business",source_sha:sourceSha,result:"PASS",features:["native-ci"],rpc,
+   committed_rpc_calls:[...writesWithReceipt].sort(),successful_rpc_calls:[...successfulCalls].sort(),
+   fixture_access:"D1 binding",runtime:"Wrangler createTestHarness/workerd",
+   jwks_requests:jwksRequests,authentication:"production JWKS path",
+   scenarios:"existing signed workerd assertions completed"});
  return await scenario({cwd,base,sourceSha,sql,statement,batch,rpcFetch,partySnapshot,assertUnconfirmed,
-   jwt,admin,viewer,knownService,unknownService,call,rpc,worker,testHarness,
-   successfulCalls,mutationPaths,writesWithReceipt,jwksRequests:()=>jwksRequests});
+   jwt,admin,viewer,knownService,unknownService,call,rpc,worker,testHarness,businessEvidence});
 }catch(error){
  testHarness.debug();
  throw error;
