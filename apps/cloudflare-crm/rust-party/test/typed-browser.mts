@@ -1,7 +1,7 @@
 // Real Chromium -> built React -> generated Connect client -> signed native Worker -> D1.
 import {chromium} from "playwright";
 import type {APIResponse, BrowserContext, Dialog, Locator, Page, Request, Response, Route} from "playwright";
-import type {BrowserSql} from "./browser-boundaries.mts";
+import type {BrowserFailurePhase, BrowserSql} from "./browser-boundaries.mts";
 import {number, record, records, string} from "../../scripts/json-boundary.mts";
 import {expect} from "playwright/test";
 import assert from "node:assert/strict";
@@ -11,7 +11,7 @@ import {readFile} from "node:fs/promises";
 import {fileURLToPath} from "node:url";
 import {installUiDiagnostics,assertUiPanel} from "./ui-diagnostics.mts";
 import {captureBrowserRpcEvidence} from "./rpc-browser-evidence.mts";
-import {browserFirstId,matchesRpcPath,safeBrowserFailure} from "./browser-boundaries.mts";
+import {browserFirstId,matchesRpcPath,reportBrowserFailure,withBrowserCleanup} from "./browser-boundaries.mts";
 import {browserRecovery} from "./browser-recovery.mts";
 import {verifyBrowserMobile} from "./browser-mobile.mts";
 import {verifyBrowserAutomation} from "./browser-automation.mts";
@@ -40,9 +40,6 @@ type BrowserOptions = {
  tenantBHeaders?: Record<string,string>; tenantA?: string; features?: string[];
  beforeViewer?: () => Promise<() => Promise<void>>; directory?: string;
 };
-type RouteEvent = {event: string; document_id: string; hash: string; at: number; persisted: boolean | null;
- rendered_kind: string | null; rendered_account_status: string | null; history_length: number};
-declare global { interface Window { __crmRouteEvents?: RouteEvent[] } }
 type Recovery = {kind: "replay" | "lookup"; original_request_id: string; subsequent_request_id: string};
 type OwnerRecovery = Recovery & {owner: string; kind: "lookup"};
 
@@ -71,34 +68,21 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    lastCheckpointAt=now;
  };
  let restoreViewer=async()=>{};
+ let closeBrowser=async()=>{};
+ let phase: BrowserFailurePhase="browser-setup";
+ let primaryFailure: Error|undefined;
  const watch=(context: BrowserContext)=>{
    context.on("page",p=>p.on("pageerror",error=>pageErrors.push(error.message)));
    context.on("response",recordResponse);
  };
+ try {
  mkdirSync(directory,{recursive:true});
  const browser=await chromium.launch({headless:true});
+ closeBrowser=()=>browser.close();
  const context=await browser.newContext({extraHTTPHeaders:adminHeaders,timezoneId:"UTC"});
  watch(context);
  const page=await context.newPage();
  await installUiDiagnostics(page);
- await page.addInitScript(()=>{
-   const events: RouteEvent[]=[];
-   Object.defineProperty(window,"__crmRouteEvents",{value:events});
-   const documentId=crypto.randomUUID();
-   const capture=(event: Event)=>{
-     const root=document.querySelector("[data-crm-route-kind]");
-     events.push({event:event.type,document_id:documentId,
-       hash:window.location.hash,at:performance.now(),
-       persisted:event instanceof PageTransitionEvent?event.persisted:null,
-       rendered_kind:root?.getAttribute("data-crm-route-kind")??null,
-       rendered_account_status:root?.getAttribute("data-crm-account-status")??null,
-       history_length:history.length});
-     if(events.length>80)events.shift();
-   };
-   for(const name of ["pageshow","pagehide","popstate","hashchange","visibilitychange"])
-     window.addEventListener(name,capture);
- });
-
  // Only browser document/assets, never authenticated response bodies or headers.
  // After a protected D1 migration, Workers.dev can briefly serve its own HTML
  // 404 before the static asset route has propagated to every edge.
@@ -115,18 +99,20 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
  });
  let firstBrowserNavigation=true;
  const navigate=async(hash: string,title: string)=>{
+   phase="navigation";
    const first=firstBrowserNavigation;
    const limit=first?6:1;
    for(let attempt=0;attempt<limit;attempt++){
      const offset=shellResponses.length;
      // Mount the document once, then navigate through the real SPA hash router.
      // Repeated page.goto() re-downloaded the shell and assets for every module.
-     const response=first?await page.goto(base+"/#"+hash):
+     if(first)await page.goto(base+"/#"+hash);else
        await page.evaluate(next=>{window.location.hash="#"+next;return null;},hash);
      try {
        await page.getByRole("heading",{name:string(title),exact:true})
          .waitFor({timeout:first?8000:30000});
        firstBrowserNavigation=false;
+       phase="scenario";
        return;
      }catch(error){
        const shell=shellResponses.slice(offset);
@@ -135,20 +121,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
          await new Promise(resolve=>setTimeout(resolve,1500));
          continue;
        }
-       // Fail closed on application errors, a missing React root, or a Worker
-       // 404. The only recoverable case above is independently observed
-       // edge-owned 404 on initial document or static-asset GET.
-       const documentState=await page.evaluate(()=>({
-         path:location.pathname,hash:location.hash,
-         readyState:document.readyState,
-         hasReactRoot:Boolean(document.getElementById("root")),
-         hasRoute:Boolean(document.querySelector("[data-crm-route-kind]"))
-       })).catch(()=>({unavailable:"navigation-in-progress"}));
-       throw new Error("CRM_BROWSER_ROUTE_START_FAILED "+JSON.stringify({
-         expected:title,first,attempt:attempt+1,
-         documentStatus:response?.status()??null,
-         shell,documentState
-       }),{cause:error});
+       throw error;
      }
    }
  };
@@ -157,6 +130,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
  // HTML/JS/CSS 404; never re-run a mutation, retry a Worker error, or conceal
  // failed React rendering behind a generic long timeout.
  const reloadDocument=async()=>{
+   phase="reload";
    for(let attempt=1;attempt<=5;attempt++){
      const offset=shellResponses.length;
      const response=await page.reload();
@@ -172,27 +146,17 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      const invalid=shell.filter(item=>item.status>=400&&
        (item.status!==404||item.fromWorker));
      if(invalid.length)
-       throw Error("CRM_BROWSER_RELOAD_HTTP_FAILED "+JSON.stringify({attempt,shell}));
+       throw Error("CRM_BROWSER_RELOAD_HTTP_FAILED");
      if(!shell.some(item=>item.status===404&&!item.fromWorker)){
        // A 200 document without a mounted React shell is an application
        // failure, not an edge 404. Fail early with bounded safe diagnostics.
-       try {await page.locator(".crm-skip-link").waitFor({state:"attached",timeout:10000});}
-       catch(error){
-         const documentState=await page.evaluate(()=>({
-           path:location.pathname,hash:location.hash,
-           hasReactRoot:Boolean(document.getElementById("root")),
-           hasRoute:Boolean(document.querySelector("[data-crm-route-kind]"))
-         })).catch(()=>({unavailable:true}));
-         throw Error("CRM_BROWSER_RELOAD_RENDER_FAILED "+JSON.stringify({
-           attempt,documentStatus:response?.status()??null,
-           shell,documentState,pageErrors:pageErrors.slice(-3)
-         }),{cause:error});
-       }
+       await page.locator(".crm-skip-link").waitFor({state:"attached",timeout:10000});
        if(attempt>1)checkpoint("Read-only SPA edge 404 recovered after "+attempt+" document requests");
+       phase="scenario";
        return response;
      }
      if(attempt===5)
-       throw Error("CRM_BROWSER_RELOAD_EDGE_404_EXHAUSTED "+JSON.stringify({attempt,shell}));
+       throw Error("CRM_BROWSER_RELOAD_EDGE_404_EXHAUSTED");
      await new Promise(resolve=>setTimeout(resolve,1500));
    }
  };
@@ -269,8 +233,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
  },key));
  const runId=Date.now().toString();
  let partyId: string,accountId: string;
- let primaryFailure: Error|undefined;
- try {
+   phase="scenario";
    await navigate("parties","Люди и организации");
    // Use only synthetic markers; signed browser sends a real Cookie and a
    // single request header into the original Rust Worker, never real secrets.
@@ -3311,6 +3274,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal(await otherPage.getByRole("heading",{name:"Browser Account "+runId,exact:true}).count(),0);
    await flushHeaderReads();
    await other.close();
+   phase="anonymous-denial";
    const anonymous=await browser.newContext();
    const anonymousPage=await anonymous.newPage();
    if(features.includes("native-ci")){
@@ -3326,9 +3290,11 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    }
    await flushHeaderReads();
    await anonymous.close();
+   phase="scenario";
    checkpoint("Generated-client unauthenticated/permission errors and tenant B isolation");
    assert.deepEqual(pageErrors,[]);
    assert.ok(writes.length>0);
+   phase="correlation";
    await flushHeaderReads();
    assertSource(sourceSha);
    const evidence={result:"PASS",source_sha:sourceSha,features,browser:"Chromium",
@@ -3338,37 +3304,14 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    writeFileSync(resolve(directory,"typed-browser.json"),JSON.stringify(evidence,null,2)+"\n");
    return evidence;
  } catch(error) {
-   primaryFailure=safeBrowserFailure(error,"typed-browser");
-   try {
-     await flushHeaderReads();
-     const navigation=await page.evaluate(()=>{
-       const field=Array.from(document.querySelectorAll("label"))
-         .find(label=>label.textContent?.trim()==="Статус клиента");
-       const select=field?document.getElementById(field.htmlFor):null;
-       const route=document.querySelector("[data-crm-route-kind]");
-       return {hash:window.location.hash,
-         document_url:new URL(window.location.href).pathname+window.location.hash,
-         navigation_type:performance.getEntriesByType("navigation").filter(entry=>entry instanceof PerformanceNavigationTiming).at(-1)?.type??null,
-         history_length:history.length,
-         history_state:window.history.state,
-         rendered_kind:route?.getAttribute("data-crm-route-kind")??null,
-         rendered_account_status:route?.getAttribute("data-crm-account-status")??null,
-         select_status:select instanceof HTMLSelectElement?select.value:null,
-         events:window.__crmRouteEvents?.slice(-60)??[]};
-     }).catch(e=>({capture_error:e instanceof Error?e.name:"UnknownError"}));
-     writeFileSync(resolve(directory,"failure.json"),JSON.stringify({result:"FAIL",source_sha:sourceSha,
-       error:primaryFailure.name,navigation,steps,requests,writes},null,2)+"\n");
-     await page.screenshot({path:resolve(directory,"failure.png"),fullPage:true}).catch(()=>{});
-   } catch {
-     // Evidence failures must not replace the original browser failure.
-   }
+   await flushHeaderReads().catch(()=>{});
+   primaryFailure=reportBrowserFailure(error,{scenario:"typed-browser",phase,sourceSha,directory,steps,requests});
    throw primaryFailure;
  } finally {
-   let cleanupFailure: unknown;
-   try {await restoreViewer();}catch(error){cleanupFailure=error;}
-   try {await browser.close();}catch(error){cleanupFailure??=error;}
-   if(cleanupFailure!==undefined){
-     if(!primaryFailure) throw safeBrowserFailure(cleanupFailure,"typed-browser");
+   try {
+     await withBrowserCleanup(restoreViewer,closeBrowser);
+   } catch(error) {
+     if(!primaryFailure) throw reportBrowserFailure(error,{scenario:"typed-browser",phase:"cleanup",sourceSha,directory,steps,requests});
      console.error("typed-browser cleanup failed after browser failure");
    }
  }

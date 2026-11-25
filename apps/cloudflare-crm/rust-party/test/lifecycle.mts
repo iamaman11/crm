@@ -3,10 +3,8 @@ import { randomUUID } from "node:crypto";
 import { DealService, OpportunityTeamRole } from "../../../../packages/client/gen/crm/sales/v2/deal_pb.js";
 import { MemberService } from "../../../../packages/client/gen/crm/access/v2/member_pb.js";
 import { TaskService } from "../../../../packages/client/gen/crm/activities/v2/task_pb.js";
-import { dispatchFixtureRpc, fixtureRpc, fixtureRpcError } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
-import { decodeSalesV2, decodeMemberV2, decodeTaskV2 } from "../../../../packages/client/test/cloudflare-binary-rpc-fixture.ts";
+import { fixtureRpc, fixtureRpcError, fixtureRpcRace } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
 import type { RpcDispatch } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
-import { record } from "../../scripts/json-boundary.mts";
 import { formatRpcFailure } from "../../scripts/rpc-error-response.mts";
 
 type LifecycleFixture = {
@@ -19,12 +17,6 @@ export async function verifyLifecycle({dispatch,sql,jwt,accountId,admin,viewer,t
  const sales=DealService.method;
  const member=MemberService.method;
  const task=TaskService.method;
- const dispatchRace=async<T,>(send: ()=>ReturnType<typeof dispatchFixtureRpc>, decode:(bytes:Uint8Array)=>T)=>{
-   const response=await send();
-   const bytes=new Uint8Array(await response.arrayBuffer());
-   if(response.status>=400){const error: unknown=JSON.parse(new TextDecoder().decode(bytes)); assert.ok(typeof record(error).code==="string"); return {status:response.status,headers:response.headers,body:undefined};}
-   return {status:response.status,headers:response.headers,body:decode(bytes)};
- };
  // Independent signed viewer and original lifecycle CAS; test at the end
  // so disposable fixtures never change earlier deterministic analytics.
  {
@@ -61,8 +53,8 @@ export async function verifyLifecycle({dispatch,sql,jwt,accountId,admin,viewer,t
    assert.equal(renewed.status,200,formatRpcFailure(renewed));
    assert.equal(renewed.body.deal?.opportunityTeam[0]?.memberVersion,3n);
    const [revoke,write]=await Promise.all([
-     dispatchRace(()=>dispatchFixtureRpc(dispatch,sales.setOpportunityParticipant,admin,grant(undefined,4n,"revoke")),bytes=>decodeSalesV2("SetOpportunityParticipant",bytes)),
-     dispatchRace(()=>dispatchFixtureRpc(dispatch,sales.updateDeal,token,update(4n,"race")),bytes=>decodeSalesV2("UpdateDeal",bytes))
+     fixtureRpcRace(dispatch,sales.setOpportunityParticipant,admin,grant(undefined,4n,"revoke")),
+     fixtureRpcRace(dispatch,sales.updateDeal,token,update(4n,"race"))
    ]);
    assert.equal([revoke,write].filter(r=>r.status===200).length,1);
    assert.ok([403,409].includes((revoke.status===200?write:revoke).status));
@@ -165,8 +157,8 @@ export async function verifyLifecycle({dispatch,sql,jwt,accountId,admin,viewer,t
     assert.ok(distribution?.scope); scope=distribution.scope;}
    const revoke={teamId:tid,queueCoordinator:{email:leadEmail,enabled:false},precondition:pre("revoke",8n)};
    const [removed,race]=await Promise.all([
-     dispatchRace(()=>dispatchFixtureRpc(dispatch,member.updateTeam,admin,revoke),bytes=>decodeMemberV2("UpdateTeam",bytes)),
-     dispatchRace(()=>dispatchFixtureRpc(dispatch,task.updateTask,lead,taskMove(taskRace,"race")),bytes=>decodeTaskV2("UpdateTask",bytes))
+     fixtureRpcRace(dispatch,member.updateTeam,admin,revoke),
+     fixtureRpcRace(dispatch,task.updateTask,lead,taskMove(taskRace,"race"))
    ]);
    assert.equal(removed.status,200,formatRpcFailure(removed));
    assert.ok([200,403,409].includes(race.status),formatRpcFailure(race));

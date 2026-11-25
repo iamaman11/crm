@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import type { APIResponse, Response } from "playwright";
 
-type RpcEvidence = {
+export type RpcEvidence = {
   path: string;
   status: number;
   request_id?: string | undefined;

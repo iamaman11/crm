@@ -96,6 +96,29 @@ export async function verifyIdentityResolution(
    survivorPartyId:mergeSurvivorId,survivorPartyVersion:1n,
    reason:"manual_identity_review",precondition:{idempotencyKey:mergeKey}
  };
+ const mergeBefore=async()=>({
+   operation:await count("SELECT COUNT(*) AS n FROM crm_identity_merge_records WHERE tenant=? AND id=?",
+     "tenant-a",mergeOpId),
+   receipt:await count("SELECT COUNT(*) AS n FROM crm_identity_merge_receipts WHERE tenant=? AND key=?",
+     "tenant-a",mergeKey),
+   audit:await count("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND action='identity_resolution.merge'",
+     "tenant-a",mergeOpId)
+ });
+ const beforeMergeAdapterFailure=await mergeBefore();
+ await sql("ALTER TABLE crm_identity_merge_receipts RENAME TO fixture_unavailable_identity_merge_receipts");
+ try {
+   const failed=await sendFixtureRpc(dispatch,methods.mergeParty,admin,intent,503);
+   await assertUnconfirmed(failed,"IDENTITY_MERGE_WRITE_UNAVAILABLE");
+   assert.match(failed.headers.get("x-request-id")??"",/^[a-f0-9-]{36}$/i);
+   assert.equal(await count("SELECT COUNT(*) AS n FROM crm_identity_merge_records WHERE tenant=? AND id=?",
+     "tenant-a",mergeOpId),beforeMergeAdapterFailure.operation);
+   assert.equal(await count("SELECT COUNT(*) AS n FROM fixture_unavailable_identity_merge_receipts WHERE tenant=? AND key=?",
+     "tenant-a",mergeKey),beforeMergeAdapterFailure.receipt);
+   assert.equal(await count("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND action='identity_resolution.merge'",
+     "tenant-a",mergeOpId),beforeMergeAdapterFailure.audit);
+ } finally {
+   await sql("ALTER TABLE fixture_unavailable_identity_merge_receipts RENAME TO crm_identity_merge_receipts");
+ }
  const downstreamTables=["crm_account_records","crm_contact_point_records",
    "crm_party_relationship_records","crm_sales_deal_records",
    "crm_activity_task_records","crm_consent_records"];
@@ -163,6 +186,29 @@ export async function verifyIdentityResolution(
  await sendFixtureRpc(dispatch, methods.unmergeParty,admin,{
    ...undo,precondition:{expectedVersion:2n,idempotencyKey:"l03-undo-stale-"+randomUUID()}
  },409);
+ const unmergeBefore=async()=>({
+   operation:await count("SELECT COUNT(*) AS n FROM crm_identity_merge_records WHERE tenant=? AND id=? AND status='active' AND version=1",
+     "tenant-a",mergeOpId),
+   receipt:await count("SELECT COUNT(*) AS n FROM crm_identity_merge_receipts WHERE tenant=? AND key=?",
+     "tenant-a",unmergeKey),
+   audit:await count("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND action='identity_resolution.unmerge'",
+     "tenant-a",mergeOpId)
+ });
+ const beforeUnmergeAdapterFailure=await unmergeBefore();
+ await sql("ALTER TABLE crm_identity_merge_receipts RENAME TO fixture_unavailable_identity_merge_receipts");
+ try {
+   const failed=await sendFixtureRpc(dispatch,methods.unmergeParty,admin,undo,503);
+   await assertUnconfirmed(failed,"IDENTITY_UNMERGE_WRITE_UNAVAILABLE");
+   assert.match(failed.headers.get("x-request-id")??"",/^[a-f0-9-]{36}$/i);
+   assert.equal(await count("SELECT COUNT(*) AS n FROM crm_identity_merge_records WHERE tenant=? AND id=? AND status='active' AND version=1",
+     "tenant-a",mergeOpId),beforeUnmergeAdapterFailure.operation);
+   assert.equal(await count("SELECT COUNT(*) AS n FROM fixture_unavailable_identity_merge_receipts WHERE tenant=? AND key=?",
+     "tenant-a",unmergeKey),beforeUnmergeAdapterFailure.receipt);
+   assert.equal(await count("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND action='identity_resolution.unmerge'",
+     "tenant-a",mergeOpId),beforeUnmergeAdapterFailure.audit);
+ } finally {
+   await sql("ALTER TABLE fixture_unavailable_identity_merge_receipts RENAME TO crm_identity_merge_receipts");
+ }
  await sql("CREATE TRIGGER fixture_identity_rollback BEFORE INSERT ON crm_audit "+
    "WHEN NEW.action='identity_resolution.unmerge' BEGIN SELECT RAISE(ABORT,'fixture audit failure'); END;");
  try {
@@ -189,5 +235,6 @@ export async function verifyIdentityResolution(
  console.log(JSON.stringify({event:"crm.native-l03-merge-lineage",result:"PASS",
    generated_binary:true,role_policy:true,tenant_isolation:true,stale_party_guard:true,
    replay_receipt:true,immutable_history:true,canonical_resolve:true,
-   reversible:true,downstream_unchanged:true,audit_atomic:true}));
+   reversible:true,downstream_unchanged:true,audit_atomic:true,
+   adapter_failure_unconfirmed:true,same_key_recovery:true}));
 }

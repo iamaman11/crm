@@ -6,10 +6,13 @@ import { AccountService } from "../../../packages/client/gen/crm/accounts/v2/acc
 import { fixtureRpcPath } from "../../../packages/client/test/cloudflare-rpc-fixture.ts";
 import {chromium} from "playwright";
 import type {Locator, Page, Route} from "playwright";
+import {writeFileSync} from "node:fs";
+import {resolve} from "node:path";
 import {string} from "../scripts/json-boundary.mts";
 import {waitForPublishedRpc} from "../scripts/release-readback.mts";
 import {captureBrowserRpcEvidence} from "../rust-party/test/rpc-browser-evidence.mts";
-import {safeBrowserFailure} from "../rust-party/test/browser-boundaries.mts";
+import {reportBrowserFailure,withBrowserCleanup} from "../rust-party/test/browser-boundaries.mts";
+import type {BrowserFailurePhase} from "../rust-party/test/browser-boundaries.mts";
 
 type Restore = () => Promise<void>;
 type SmokeOptions = {
@@ -36,9 +39,14 @@ export async function publishedSmoke({base,sourceSha,tenantA,adminIdentity,admin
   const {requests,recordResponse: record,flushHeaderReads: flushHeaders,assertSource}=captureBrowserRpcEvidence();
   const pageErrors: string[] = [];
   const writes: Array<{path: string; request_id: string; audit: ReadonlyArray<Record<string, unknown>>}> = [];
-  const syntheticPrivateProbes=[],steps=[];
-  const browser=await chromium.launch({headless:true});
+  const syntheticPrivateProbes=[],steps: string[]=[];
   let restoreViewer: Restore=async()=>{};
+  let closeBrowser: Restore=async()=>{};
+  let phase: BrowserFailurePhase="browser-setup";
+  let primaryFailure: Error|undefined;
+  try {
+  const browser=await chromium.launch({headless:true});
+  closeBrowser=()=>browser.close();
   const context=await browser.newContext({extraHTTPHeaders:adminHeaders,timezoneId:"UTC"});
   // Readiness probes are signed GETs and are outside the executed RPC evidence.
   context.on("response",response=>{
@@ -91,10 +99,10 @@ export async function publishedSmoke({base,sourceSha,tenantA,adminIdentity,admin
       return;
     }
   };
-  let primaryFailure: Error|undefined;
-  try {
+    phase="navigation";
     await open(page,"/#parties","Люди и организации");
     steps.push("signed-access");
+    phase="party-create";
     // Real signed mutation with synthetic-only private values: no real user
     // names, credentials or data are written into privacy proof fixtures.
     const privateCookie="crm-s3-cookie-"+runId;
@@ -153,10 +161,12 @@ export async function publishedSmoke({base,sourceSha,tenantA,adminIdentity,admin
     assert.equal(parties.length,1,"Signed CreateParty must persist exactly one record");
     const partyId=string(parties[0]?.id);
     steps.push("party-create");
+    phase="party-reload";
     await open(page,"/#parties","Люди и организации");
     const heading=page.getByRole("heading",{name,exact:true});
     await heading.waitFor();
     steps.push("party-reload");
+    phase="account-create";
     await page.locator("section").filter({has:heading})
       .getByRole("button",{name:"Создать клиента",exact:true}).click();
     await page.getByRole("heading",{name:"Новый клиент",exact:true}).waitFor();
@@ -172,11 +182,12 @@ export async function publishedSmoke({base,sourceSha,tenantA,adminIdentity,admin
     await page.getByRole("heading",{name:"Карточка клиента",exact:true}).waitFor();
     assert.equal(new URL(page.url()).hash,"#accounts/"+string(accounts[0]?.id));
     steps.push("account-create");
+    phase="viewer-denial";
     // An actual persisted-role downgrade, not a fake role header or JS mock.
     restoreViewer=await beforeViewer();
     const denied=await browser.newContext({extraHTTPHeaders:adminHeaders});
     denied.on("response",record);
-    try{
+    await withBrowserCleanup(async()=>{
       const deniedPage=await denied.newPage();
       deniedPage.on("pageerror",error=>pageErrors.push(error.message));
       await open(deniedPage,"/#parties","Люди и организации");
@@ -189,11 +200,12 @@ export async function publishedSmoke({base,sourceSha,tenantA,adminIdentity,admin
       await deniedPage.getByRole("heading",{name:/Недостаточно прав/}).waitFor();
       assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant=? "+
         "AND json_extract(state,'$.display_name')=?",[tenantA,deniedName]))[0]?.n,0);
-    }finally{await flushHeaders();await denied.close();await restoreViewer();restoreViewer=async()=>{};}
+    },async()=>{await flushHeaders();await denied.close();await restoreViewer();restoreViewer=async()=>{};});
     steps.push("viewer-denial");
+    phase="tenant-isolation";
     const other=await browser.newContext({extraHTTPHeaders:tenantBHeaders});
     other.on("response",record);
-    try{
+    await withBrowserCleanup(async()=>{
       const otherPage=await other.newPage();
       otherPage.on("pageerror",error=>pageErrors.push(error.message));
       await open(otherPage,"/#parties","Люди и организации");
@@ -205,15 +217,17 @@ export async function publishedSmoke({base,sourceSha,tenantA,adminIdentity,admin
       assert.equal(new URL(otherPage.url()).hash,"#accounts");
       await otherPage.getByText("Клиентов пока нет.",{exact:true}).waitFor();
       assert.equal(await otherPage.getByRole("heading",{name:accountName,exact:true}).count(),0);
-    }finally{await flushHeaders();await other.close();}
+    },async()=>{await flushHeaders();await other.close();});
     steps.push("tenant-isolation");
+    phase="anonymous-denial";
     const anonymous=await browser.newContext();
-    try{
+    await withBrowserCleanup(async()=>{
       const response=await anonymous.request.get(base+"/api/session",{maxRedirects:0});
       assert.equal(response.status(),302,"Anonymous public request must stop at Cloudflare Access");
       assert.match(new URL(string(response.headers().location)).hostname,/\.cloudflareaccess\.com$/);
-    }finally{await anonymous.close();}
+    },()=>anonymous.close());
     steps.push("anonymous-denial");
+    phase="correlation";
     await flushHeaders();
     assert.deepEqual(pageErrors,[],"Browser page must have no uncaught runtime errors");
     assertSource(sourceSha);
@@ -223,30 +237,17 @@ export async function publishedSmoke({base,sourceSha,tenantA,adminIdentity,admin
       browser:"Chromium",started_at:startedAt,finished_at:Date.now(),tenant:tenantA,
       tested:"published React, signed Access, typed Connect, original Rust D1",
       steps,requests,writes,synthetic_private_probes:syntheticPrivateProbes};
-    const {writeFileSync}=await import("node:fs");
-    const {resolve}=await import("node:path");
     writeFileSync(resolve(directory,"published-smoke.json"),JSON.stringify(evidence,null,2)+"\n");
     return evidence;
   }catch(error){
-    primaryFailure=safeBrowserFailure(error,"published-smoke");
-    try {
-      await flushHeaders();
-      const {writeFileSync}=await import("node:fs");
-      const {resolve}=await import("node:path");
-      writeFileSync(resolve(directory,"failure.json"),JSON.stringify({
-        result:"FAIL",source_sha:sourceSha,error:primaryFailure.name,steps,requests,writes
-      },null,2)+"\n");
-      await page.screenshot({path:resolve(directory,"failure.png"),fullPage:true}).catch(()=>{});
-    } catch {
-      // Keep the primary failure if evidence collection itself fails.
-    }
+    await flushHeaders().catch(()=>{});
+    primaryFailure=reportBrowserFailure(error,{scenario:"published-smoke",phase,sourceSha,directory,steps,requests});
     throw primaryFailure;
   }finally{
-    let cleanupFailure: unknown;
-    try{await restoreViewer();}catch(error){cleanupFailure=error;}
-    try{await browser.close();}catch(error){cleanupFailure??=error;}
-    if(cleanupFailure!==undefined){
-      if(!primaryFailure) throw safeBrowserFailure(cleanupFailure,"published-smoke");
+    try {
+      await withBrowserCleanup(restoreViewer,closeBrowser);
+    } catch(error) {
+      if(!primaryFailure) throw reportBrowserFailure(error,{scenario:"published-smoke",phase:"cleanup",sourceSha,directory,steps,requests});
       console.error("published-smoke cleanup failed after browser failure");
     }
   }

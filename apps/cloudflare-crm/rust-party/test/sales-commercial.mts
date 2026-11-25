@@ -2,8 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID, createHash } from "node:crypto";
 import { DealService } from "../../../../packages/client/gen/crm/sales/v2/deal_pb.js";
 import { MemberService } from "../../../../packages/client/gen/crm/access/v2/member_pb.js";
-import { decodeFixtureDetail, dispatchFixtureRpc, fixtureRpc, fixtureRpcError } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
-import { decodeSalesV2 } from "../../../../packages/client/test/cloudflare-binary-rpc-fixture.ts";
+import { decodeFixtureDetail, fixtureRpc, fixtureRpcError, fixtureRpcRace } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
 import { DomainErrorDetailSchema, MutationCommitOutcome } from "../../../../packages/client/gen/crm/core/v2/operation_pb.js";
 import { record, records, string } from "../../scripts/json-boundary.mts";
 import type { RpcDispatch } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
@@ -85,7 +84,7 @@ export async function verifySalesCommercial({dispatch,sql,statement,batch,accoun
    const p2=(await fixtureRpc(dispatch,sales.previewSalesRouting,viewer,facts)).body;
    assert.equal(required(required(p2.decision).selectedOwner).owner.value,emailB);
    const race=[deal("race-a",p2.expectedDecision),deal("race-b",p2.expectedDecision)];
-   const results=await Promise.all(race.map(input=>dispatchFixtureRpc(dispatch,sales.createDeal,admin,input)));
+   const results=await Promise.all(race.map(input=>fixtureRpcRace(dispatch,sales.createDeal,admin,input)));
    assert.equal(results.filter(r=>r.status===200).length,1);
    assert.equal(results.filter(r=>r.status===409).length,1);
    const winner=race[results.findIndex(r=>r.status===200)];
@@ -579,7 +578,7 @@ export async function verifySalesCommercial({dispatch,sql,statement,batch,accoun
      // alter unrelated fixture semantics. Use a single real Deal mutation.
      const raceFence=await revision("tenant-a");
      const [race,mutation]=await Promise.all([
-       dispatchFixtureRpc(dispatch,sales.previewSalesPerformanceReport,viewer,captureInput),
+       fixtureRpcRace(dispatch,sales.previewSalesPerformanceReport,viewer,captureInput),
        fixtureRpc(dispatch,sales.updateDeal,admin,{dealId:fixtureId(openScale),probabilityBasisPoints:1000,
          precondition:pre("open-scale-race",1n)})
      ]);
@@ -590,9 +589,9 @@ export async function verifySalesCommercial({dispatch,sql,statement,batch,accoun
      const newWeight=weightedAmount-1001n*4000n;
      assert.ok([200,409].includes(race.status));
      if(race.status===200) {
-      const body=decodeSalesV2("PreviewSalesPerformanceReport",new Uint8Array(await race.arrayBuffer()));
+       const body=required(race.body);
        assert.ok([String(weightedAmount),String(newWeight)].includes(required(required(body.report).forecast).weightedMinorUnitsTimesBasisPoints),"mixed capture");
-     } else assert.match(string(record(await race.json()).message),/SALES_FORECAST_SNAPSHOT_CHANGED/);
+     } else assert.match(string(record(race.errorBody).message),/SALES_FORECAST_SNAPSHOT_CHANGED/);
      assert.equal(required(required(((await fixtureRpc(dispatch,sales.previewSalesPerformanceReport,viewer,captureInput)).body).report).forecast).weightedMinorUnitsTimesBasisPoints,String(newWeight));
      assert.deepEqual(((await fixtureRpc(dispatch,sales.getSalesPerformanceReport,viewer,{reportId:scaledReportId,pageSize:1})).body).report,largeReport);
      await cloneOpen(openScale+1,limitScale);

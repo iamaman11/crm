@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
-import type { DescMessage, DescMethod, DescMethodUnary, MessageInitShape } from "@bufbuild/protobuf";
+import type { DescMessage, DescMethod, DescMethodUnary, MessageInitShape, MessageShape } from "@bufbuild/protobuf";
+
+export { codeFromString as parseFixtureConnectCode } from "@connectrpc/connect/protocol-connect";
 
 type FixtureRequest = {
   method: "POST";
@@ -66,6 +68,28 @@ export async function fixtureRpc<I extends DescMessage, O extends DescMessage>(
   return { status: response.status, headers: response.headers, body };
 }
 
+async function decodeFixtureError(response: FixtureResponse, method: DescMethod) {
+  const body: unknown = await response.json();
+  assert.ok(body && typeof body === "object" && "code" in body && typeof body.code === "string",
+    `${method.name} must return a Connect error`);
+  return body;
+}
+
+export async function fixtureRpcRace<I extends DescMessage, O extends DescMessage>(
+  dispatch: RpcDispatch,
+  method: DescMethodUnary<I, O>,
+  jwt: string | null,
+  input: MessageInitShape<NoInfer<I>>,
+) {
+  const response = await dispatchFixtureRpc(dispatch, method, jwt, input);
+  if (response.status >= 400) {
+    const errorBody = await decodeFixtureError(response, method);
+    return { status: response.status, headers: response.headers, body: undefined, errorBody };
+  }
+  const body: MessageShape<O> = fromBinary(method.output, new Uint8Array(await response.arrayBuffer()));
+  return { status: response.status, headers: response.headers, body, errorBody: undefined };
+}
+
 export async function fixtureRpcError<I extends DescMessage, O extends DescMessage>(
   dispatch: RpcDispatch,
   method: DescMethodUnary<I, O>,
@@ -74,9 +98,7 @@ export async function fixtureRpcError<I extends DescMessage, O extends DescMessa
 ) {
   const response = await dispatchFixtureRpc(dispatch, method, jwt, input, {});
   assert.ok(response.status >= 400, `${method.name} must reject the request`);
-  const body: unknown = await response.json();
-  assert.ok(body && typeof body === "object" && "code" in body && typeof body.code === "string",
-    `${method.name} must return a Connect error`);
+  const body = await decodeFixtureError(response, method);
   return {status: response.status, headers: response.headers, body};
 }
 

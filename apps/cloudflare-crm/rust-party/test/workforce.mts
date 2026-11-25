@@ -3,8 +3,7 @@ import { randomUUID } from "node:crypto";
 import { MemberService } from "../../../../packages/client/gen/crm/access/v2/member_pb.js";
 import { TaskPriority, TaskService } from "../../../../packages/client/gen/crm/activities/v2/task_pb.js";
 import { DomainErrorDetailSchema, MutationCommitOutcome } from "../../../../packages/client/gen/crm/core/v2/operation_pb.js";
-import { decodeFixtureDetail, dispatchFixtureRpc, fixtureRpc, fixtureRpcError } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
-import { decodeMemberV2, decodeTaskV2 } from "../../../../packages/client/test/cloudflare-binary-rpc-fixture.ts";
+import { decodeFixtureDetail, fixtureRpc, fixtureRpcError, fixtureRpcRace } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
 import type { RpcDispatch } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
 import { record, records } from "../../scripts/json-boundary.mts";
 import { formatRpcFailure } from "../../scripts/rpc-error-response.mts";
@@ -18,16 +17,6 @@ type WorkforceFixture = {
 export async function verifyWorkforce({dispatch,sql,jwt,accountId,admin,viewer,tenantB,knownService}: WorkforceFixture) {
  const member=MemberService.method;
  const task=TaskService.method;
- const race=async<T,>(send: ()=>ReturnType<typeof dispatchFixtureRpc>, decode:(bytes:Uint8Array)=>T)=>{
-   const response=await send();
-   const bytes=new Uint8Array(await response.arrayBuffer());
-   if(response.status>=400){
-     const error: unknown=JSON.parse(new TextDecoder().decode(bytes));
-     assert.ok(typeof record(error).code==="string");
-     return {status:response.status,headers:response.headers,body:undefined};
-   }
-   return {status:response.status,headers:response.headers,body:decode(bytes)};
- };
  // SK-07.B: signed human membership, CAS role/deactivation and original
  // TaskOwner reassignment. No identity headers or service->human impersonation.
  const beforeMemberRead=(await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id='tenant-a'"))[0]?.n;
@@ -66,6 +55,34 @@ export async function verifyWorkforce({dispatch,sql,jwt,accountId,admin,viewer,t
  const assignee="native-assignee@example.test";
  const staffInput={email:assignee,role:1,
    precondition:{idempotencyKey:"sk07-member-create-assignee"}};
+ const memberStateBefore=(await sql("SELECT COUNT(*) n FROM crm_users WHERE tenant_id=? AND email=?",
+   "tenant-a",assignee))[0]?.n;
+ const memberReceiptBefore=(await sql("SELECT COUNT(*) n FROM crm_member_receipts WHERE tenant=? AND key=?",
+   "tenant-a",staffInput.precondition.idempotencyKey))[0]?.n;
+ const memberAuditBefore=(await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND action='access.member.provision'",
+   "tenant-a",assignee))[0]?.n;
+ assert.equal(memberStateBefore,0);
+ assert.equal(memberReceiptBefore,0);
+ assert.equal(memberAuditBefore,0);
+ await sql("ALTER TABLE crm_member_receipts RENAME TO fixture_unavailable_member_receipts");
+ try {
+   const failed=await fixtureRpcError(dispatch,member.provisionMember,admin,staffInput);
+   assert.equal(failed.status,503);
+   assert.equal(failed.body.code,"unavailable");
+   const detail=decodeFixtureDetail(DomainErrorDetailSchema,records(record(failed.body).details));
+   assert.equal(detail.commitOutcome,MutationCommitOutcome.UNCONFIRMED);
+   assert.equal(detail.domainCode,"ACCESS_MEMBER_WRITE_FAILED");
+   assert.match(failed.headers.get("x-request-id")??"",/^[a-f0-9-]{36}$/i);
+   assert.equal(detail.requestId,failed.headers.get("x-request-id"));
+   assert.equal((await sql("SELECT COUNT(*) n FROM crm_users WHERE tenant_id=? AND email=?",
+     "tenant-a",assignee))[0]?.n,memberStateBefore);
+   assert.equal((await sql("SELECT COUNT(*) n FROM fixture_unavailable_member_receipts WHERE tenant=? AND key=?",
+     "tenant-a",staffInput.precondition.idempotencyKey))[0]?.n,memberReceiptBefore);
+   assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND action='access.member.provision'",
+     "tenant-a",assignee))[0]?.n,memberAuditBefore);
+ } finally {
+   await sql("ALTER TABLE fixture_unavailable_member_receipts RENAME TO crm_member_receipts");
+ }
  const staffCreated=await fixtureRpc(dispatch,member.provisionMember,admin,staffInput);
  assert.equal(staffCreated.status,200,formatRpcFailure(staffCreated));
  assert.equal(staffCreated.body.member?.email,assignee);
@@ -201,9 +218,9 @@ export async function verifyWorkforce({dispatch,sql,jwt,accountId,admin,viewer,t
  const raceUpdate={taskId:raceUpdateId,assigneeEmail:assignee,
    precondition:{expectedVersion:1n,idempotencyKey:"sk07-race-assign-"+raceUpdateId}};
  const [createRace,updateRace,deactivate]=await Promise.all([
-   race(()=>dispatchFixtureRpc(dispatch,task.createTask,admin,raceCreate),bytes=>decodeTaskV2("CreateTask",bytes)),
-   race(()=>dispatchFixtureRpc(dispatch,task.updateTask,admin,raceUpdate),bytes=>decodeTaskV2("UpdateTask",bytes)),
-   race(()=>dispatchFixtureRpc(dispatch,member.updateMember,admin,{email:assignee,active:false, precondition:{idempotencyKey:"sk07-member-deactivate",expectedVersion:2n}}),bytes=>decodeMemberV2("UpdateMember",bytes))
+   fixtureRpcRace(dispatch,task.createTask,admin,raceCreate),
+   fixtureRpcRace(dispatch,task.updateTask,admin,raceUpdate),
+   fixtureRpcRace(dispatch,member.updateMember,admin,{email:assignee,active:false, precondition:{idempotencyKey:"sk07-member-deactivate",expectedVersion:2n}})
  ]);
  assert.equal(deactivate.status,200,formatRpcFailure(deactivate));
  assert.ok(deactivate.body?.receipt);
@@ -257,6 +274,34 @@ export async function verifyWorkforce({dispatch,sql,jwt,accountId,admin,viewer,t
    roster:{memberEmails:[teamMember,"native-a@example.test"]},
    precondition:{idempotencyKey:"sk07-team-create-"+teamId}};
  assert.equal((await fixtureRpcError(dispatch,member.createTeam,viewer,teamInput)).status,403);
+ const teamStateBefore=(await sql("SELECT COUNT(*) n FROM crm_access_teams WHERE tenant=? AND id=?",
+   "tenant-a",teamId))[0]?.n;
+ const teamReceiptBefore=(await sql("SELECT COUNT(*) n FROM crm_team_receipts WHERE tenant=? AND key=?",
+   "tenant-a",teamInput.precondition.idempotencyKey))[0]?.n;
+ const teamAuditBefore=(await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND action='access.team.create'",
+   "tenant-a",teamId))[0]?.n;
+ assert.equal(teamStateBefore,0);
+ assert.equal(teamReceiptBefore,0);
+ assert.equal(teamAuditBefore,0);
+ await sql("ALTER TABLE crm_team_receipts RENAME TO fixture_unavailable_team_receipts");
+ try {
+   const failed=await fixtureRpcError(dispatch,member.createTeam,admin,teamInput);
+   assert.equal(failed.status,503);
+   assert.equal(failed.body.code,"unavailable");
+   const detail=decodeFixtureDetail(DomainErrorDetailSchema,records(record(failed.body).details));
+   assert.equal(detail.commitOutcome,MutationCommitOutcome.UNCONFIRMED);
+   assert.equal(detail.domainCode,"ACCESS_TEAM_WRITE_FAILED");
+   assert.match(failed.headers.get("x-request-id")??"",/^[a-f0-9-]{36}$/i);
+   assert.equal(detail.requestId,failed.headers.get("x-request-id"));
+   assert.equal((await sql("SELECT COUNT(*) n FROM crm_access_teams WHERE tenant=? AND id=?",
+     "tenant-a",teamId))[0]?.n,teamStateBefore);
+   assert.equal((await sql("SELECT COUNT(*) n FROM fixture_unavailable_team_receipts WHERE tenant=? AND key=?",
+     "tenant-a",teamInput.precondition.idempotencyKey))[0]?.n,teamReceiptBefore);
+   assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND action='access.team.create'",
+     "tenant-a",teamId))[0]?.n,teamAuditBefore);
+ } finally {
+   await sql("ALTER TABLE fixture_unavailable_team_receipts RENAME TO crm_team_receipts");
+ }
  const teamCreated=await fixtureRpc(dispatch,member.createTeam,admin,teamInput);
  assert.equal(teamCreated.status,200,formatRpcFailure(teamCreated));
  assert.equal((await fixtureRpc(dispatch,member.createTeam,admin,teamInput)).body.receipt?.replayed,true);
@@ -290,10 +335,38 @@ export async function verifyWorkforce({dispatch,sql,jwt,accountId,admin,viewer,t
  const claim={taskId:poolId,precondition:{expectedVersion:1n,idempotencyKey:"sk07-pool-claim-"+poolId}};
  assert.equal((await fixtureRpcError(dispatch,task.claimTask,knownService,claim)).status,403);
  assert.equal((await fixtureRpcError(dispatch,task.claimTask,tenantB,claim)).status,404);
+ const claimStateBefore=await sql("SELECT state,version FROM crm_activity_task_records WHERE tenant=? AND id=?",
+   "tenant-a",poolId);
+ const claimReceiptBefore=(await sql("SELECT COUNT(*) n FROM crm_activity_task_receipts WHERE tenant=? AND key=?",
+   "tenant-a",claim.precondition.idempotencyKey))[0]?.n;
+ const claimAuditBefore=(await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND action='activity_tasks.update'",
+   "tenant-a",poolId))[0]?.n;
+ assert.equal(claimStateBefore.length,1);
+ assert.equal(claimReceiptBefore,0);
+ assert.equal(claimAuditBefore,0);
+ await sql("ALTER TABLE crm_activity_task_receipts RENAME TO fixture_unavailable_task_receipts");
+ try {
+   const failed=await fixtureRpcError(dispatch,task.claimTask,viewer,claim);
+   assert.equal(failed.status,503);
+   assert.equal(failed.body.code,"unavailable");
+   const detail=decodeFixtureDetail(DomainErrorDetailSchema,records(record(failed.body).details));
+   assert.equal(detail.commitOutcome,MutationCommitOutcome.UNCONFIRMED);
+   assert.equal(detail.domainCode,"ACTIVITIES_CLAIM_FAILED");
+   assert.match(failed.headers.get("x-request-id")??"",/^[a-f0-9-]{36}$/i);
+   assert.equal(detail.requestId,failed.headers.get("x-request-id"));
+   assert.deepEqual(await sql("SELECT state,version FROM crm_activity_task_records WHERE tenant=? AND id=?",
+     "tenant-a",poolId),claimStateBefore);
+   assert.equal((await sql("SELECT COUNT(*) n FROM fixture_unavailable_task_receipts WHERE tenant=? AND key=?",
+     "tenant-a",claim.precondition.idempotencyKey))[0]?.n,claimReceiptBefore);
+   assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND action='activity_tasks.update'",
+     "tenant-a",poolId))[0]?.n,claimAuditBefore);
+ } finally {
+   await sql("ALTER TABLE fixture_unavailable_task_receipts RENAME TO crm_activity_task_receipts");
+ }
  const claimOther={...claim,precondition:{...claim.precondition,idempotencyKey:"sk07-other-claim-"+poolId}};
  const claimResults=await Promise.all([
-   race(()=>dispatchFixtureRpc(dispatch,task.claimTask,viewer,claim),bytes=>decodeTaskV2("ClaimTask",bytes)),
-   race(()=>dispatchFixtureRpc(dispatch,task.claimTask,admin,claimOther),bytes=>decodeTaskV2("ClaimTask",bytes))
+   fixtureRpcRace(dispatch,task.claimTask,viewer,claim),
+   fixtureRpcRace(dispatch,task.claimTask,admin,claimOther)
  ]);
  assert.deepEqual(claimResults.map(r=>r.status).sort(),[200,409]);
  const claimWinner=claimResults[0].status===200?viewer:admin;
@@ -311,7 +384,7 @@ export async function verifyWorkforce({dispatch,sql,jwt,accountId,admin,viewer,t
  assert.equal((await fixtureRpcError(dispatch,task.createTask,admin,{...poolCreate,taskId:"sk07-inactive-pool-"+poolId,
    precondition:{idempotencyKey:"sk07-inactive-pool-"+poolId}})).status,400);
  assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=?","tenant-a",poolId))[0]?.n,3);
- console.log(JSON.stringify({event:"crm.native-sk07c-team-pool",result:"PASS",atomic_claim:true,tenant_ab:true,archive_guard:true,receipts:true}));
+ console.log(JSON.stringify({event:"crm.native-sk07c-team-pool",result:"PASS",atomic_claim:true,tenant_ab:true,archive_guard:true,receipts:true,adapter_failures_unconfirmed:true}));
 
  // SK-07.C3: roster revocation and assignment/archival are actual atomic
  // owner races, not browser timing assumptions. All identities remain signed.
@@ -333,8 +406,8 @@ export async function verifyWorkforce({dispatch,sql,jwt,accountId,admin,viewer,t
    const remove={teamId:id,roster:{memberEmails:["native-a@example.test"]},
      precondition:{expectedVersion:2n,idempotencyKey:"remove-"+id}};
    const [claim,removed]=await Promise.all([
-     race(()=>dispatchFixtureRpc(dispatch,task.claimTask,viewer,attempt),bytes=>decodeTaskV2("ClaimTask",bytes)),
-     race(()=>dispatchFixtureRpc(dispatch,member.updateTeam,admin,remove),bytes=>decodeMemberV2("UpdateTeam",bytes))
+     fixtureRpcRace(dispatch,task.claimTask,viewer,attempt),
+     fixtureRpcRace(dispatch,member.updateTeam,admin,remove)
    ]);
    assert.equal(removed.status,200,formatRpcFailure(removed));
    assert.ok([200,403,409].includes(claim.status),formatRpcFailure(claim));
@@ -364,8 +437,8 @@ export async function verifyWorkforce({dispatch,sql,jwt,accountId,admin,viewer,t
      owner:{owner:{case:"teamId" as const,value:raceTeam}},precondition:{idempotencyKey:"create-"+raceTask}};
    const archive={teamId:raceTeam,active:false,precondition:{expectedVersion:1n,idempotencyKey:"archive-"+raceTeam}};
    const [assigned,archived]=await Promise.all([
-     race(()=>dispatchFixtureRpc(dispatch,task.createTask,admin,raceInput),bytes=>decodeTaskV2("CreateTask",bytes)),
-     race(()=>dispatchFixtureRpc(dispatch,member.updateTeam,admin,archive),bytes=>decodeMemberV2("UpdateTeam",bytes))
+     fixtureRpcRace(dispatch,task.createTask,admin,raceInput),
+     fixtureRpcRace(dispatch,member.updateTeam,admin,archive)
    ]);
    assert.equal(Number(assigned.status===200)+Number(archived.status===200),1,
      "assignment and archive cannot both commit");

@@ -1,9 +1,10 @@
 // Independent post-merge Gate B is separate; this runs only a compact CI release smoke.
 import assert from "node:assert/strict";
-import {readFileSync,writeFileSync,mkdirSync,existsSync} from "node:fs";
+import {readFileSync,mkdirSync} from "node:fs";
 import {publishedSmoke} from "./published-smoke.mts";
 import {record, records, string} from "../scripts/json-boundary.mts";
 import {waitForExactSourceSha} from "../scripts/release-readback.mts";
+import {reportBrowserFailure,withBrowserCleanup} from "../rust-party/test/browser-boundaries.mts";
 const required=(name: string)=>{const value=process.env[name];if(!value)throw Error("Missing "+name);return value;};
 const sha=required("GITHUB_SHA");
 assert.match(sha,/^[a-f0-9]{40}$/);
@@ -41,10 +42,14 @@ async function restoreRole(){
  assert.deepEqual(rows,[{role:"admin"}],"E2E administrator role must be restored");
  roleMayHaveChanged=false;
 }
+let smokeStarted=false;
+let smokePassed=false;
 try{
+ await withBrowserCleanup(async()=>{
  await waitForExactSourceSha(base+"/api/version?browser-preflight="+Date.now(),sha,{
    headers:{...access("A"),"cache-control":"no-cache",connection:"close"}
  });
+ smokeStarted=true;
  await publishedSmoke({base,sourceSha:sha,adminHeaders:access("A"),
    tenantBHeaders:access("B"),tenantA:tenantA,adminIdentity:principal,directory,
    sql:async (statement,params=[])=>records((await query(statement,params)).results),
@@ -75,13 +80,9 @@ try{
      return restoreRole;
    }
  });
+ smokePassed=true;
+ },restoreRole);
 }catch(error){
- // Browser errors are already recorded by publishedSmoke; do not create a second report.
- // Only failures before the browser report exists need separate preflight evidence.
- if(!existsSync(directory+"/failure.json"))
-   writeFileSync(directory+"/live-preflight-failure.json",
-     JSON.stringify({result:"FAIL",source_sha:sha,error:error instanceof Error ? error.name : "UnknownError"},null,2)+"\n");
- throw error;
-}finally{
- await restoreRole();
+ if(smokeStarted && !smokePassed)throw error;
+ throw reportBrowserFailure(error,{scenario:"live",phase:smokePassed?"cleanup":"signed-readback",sourceSha:sha,directory});
 }

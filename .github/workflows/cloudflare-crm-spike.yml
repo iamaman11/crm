@@ -291,7 +291,7 @@ jobs:
             /tmp/crm-module-coverage.json
           if-no-files-found: error
           retention-days: 7
-      - name: Preserve native Rust browser proof and screenshot
+      - name: Preserve native browser acceptance or safe failure evidence
         # No misleading second FAIL when an earlier gate skipped workerd/browser.
         # A successful workerd test without mandatory evidence still fails the
         # explicit "Require actual browser acceptance" step below.
@@ -299,7 +299,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: crm-native-party-proof-${{ github.sha }}-attempt-${{ github.run_attempt }}
-          path: apps/cloudflare-crm/e2e-evidence-native/
+          path: ${{ steps.crm_native_workerd.outcome == 'success' && 'apps/cloudflare-crm/e2e-evidence-native/' || 'apps/cloudflare-crm/e2e-evidence-native/failure.json' }}
           if-no-files-found: warn
           retention-days: 7
       - name: Select the production build for Wrangler verification
@@ -540,16 +540,13 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: 5bd5e1e1e813f061afc259e91334262d
           CRM_D1_DATABASE_ID: 35fc7ee9-9710-485f-8fb3-f5a398b229b4
         run: node apps/cloudflare-crm/scripts/deploy.mts fail-closed
-      - name: Save release evidence and browser failure screenshots
+      - name: Save release evidence
         if: ${{ always() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: crm-dev-release-${{ github.sha }}-attempt-${{ github.run_attempt }}
           path: |
             apps/cloudflare-crm/.release/*.json
-            apps/cloudflare-crm/e2e-failure.png
-            apps/cloudflare-crm/e2e-mobile.png
-            apps/cloudflare-crm/e2e-evidence/*.png
             apps/cloudflare-crm/e2e-evidence/*.json
             apps/cloudflare-crm/.release/native-proof/
           if-no-files-found: warn
