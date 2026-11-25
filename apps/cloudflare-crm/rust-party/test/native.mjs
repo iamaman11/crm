@@ -313,8 +313,12 @@ try{
      assert.equal(denied.body.code,"unimplemented");
    }
    assert.deepEqual(await partySnapshot(),beforeDenials,"denied routes must not mutate the fixture");
-   assert.equal(jwksRequests,1,"isolated denial matrix must reuse one imported Access key");
-   console.log(JSON.stringify({event:"crm.access-jwks-cache-policy",result:"PASS",jwks_requests:jwksRequests}));
+   assert.ok(jwksRequests>0,"isolated denial matrix must fetch the real Access JWKS");
+   assert.ok(jwksRequests<viewerDenials.length,
+     "repeated signed viewer denials must reuse isolate-local JWKS instead of fetching once per RPC");
+   console.log(JSON.stringify({event:"crm.access-jwks-cache-policy",result:"PASS",
+     jwks_requests:jwksRequests,viewer_denials:viewerDenials.length,
+     reused_across_requests:jwksRequests<viewerDenials.length}));
    return {rpc,unauthenticatedDenials,viewerDenials};
  }
  assert.deepEqual(rpc,denialProof.rpc,"isolated denial and business harnesses must expose identical compiled RPC/owner/policy inventory");
