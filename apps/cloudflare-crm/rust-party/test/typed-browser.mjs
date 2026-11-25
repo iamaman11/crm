@@ -49,13 +49,16 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const capture=headers=>Object.assign(entry,{
      request_id:headers["x-request-id"],error_code:headers["x-crm-error-code"]??null,
      source_sha:headers["x-crm-source-sha"],runtime:headers["x-crm-runtime"]});
-   // Browser Response headers may arrive with later network extra-info. Await
-   // Playwright's complete headers; route.fetch() returns an APIResponse instead.
+   // Worker correlation headers are ordinary HTTP headers. Preserve the
+   // response event's snapshot before a watched page or context can close.
+   capture(response.headers());
    if(typeof response.allHeaders==="function"){
-     headerReads.push(response.allHeaders().then(capture).catch(error=>{
-       entry.header_error=String(error.message);
+     headerReads.push(response.allHeaders().then(capture).catch(()=>{
+       if(!entry.source_sha||!entry.runtime||!entry.request_id||
+         (entry.status>=400&&!entry.error_code))
+         entry.header_error="COMPLETE_CORRELATION_HEADERS_UNAVAILABLE";
      }));
-   }else capture(response.headers());
+   }
  };
  // Match the RPC pathname, not the serialized URL: privacy probes deliberately add query parameters.
  const responsePathEndsWith=(response,suffix)=>new URL(response.url()).pathname.endsWith(suffix);
@@ -2478,6 +2481,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal(await firstId("crm_party_records","display_name","Browser Winner "+runId),partyId);
    assert.equal((await sql("SELECT version FROM crm_party_records WHERE tenant='"+tenantSql+"' AND id='"+partyId+"'"))[0].version,3);
    await flushHeaderReads();
+   await flushHeaderReads();
    await stalePage.close();
    checkpoint("Two browser forms enforce CAS and show generated-client conflict");
 
@@ -3280,6 +3284,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
          if(!isTask)await expect(record.getByRole("region",{name:"История сделки "+id,exact:true})).toHaveCount(1);
          assert.equal((await sql("SELECT json_extract(state,'$.owner.actor_id') AS owner FROM "+table+" WHERE tenant=? AND id=?",tenantA,id))[0].owner,"native-viewer@example.test");
          checkpoint("SK-07 signed coordinator "+method+" exact record, D1 and reload");
+         await flushHeaderReads();
          await coordinatorPage.close();
        }
      } finally {await flushHeaderReads();await coordinatorContext.close();}
@@ -3413,6 +3418,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      checkpoint("SK-07.B signed viewer completes only own Task, no admin controls, reload and D1 audit");
    }
    await flushHeaderReads();
+   await flushHeaderReads();
    await denied.close();
    await restoreViewer();restoreViewer=async()=>{};
    const other=await browser.newContext({extraHTTPHeaders:tenantBHeaders});
@@ -3421,6 +3427,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await otherPage.goto(base+"/#accounts");
    await otherPage.getByText("Клиентов пока нет.",{exact:true}).waitFor();
    assert.equal(await otherPage.getByRole("heading",{name:"Browser Account "+runId,exact:true}).count(),0);
+   await flushHeaderReads();
    await flushHeaderReads();
    await other.close();
    const anonymous=await browser.newContext();
@@ -3436,12 +3443,14 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      assert.equal(response.status(),302,"Anonymous production request must stop at Access");
      assert.match(new URL(response.headers().location).hostname,/\.cloudflareaccess\.com$/);
    }
+   await flushHeaderReads();
    await anonymous.close();
    checkpoint("Generated-client unauthenticated/permission errors and tenant B isolation");
    assert.deepEqual(pageErrors,[]);
    assert.ok(writes.length>0);
    await flushHeaderReads();
    for(const response of requests){
+     assert.equal(response.header_error,undefined,"Complete browser correlation evidence is required");
      assert.equal(response.source_sha,sourceSha,"Every browser response must use the tested source: "+JSON.stringify(response));
      assert.equal(response.runtime,"native-workers-rs");
      assert.match(response.request_id??"",/^[a-f0-9-]{36}$/i);
