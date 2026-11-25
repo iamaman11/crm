@@ -240,7 +240,7 @@ jobs:
           (cd rust-party && worker-build --dev --locked --features native-ci --timings &&
             cp target/cargo-timings/cargo-timing.html "$RUNNER_TEMP/crm-cargo-timings/native-ci.html") &
           worker_pid=$!
-          (cd "$GITHUB_WORKSPACE" && python apps/cloudflare-crm/scripts/test-rust-owners.py) &
+          (cd "$GITHUB_WORKSPACE" && node apps/cloudflare-crm/scripts/test-rust-owners.mts) &
           owners_pid=$!
           status=0
           bash scripts/prepare-chromium.sh || status=$?
