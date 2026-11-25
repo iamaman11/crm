@@ -1,7 +1,7 @@
 // Canonical manifest inventory; discovered is not linked, and linked is not executed.
 import assert from "node:assert/strict";
 import {execFileSync} from "node:child_process";
-import {globSync, realpathSync, readFileSync, mkdirSync, writeFileSync} from "node:fs";
+import {globSync, realpathSync, mkdirSync, writeFileSync} from "node:fs";
 import {dirname, relative, resolve, sep} from "node:path";
 import {fileURLToPath} from "node:url";
 import {record, records, string, strings} from "./json-boundary.mts";
