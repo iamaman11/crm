@@ -178,6 +178,29 @@ jobs:
           npm install --global pnpm@12.21.0
           pnpm --version | grep -Fx '12.21.0'
           pnpm install --frozen-lockfile
+      # Temporary #486 prerequisite. Generate candidate dependency resolution
+      # using the pinned pnpm in a disposable worktree, never the build tree.
+      - name: Generate native governance dependency lock candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          scratch="$(mktemp -d)"
+          trap 'git worktree remove --force "$scratch/repo" 2>/dev/null || true; rm -rf "$scratch"' EXIT
+          git worktree add --detach "$scratch/repo" "$GITHUB_SHA"
+          (
+            cd "$scratch/repo"
+            pnpm --version | grep -Fx '12.21.0'
+            pnpm add --workspace-root --save-dev --save-exact --lockfile-only --ignore-scripts yaml@2.9.0 ajv@8.20.0 ajv-formats@3.0.1
+            pnpm install --lockfile-only --frozen-lockfile --ignore-scripts
+            git diff --check
+            test "$(git diff --name-only)" = "$(printf 'package.json\npnpm-lock.yaml')"
+            test -z "$(git ls-files --others --exclude-standard)"
+            echo 'CRM_GOVERNANCE_LOCK_PATCH_BEGIN'
+            git -c color.ui=never diff --no-ext-diff --binary -- package.json pnpm-lock.yaml
+            echo 'CRM_GOVERNANCE_LOCK_PATCH_END'
+            sha256sum package.json pnpm-lock.yaml
+          )
+          git diff --exit-code -- package.json pnpm-lock.yaml pnpm-workspace.yaml
       # Report actual compiler-cache hits/misses, rather than assuming cache speedup.
       # The Mozilla action also emits end-of-job statistics for the complete job.
       # Clippy checks WASM compilation, so a separate cargo check repeats the work.
