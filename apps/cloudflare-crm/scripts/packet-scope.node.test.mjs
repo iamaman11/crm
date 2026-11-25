@@ -3,34 +3,36 @@ import test from "node:test";
 import {readFileSync} from "node:fs";
 import {resolve} from "node:path";
 import {fileURLToPath} from "node:url";
-import {analyzeScope,pathMatches,verifyPacketPaths} from "./packet-scope.mts";
+import {scopeClassifier,pathMatches,verifyPacketPaths,packetClassifier} from "./packet-scope.mts";
 
 const root=fileURLToPath(new URL("../../../",import.meta.url));
 const packet=JSON.parse(readFileSync(resolve(root,"repository-packet.json"),"utf8"));
 const policy=JSON.parse(readFileSync(resolve(root,"affected-scope-policy.json"),"utf8"));
 const metadata={packages:[
-  {id:"core",name:"core",manifest_path:resolve(root,"crates/core/Cargo.toml"),dependencies:[]},
-  {id:"owner",name:"owner",manifest_path:resolve(root,"modules/owner/Cargo.toml"),dependencies:[{name:"core"}]},
-  {id:"app",name:"app",manifest_path:resolve(root,"crates/app/Cargo.toml"),dependencies:[{name:"owner"}]},
-],workspace_members:["core","owner","app"]};
+  {id:"core",name:"core",manifest_path:resolve(root,"crates/core/Cargo.toml")},
+],workspace_members:["core"]};
 
-test("actual Cargo workspace reverse impact and broadening are deterministic",()=>{
-  const report=analyzeScope(root,["crates/core/src/lib.rs"],metadata,policy);
-  assert.deepEqual(report.direct_packages,["core"]);
-  assert.deepEqual(report.affected_packages,["app","core","owner"]);
-  assert.equal(report.broadened,false);
-  const broad=analyzeScope(root,["Cargo.toml"],metadata,policy);
-  assert.equal(broad.broadened,true);
-  assert.deepEqual(broad.affected_packages,["app","core","owner"]);
+test("scope classification uses actual Cargo owners, never a custom test subset",()=>{
+  const classify=scopeClassifier(root,metadata,policy);
+  assert.equal(classify("crates/core/src/lib.rs").known,true);
+  assert.equal(classify("Cargo.toml").known,true);
+  assert.equal(classify("unknown/new.bin").known,false);
+  const broken=structuredClone(policy);
+  broken.scopes[0].required_workflows=["Missing CI"];
+  assert.throws(()=>scopeClassifier(root,metadata,broken),/requires missing required CI workflows/);
+  const duplicate=structuredClone(policy);
+  duplicate.scopes.push(duplicate.scopes[0]);
+  assert.throws(()=>scopeClassifier(root,metadata,duplicate),/invalid scope categories/);
 });
-test("canonical packet ignores only documentation and rejects forbidden/unclassified paths",()=>{
+test("canonical packet ignores documentation and rejects forbidden/unclassified paths",()=>{
   verifyPacketPaths(packet,["AGENTS.md","apps/cloudflare-crm/web/src/App.tsx"],"origin/dev");
   assert.throws(()=>verifyPacketPaths(packet,["database/secret.sql"],"origin/dev"),/forbidden path/);
   assert.throws(()=>verifyPacketPaths(packet,["unknown/new.bin"],"origin/dev"),/outside packet/);
   assert.throws(()=>verifyPacketPaths(packet,[],"origin/main"),/unrecognized packet base/);
-  assert.throws(()=>analyzeScope(root,["unknown/new.bin"],metadata,policy),/unknown affected scope/);
-  const docs=analyzeScope(root,["docs/README.md"],metadata,policy);
-  assert.equal(docs.selected_workflows.length,0);
+  const classify=packetClassifier(packet,"origin/dev");
+  assert.equal(classify("docs/README.md"),"documentation");
+  assert.equal(classify("modules/example/src/nested/lib.rs"),"allowed");
+  assert.notEqual(classify("modules/example/nested/module.yaml"),"allowed");
 });
 test("native glob boundaries and actual governed scope representatives",()=>{
   assert(pathMatches("crates/crm-customer-enrichment-query-adapter/src/lib.rs","crates/crm-customer-enrichment-*/**"));
@@ -43,9 +45,10 @@ test("native glob boundaries and actual governed scope representatives",()=>{
     ["apps/cloudflare-crm/web/src/app.tsx","frontend"],
     ["repository-packet.json","operations"],
   ];
+  const classify=scopeClassifier(root,metadata,policy);
   for(const [path,id] of cases){
-    const report=analyzeScope(root,[path],metadata,policy);
-    assert(report.selected_scopes.includes(id),path);
-    assert.equal(report.selected_workflows.length,1);
+    const result=classify(path);
+    assert(result.known,path);
+    assert(result.scopes.includes(id),path);
   }
 });

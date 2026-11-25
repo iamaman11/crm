@@ -24,7 +24,7 @@ function packageAt(packages: Record<string,unknown>[], path:string) {
   return candidates[0];
 }
 export function buildModuleReport(root: string, native: unknown, workspace: unknown, sourceSha: string,
-  lookupUnlinked: (path:string)=>unknown = path => cargo(root,["metadata","--locked","--no-deps","--format-version","1","--manifest-path",resolve(path,"Cargo.toml")])) {
+  entries = loadCanonicalManifests(root)) {
   root=realpathSync(root);
   assert(/^[a-f0-9]{40}$/.test(sourceSha),"invalid source SHA");
   const worker=insideRepo(root,workerDirectory);
@@ -46,7 +46,6 @@ export function buildModuleReport(root: string, native: unknown, workspace: unkn
     assert(pkg&&pkg.name===name&&resolvedIds.has(string(pkg.id)),"missing resolved owner: "+name);
     direct.set(path,name);
   }
-  const entries=loadCanonicalManifests(root);
   const moduleDirs=new Set(entries.map(entry=>dirname(insideRepo(root,entry.path))));
   for(const path of globSync("modules/*/Cargo.toml",{cwd:root})){
     assert(moduleDirs.has(dirname(insideRepo(root,path))),path+": missing sibling module.yaml");
@@ -65,7 +64,7 @@ export function buildModuleReport(root: string, native: unknown, workspace: unkn
     if(!pkg){
       // A discovered-but-unlinked crate can be a legitimate standalone/excluded
       // Cargo package. Cargo must identify it; never guess from a directory name.
-      pkg=packageAt(records(record(lookupUnlinked(crate)).packages),crate);
+      pkg=packageAt(records(record(cargo(root,["metadata","--locked","--no-deps","--format-version","1","--manifest-path",resolve(crate,"Cargo.toml")])).packages),crate);
     }
     assert(pkg,"Cargo metadata missing in-process crate: "+entry);
     const crateName=string(pkg.name);
