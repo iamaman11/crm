@@ -134,19 +134,19 @@ const partySnapshot=async()=>(await sql("SELECT "+
   "(SELECT COUNT(*) FROM crm_audit) AS audits"));
 const {privateKey,publicKey}=generateKeyPairSync("rsa",{modulusLength:2048});
 const kid="local-signed-rsa-fixture";
-const jwks={keys:[{...publicKey.export({format:"jwk"}),kid,alg:"RS256",use:"sig"}]};
+const originalJwk={...publicKey.export({format:"jwk"}),kid,alg:"RS256",use:"sig"};
+const jwks={keys:[originalJwk]};
 const iss="https://royal-limit-ea43.cloudflareaccess.com";
 const aud="e0a664cf4f46f0d13d0ac0d8dd621c718c70842a377bf6738d1a24f0d16cedc7";
 const now=Math.floor(Date.now()/1000);
-function signedJwt(identityClaims){
- const parts=[{alg:"RS256",kid,typ:"JWT"},{
-   iss,aud,exp:now+3600,iat:now-10,...identityClaims
- }].map(x=>Buffer.from(JSON.stringify(x)).toString("base64url"));
+function signedJwt(identityClaims,signingKey=privateKey,signingKid=kid){
+ const parts=[{alg:"RS256",kid:signingKid,typ:"JWT"},{iss,aud,exp:now+3600,iat:now-10,...identityClaims}]
+   .map(x=>Buffer.from(JSON.stringify(x)).toString("base64url"));
  const raw=parts.join(".");
- return raw+"."+createSign("RSA-SHA256").update(raw).end().sign(privateKey).toString("base64url");
+ return raw+"."+createSign("RSA-SHA256").update(raw).end().sign(signingKey).toString("base64url");
 }
-const jwt=email=>signedJwt({sub:email,email});
-const serviceJwt=common_name=>signedJwt({sub:"",common_name});
+const jwt=(email,signingKey=privateKey,signingKid=kid)=>signedJwt({sub:email,email},signingKey,signingKid);
+const serviceJwt=(common_name,signingKey=privateKey,signingKid=kid)=>signedJwt({sub:"",common_name},signingKey,signingKid);
 const configPath=join(cwd,"wrangler.jsonc");
 const config=JSON.parse(readFileSync(configPath,"utf8"));
 assert.equal(config.d1_databases.length,1);
@@ -230,7 +230,26 @@ try{
  assert.equal((await call("/api/session",signedJwt({
    sub:"",common_name:"ci-fixture.access",aud:"wrong-app-audience"
  }))).status,401,"Cross-application service JWT must be denied");
- assert.ok(jwksRequests>=2,"signed service fixtures must exercise the ordinary JWKS provider");
+ assert.equal(jwksRequests,1,
+   "the same Access signing key must be fetched once and reused for later signed requests");
+ const rotated=generateKeyPairSync("rsa",{modulusLength:2048});
+ const rotatedKid="local-signed-rsa-rotated";
+ const rotatedJwk={...rotated.publicKey.export({format:"jwk"}),kid:rotatedKid,alg:"RS256",use:"sig"};
+ jwks.keys=[originalJwk,rotatedJwk];
+ const rotatedService=serviceJwt("ci-fixture.access",rotated.privateKey,rotatedKid);
+ assert.equal((await call("/api/session",rotatedService)).status,200);
+ assert.equal(jwksRequests,2,"new kid must cause exactly one JWKS refresh");
+ assert.equal((await call("/api/session",knownService)).status,200,
+   "the previous Access key remains valid during the published overlap window");
+ assert.equal((await call("/api/session",rotatedService)).status,200);
+ const unknownKidToken=signedJwt({sub:"",common_name:"ci-fixture.access"},privateKey,"local-signed-rsa-unknown");
+ assert.equal((await call("/api/session",unknownKidToken)).status,401,
+   "a kid absent from refreshed JWKS must fail closed");
+ assert.equal(jwksRequests,3,"unknown kid must refresh once and then be rejected");
+ assert.equal((await call("/api/session",rotatedService)).status,200);
+ assert.equal(jwksRequests,3,"the refreshed CryptoKey must be reused without another provider fetch");
+ console.log(JSON.stringify({event:"crm.access-jwks-cache",result:"PASS",jwks_requests:jwksRequests,
+   cached_key_reuse:true,rotated_kid_refresh:true,previous_key_overlap:true,unknown_kid_denied:true}));
  const version=await rpcFetch("/api/version",{headers:{"cf-access-jwt-assertion":admin}});
  assert.equal(version.status,200);
  assert.equal(version.headers.get("x-crm-source-sha"),sourceSha,"Worker must receive the tested checkout SHA");
@@ -291,6 +310,8 @@ try{
      assert.equal(denied.body.code,"unimplemented");
    }
    assert.deepEqual(await partySnapshot(),beforeDenials,"denied routes must not mutate the fixture");
+   assert.equal(jwksRequests,1,"isolated denial matrix must reuse one imported Access key");
+   console.log(JSON.stringify({event:"crm.access-jwks-cache-policy",result:"PASS",jwks_requests:jwksRequests}));
    return {rpc,unauthenticatedDenials,viewerDenials};
  }
  assert.deepEqual(rpc,denialProof.rpc,"isolated denial and business harnesses must expose identical compiled RPC/owner/policy inventory");
@@ -7198,7 +7219,10 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    unauthenticated_denials:unauthenticatedDenials.sort(),
    viewer_denials:viewerDenials.sort(),
    fixture_access:"D1 binding",runtime:"Wrangler createTestHarness/workerd",
-   jwks_requests:jwksRequests,authentication:"production JWKS path",
+   jwks_requests:jwksRequests,
+   access_key_cache:{result:"PASS",ttl_seconds:300,rotation_refresh:true,
+     previous_key_overlap:true,unknown_kid_denied:true},
+   authentication:"production JWKS path",
   scenarios:"existing signed workerd assertions completed"
  },null,2)+"\n");
  console.log(JSON.stringify({event:"crm.signed-connect-acceptance",

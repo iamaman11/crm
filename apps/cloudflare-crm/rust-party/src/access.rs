@@ -1,6 +1,9 @@
 //! Cloudflare Access admission for the eventual single native Rust Worker.
 //! The Static Assets router does not forward ctx.access, so the signed Access JWT
 //! must be independently verified. Never trust caller-provided tenant headers.
+use std::cell::RefCell;
+use std::collections::HashMap;
+
 use js_sys::{Array, JSON, Object, Reflect};
 use serde_json::Value;
 use wasm_bindgen::{JsCast, JsValue};
@@ -10,6 +13,116 @@ use worker::{D1Database, Date, Env, Fetch, Request, Result};
 
 const ISSUER: &str = "https://royal-limit-ea43.cloudflareaccess.com";
 const AUDIENCE: &str = "e0a664cf4f46f0d13d0ac0d8dd621c718c70842a377bf6738d1a24f0d16cedc7";
+ 
+// Access rotates signing keys on a multi-week schedule and retains the previous
+// key for seven days. Cache only public key material; unknown kid forces refresh.
+const ACCESS_JWKS_CACHE_TTL_MS: f64 = 300_000.0;
+
+struct AccessJwksCache {
+    fetched_at_ms: f64,
+    document: Value,
+    imported_keys: HashMap<String, JsValue>,
+}
+
+std::thread_local! {
+    static ACCESS_JWKS_CACHE: RefCell<Option<AccessJwksCache>> =
+        const { RefCell::new(None) };
+}
+
+fn access_jwks_cache_is_fresh(fetched_at_ms: f64, now_ms: f64) -> bool {
+    now_ms >= fetched_at_ms && now_ms - fetched_at_ms < ACCESS_JWKS_CACHE_TTL_MS
+}
+
+fn cached_jwks(now_ms: f64) -> Option<Value> {
+    ACCESS_JWKS_CACHE.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        let fresh = cache
+            .as_ref()
+            .is_some_and(|entry| access_jwks_cache_is_fresh(entry.fetched_at_ms, now_ms));
+        if fresh {
+            cache.as_ref().map(|entry| entry.document.clone())
+        } else {
+            *cache = None;
+            None
+        }
+    })
+}
+
+fn replace_cached_jwks(document: Value, fetched_at_ms: f64) {
+    ACCESS_JWKS_CACHE.with(|cache| {
+        *cache.borrow_mut() = Some(AccessJwksCache {
+            fetched_at_ms,
+            document,
+            imported_keys: HashMap::new(),
+        });
+    });
+}
+
+fn cached_imported_key(kid: &str, now_ms: f64) -> Option<JsValue> {
+    ACCESS_JWKS_CACHE.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        let fresh = cache
+            .as_ref()
+            .is_some_and(|entry| access_jwks_cache_is_fresh(entry.fetched_at_ms, now_ms));
+        if !fresh {
+            *cache = None;
+            return None;
+        }
+        cache
+            .as_ref()
+            .and_then(|entry| entry.imported_keys.get(kid).cloned())
+    })
+}
+
+fn remember_imported_key(kid: &str, key: JsValue, now_ms: f64) {
+    ACCESS_JWKS_CACHE.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        let fresh = cache
+            .as_ref()
+            .is_some_and(|entry| access_jwks_cache_is_fresh(entry.fetched_at_ms, now_ms));
+        if !fresh {
+            *cache = None;
+            return;
+        }
+        if let Some(entry) = cache.as_mut() {
+            let present = entry
+                .document
+                .get("keys")
+                .and_then(Value::as_array)
+                .is_some_and(|keys| {
+                    keys.iter().any(|jwk| {
+                        jwk.get("kid").and_then(Value::as_str) == Some(kid)
+                    })
+                });
+            if present {
+                entry.imported_keys.insert(kid.to_owned(), key);
+            }
+        }
+    });
+}
+
+async fn fetch_access_jwks() -> Result<Option<Value>> {
+    let url = format!("{ISSUER}/cdn-cgi/access/certs");
+    let mut response = Fetch::Url(url.parse()?).send().await?;
+    if response.status_code() != 200 {
+        return Ok(None);
+    }
+    Ok(Some(response.json().await?))
+}
+
+fn matching_access_jwk<'a>(jwks: &'a Value, kid: &str) -> Option<&'a Value> {
+    jwks.get("keys").and_then(Value::as_array).and_then(|keys| {
+        keys.iter().find(|key| {
+            key.get("kid").and_then(Value::as_str) == Some(kid)
+                && key.get("kty").and_then(Value::as_str) == Some("RSA")
+                && key.get("n").and_then(Value::as_str).is_some()
+                && key.get("e").and_then(Value::as_str).is_some()
+                && key.get("use").and_then(Value::as_str).is_none_or(|usage| usage == "sig")
+                && key.get("alg").and_then(Value::as_str).is_none_or(|algorithm| algorithm == "RS256")
+        })
+    })
+}
+
 
 fn invalid(message: &str) -> worker::Error {
     worker::Error::RustError(format!("Access verification: {message}"))
@@ -22,7 +135,7 @@ fn prop(object: &JsValue, name: &str) -> Result<JsValue> {
 
 // Only standard Web Crypto primitives run on the Cloudflare host. No custom
 // signing, RSA implementation, JS auth middleware, or second Worker.
-async fn verify_signature(jwk: &Value, input: &str, signature: &[u8]) -> Result<bool> {
+async fn import_verification_key(jwk: &Value) -> Result<JsValue> {
     let crypto: Crypto = prop(&js_sys::global(), "crypto")?
         .dyn_into()
         .map_err(|_| invalid("crypto unavailable"))?;
@@ -44,15 +157,20 @@ async fn verify_signature(jwk: &Value, input: &str, signature: &[u8]) -> Result<
             &usages,
         )
         .map_err(|_| invalid("public key import rejected"))?;
-    let key: CryptoKey = JsFuture::from(imported)
+    JsFuture::from(imported)
         .await
-        .map_err(|_| invalid("public key import failed"))?
+        .map_err(|_| invalid("public key import failed"))
+}
+
+async fn verify_signature(key: &CryptoKey, input: &str, signature: &[u8]) -> Result<bool> {
+    let crypto: Crypto = prop(&js_sys::global(), "crypto")?
         .dyn_into()
-        .map_err(|_| invalid("invalid imported public key"))?;
-    let verified = subtle
+        .map_err(|_| invalid("crypto unavailable"))?;
+    let verified = crypto
+        .subtle()
         .verify_with_str_and_u8_array_and_u8_array(
             "RSASSA-PKCS1-v1_5",
-            &key,
+            key,
             signature,
             input.as_bytes(),
         )
@@ -269,32 +387,41 @@ async fn verify(req: &Request, _env: &Env) -> Result<Option<String>> {
             return reject("ci_fixture_missing");
         }
     }
-    let jwks: Value = {
-        let url = format!("{ISSUER}/cdn-cgi/access/certs");
-        let mut response = Fetch::Url(url.parse()?).send().await?;
-        if response.status_code() != 200 {
-            return reject("jwks_http_not_200");
+    let now_ms = Date::now().as_millis();
+    let cached = cached_jwks(now_ms);
+    let from_cache = cached.is_some();
+    let mut jwks = match cached {
+        Some(jwks) => jwks,
+        None => {
+            let Some(jwks) = fetch_access_jwks().await? else {
+                return reject("jwks_http_not_200");
+            };
+            replace_cached_jwks(jwks.clone(), Date::now().as_millis());
+            jwks
         }
-        response.json().await?
     };
-    let key = jwks.get("keys").and_then(Value::as_array).and_then(|keys| {
-        keys.iter().find(|k| {
-            k.get("kid").and_then(Value::as_str) == Some(kid)
-                && k.get("kty").and_then(Value::as_str) == Some("RSA")
-                && k.get("n").and_then(Value::as_str).is_some()
-                && k.get("e").and_then(Value::as_str).is_some()
-                && k.get("use")
-                    .and_then(Value::as_str)
-                    .is_none_or(|u| u == "sig")
-                && k.get("alg")
-                    .and_then(Value::as_str)
-                    .is_none_or(|a| a == "RS256")
-        })
-    });
-    let Some(key) = key else {
+    if from_cache && matching_access_jwk(&jwks, kid).is_none() {
+        let Some(fresh) = fetch_access_jwks().await? else {
+            return reject("jwks_http_not_200");
+        };
+        replace_cached_jwks(fresh.clone(), Date::now().as_millis());
+        jwks = fresh;
+    }
+    let Some(jwk) = matching_access_jwk(&jwks, kid) else {
         return reject("jwks_key_not_found");
     };
-    if !verify_signature(key, &format!("{}.{}", parts[0], parts[1]), &signature).await? {
+    let key_value = match cached_imported_key(kid, Date::now().as_millis()) {
+        Some(key) => key,
+        None => {
+            let key = import_verification_key(jwk).await?;
+            remember_imported_key(kid, key.clone(), Date::now().as_millis());
+            key
+        }
+    };
+    let key: CryptoKey = key_value
+        .dyn_into()
+        .map_err(|_| invalid("invalid imported public key"))?;
+    if !verify_signature(&key, &format!("{}.{}", parts[0], parts[1]), &signature).await? {
         return reject("jwt_signature_invalid");
     }
     Ok(identity_key(&claims))
@@ -378,7 +505,7 @@ pub async fn actor(req: &Request, env: &Env) -> Result<Option<Actor>> {
 
 #[cfg(test)]
 mod tests {
-    use super::identity_key;
+    use super::{access_jwks_cache_is_fresh, identity_key};
     use serde_json::json;
 
     #[test]
@@ -408,4 +535,12 @@ mod tests {
             Some("owner@example.test".to_owned())
         );
     }
+    #[test]
+    fn access_jwks_cache_has_a_bounded_ttl_and_rejects_clock_rewind() {
+        assert!(access_jwks_cache_is_fresh(1_000.0, 1_000.0));
+        assert!(access_jwks_cache_is_fresh(1_000.0, 300_999.0));
+        assert!(!access_jwks_cache_is_fresh(1_000.0, 301_000.0));
+        assert!(!access_jwks_cache_is_fresh(1_000.0, 999.0));
+    }
+
 }

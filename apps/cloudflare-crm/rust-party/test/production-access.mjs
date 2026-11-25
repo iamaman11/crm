@@ -28,7 +28,8 @@ const audience="e0a664cf4f46f0d13d0ac0d8dd621c718c70842a377bf6738d1a24f0d16cedc7
 const {publicKey,privateKey}=generateKeyPairSync("rsa",{modulusLength:2048});
 const other=generateKeyPairSync("rsa",{modulusLength:2048}).privateKey;
 const kid="production-artifact-local-fixture";
-const jwks={keys:[{...publicKey.export({format:"jwk"}),kid,alg:"RS256",use:"sig"}]};
+const originalJwk={...publicKey.export({format:"jwk"}),kid,alg:"RS256",use:"sig"};
+const jwks={keys:[originalJwk]};
 const now=Math.floor(Date.now()/1000);
 const admin="production-artifact-admin@example.test";
 const viewer="production-artifact-viewer@example.test";
@@ -84,10 +85,23 @@ try{
   await call("/api/session",token(admin,{exp:now-1}),401);
   assert.equal(jwksRequests,initial,"invalid claims must fail before JWKS fetch");
   assert.equal((await call("/api/session",token(admin),200)).role,"admin");
+  assert.equal(jwksRequests,initial+1,"first valid key must be fetched once");
   assert.equal((await call("/api/session",token(viewer),200)).role,"viewer");
   assert.equal((await call("/api/version",token(admin),200)).source,sha);
   await call("/api/session",token(admin,{},other),401);
+  assert.equal(jwksRequests,initial+1,"bad signatures must be rejected using the cached key");
   await call("/api/session",token(admin,{},privateKey,{kid:"unknown"}),401);
+  assert.equal(jwksRequests,initial+2,"unknown kid must refresh JWKS and fail closed if absent");
+  const rotated=generateKeyPairSync("rsa",{modulusLength:2048});
+  const rotatedKid="production-artifact-rotated";
+  const rotatedJwk={...rotated.publicKey.export({format:"jwk"}),kid:rotatedKid,alg:"RS256",use:"sig"};
+  jwks.keys=[originalJwk,rotatedJwk];
+  const rotatedAdmin=token(admin,{},rotated.privateKey,{kid:rotatedKid});
+  await call("/api/session",rotatedAdmin,200);
+  assert.equal(jwksRequests,initial+3,"rotated kid must refresh JWKS exactly once");
+  await call("/api/session",token(admin),200);
+  await call("/api/session",rotatedAdmin,200);
+  assert.equal(jwksRequests,initial+3,"both current and previous keys must reuse imported CryptoKeys");
   await call("/api/session",token("",{common_name:"unassigned-artifact.access"}),401);
   await call("/api/_ci/original-domain-check",token(admin),404);
   await call("/api/doctor",null,401);
@@ -107,8 +121,9 @@ try{
   const viewerDoctor=await worker.fetch("/api/doctor",{headers:{"cf-access-jwt-assertion":token(viewer)}});
   assert.equal((await viewerDoctor.json()).rpc,null);
   providerStatus=503;
-  await call("/api/session",token(admin),401);
-  assert.ok(jwksRequests>=8,"production verifier must actually fetch JWKS");
+  await call("/api/session",token(admin,{},privateKey,{kid:"provider-unavailable"}),401);
+  assert.equal(jwksRequests,initial+4,
+    "an unknown kid must refresh even when the provider is unavailable, then fail closed");
   assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM crm_users").first()).n,2);
   assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM crm_tenants").first()).n,1);
   assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM crm_audit").first()).n,0);
@@ -223,6 +238,8 @@ try{
   assert.deepEqual(artifact(),before,"production bundle changed during test");
   const evidence={event:"crm.production-access-artifact",result:"PASS",source_sha:sha,
     production_features:["native"],artifact:before,jwks_requests:jwksRequests,
+    access_key_cache:{result:"PASS",ttl_seconds:300,rotation_refresh:true,
+      previous_key_overlap:true,unknown_kid_denied:true,provider_failure_denied:true},
     signed_admin_viewer:true,invalid_signature_denied:true,wrong_claims_denied:true,
     unknown_service_denied:true,provider_failure_denied:true,ci_endpoint_absent:true,
     unchanged_d1:true,compiled_router_policy_parity:true,production_rpc_d1:{generated_binary:true,role_denial:true,
