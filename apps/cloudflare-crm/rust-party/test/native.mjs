@@ -6,7 +6,7 @@ import {createTestHarness} from "wrangler";
 import {dirname,join} from "node:path";
 import {fileURLToPath} from "node:url";
 import assert from "node:assert/strict";
-import {mock} from "node:test";
+import {test} from "node:test";
 import {chromium} from "playwright";
 import {typedBrowser} from "./typed-browser.mjs";
 import {installUiDiagnostics,assertUiPanel} from "./ui-diagnostics.mjs";
@@ -26,6 +26,10 @@ import {binaryPartyV3,decodePartyV3,partyV3Path,
   binaryEnrichmentV2,decodeEnrichmentV2,enrichmentV2Path,
   binaryCsvV2,decodeCsvV2,csvV2Path,
   binaryOverviewV2,decodeOverviewV2,overviewV2Path,decodeDomainErrorDetail,decodeRpcOutput} from "../../../../scripts/crm-connect-binary-fixture.mjs";
+// Each native subtest owns its own harness, fixture D1, signed identity and evidence.
+// The first subtest returns only the compiled policy/denial proof; the second
+// starts clean and requires the same compiled inventory before sealing evidence.
+async function runNative(context,denialProof){
 const cwd=dirname(dirname(fileURLToPath(import.meta.url)));
 let base,fixtureDb;
 const successfulCalls=new Set();
@@ -159,7 +163,7 @@ const testHarness=createTestHarness({
 });
 let jwksRequests=0;
 const fetchOriginal=globalThis.fetch.bind(globalThis);
-mock.method(globalThis,"fetch",async(input,init)=>{
+context.mock.method(globalThis,"fetch",async(input,init)=>{
  const url=typeof input==="string"?input:input instanceof URL?input.href:input.url;
  if(url===iss+"/cdn-cgi/access/certs"){
    assert.equal(init?.method??input?.method??"GET","GET");
@@ -251,37 +255,46 @@ try{
  for(const [path,rule] of rpc.policies){
    if(rule.permission==="Write"||rule.permission==="SelfWrite")mutationPaths.add(path);
  }
- const unauthenticatedDenials=[],viewerDenials=[];
- for(const [path,rule] of rpc.policies){
-   const unauthenticated=await rpcFetch(path,{method:"POST",
-     headers:{"content-type":"application/proto","connect-protocol-version":"1"},
-     body:new Uint8Array()});
-   assert.equal(unauthenticated.status,401,"missing identity must deny "+path);
-   assert.equal((await unauthenticated.json()).code,"unauthenticated",path);
-   unauthenticatedDenials.push(path);
-   if(rule.permission==="Write"||rule.permission==="AdminRead"){
-     const denied=await rpcFetch(path,{method:"POST",
-       headers:{"content-type":"application/proto","connect-protocol-version":"1",
-         "cf-access-jwt-assertion":viewer},body:new Uint8Array()});
-     assert.equal(denied.status,403,"viewer must not access admin RPC "+path);
-     assert.equal((await denied.json()).code,"permission_denied",path);
-     viewerDenials.push(path);
+ // The denial matrix requires no business scenario state. Execute it once
+ // in a separate native harness; do not repeat it in the business subtest.
+ if(denialProof===undefined){
+   const beforeDenials=await partySnapshot();
+   const unauthenticatedDenials=[],viewerDenials=[];
+   for(const [path,rule] of rpc.policies){
+     const unauthenticated=await rpcFetch(path,{method:"POST",
+       headers:{"content-type":"application/proto","connect-protocol-version":"1"},
+       body:new Uint8Array()});
+     assert.equal(unauthenticated.status,401,"missing identity must deny "+path);
+     assert.equal((await unauthenticated.json()).code,"unauthenticated",path);
+     unauthenticatedDenials.push(path);
+     if(rule.permission==="Write"||rule.permission==="AdminRead"){
+       const denied=await rpcFetch(path,{method:"POST",
+         headers:{"content-type":"application/proto","connect-protocol-version":"1",
+           "cf-access-jwt-assertion":viewer},body:new Uint8Array()});
+       assert.equal(denied.status,403,"viewer must not access admin RPC "+path);
+       assert.equal((await denied.json()).code,"permission_denied",path);
+       viewerDenials.push(path);
+     }
    }
- }
 
- // Only technical HTTP endpoints remain; business paths must not bypass Connect.
- for(const path of ["/api/parties","/api/accounts",
-     "/api/customer-data-operations/parties.csv","/api/manual-business",
-     "/api/version/other"]){
-   assert.equal((await call(path,admin)).status,404,path);
+   // Only technical HTTP endpoints remain; business paths must not bypass Connect.
+   for(const path of ["/api/parties","/api/accounts",
+       "/api/customer-data-operations/parties.csv","/api/manual-business",
+       "/api/version/other"]){
+     assert.equal((await call(path,admin)).status,404,path);
+   }
+   for(const path of ["/crm.parties.v2.PartyService/GetParty",
+       "/crm.sales.v1.DealService/GetDeal","/crm.sales.v2.DealService/NotRegistered",
+       "/crm.future.v9.FutureService/NotRegistered"]){
+     const denied=await call(path,admin,"POST");
+     assert.equal(denied.status,501,path);
+     assert.equal(denied.body.code,"unimplemented");
+   }
+   assert.deepEqual(await partySnapshot(),beforeDenials,"denied routes must not mutate the fixture");
+   return {rpc,unauthenticatedDenials,viewerDenials};
  }
- for(const path of ["/crm.parties.v2.PartyService/GetParty",
-     "/crm.sales.v1.DealService/GetDeal","/crm.sales.v2.DealService/NotRegistered",
-     "/crm.future.v9.FutureService/NotRegistered"]){
-   const denied=await call(path,admin,"POST");
-   assert.equal(denied.status,501,path);
-   assert.equal(denied.body.code,"unimplemented");
- }
+ assert.deepEqual(rpc,denialProof.rpc,"isolated denial and business harnesses must expose identical compiled RPC/owner/policy inventory");
+ const {unauthenticatedDenials,viewerDenials}=denialProof;
  const tenantB=jwt("native-b@example.test");
  const describeProtobuf=value=>JSON.stringify(value,
    (_key,item)=>typeof item==="bigint"?item.toString():item);
@@ -7185,5 +7198,19 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  testHarness.debug();
  throw error;
 }finally{
- try{await testHarness.close();}finally{mock.restoreAll();}
+ try{await testHarness.close();}finally{context.mock.restoreAll();}
 }
+}
+
+// Serial first: fetch interception is process-global. A later concurrency
+// experiment needs process isolation, not overlapping context mocks.
+test("CRM signed workerd integration",async context=>{
+ let denialProof;
+ await context.test("compiled policy and unknown routes on isolated D1",async subtest=>{
+   denialProof=await runNative(subtest);
+ });
+ assert.ok(denialProof,"isolated policy denial proof required before business acceptance");
+ await context.test("signed business owners, D1 and Chromium on fresh D1",async subtest=>{
+   await runNative(subtest,denialProof);
+ });
+});

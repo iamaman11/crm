@@ -267,7 +267,7 @@ jobs:
             cp target/cargo-timings/cargo-timing.html "$RUNNER_TEMP/crm-cargo-timings/native-release.html") &
           release_pid=$!
           status=0
-          node rust-party/test/native.mjs || status=$?
+          node --test rust-party/test/native.mjs || status=$?
           wait "$release_pid" || status=$?
           exit "$status"
       - name: Preserve Cargo build timing reports
