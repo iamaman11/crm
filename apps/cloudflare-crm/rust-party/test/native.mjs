@@ -63,12 +63,10 @@ const batch=async(statements)=>{
  return results;
 };
 const rpcFetch=async(path,options)=>{
- // Keep every CI RPC on a fresh HTTP connection. Workerd may close an idle
- // socket between requests; reusing that socket fails with UND_ERR_SOCKET.
- // This does NOT retry a mutation with an unknown outcome.
- const requestOptions={...options,headers:{...options?.headers,connection:"close"}};
+ // Use Wrangler's native route-dispatch API for RPC integration tests.
+ // Chromium still exercises the actual listening HTTP server. Never retry a mutation.
  let response;
- try {response=await globalThis.fetch(base+path,requestOptions);}
+ try {response=await testHarness.fetch(base+path,options);}
  catch(error) {
    // No mutation retry: an interrupted Connect request can have an unknown outcome.
    // A separate read-only probe distinguishes a closed keepalive connection
