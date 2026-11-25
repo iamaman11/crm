@@ -16,10 +16,10 @@ const AUDIENCE: &str = "e0a664cf4f46f0d13d0ac0d8dd621c718c70842a377bf6738d1a24f0
 
 // Access rotates signing keys on a multi-week schedule and retains the previous
 // key for seven days. Cache only public key material; unknown kid forces refresh.
-const ACCESS_JWKS_CACHE_TTL_MS: f64 = 300_000.0;
+const ACCESS_JWKS_CACHE_TTL_MS: u64 = 300_000;
 
 struct AccessJwksCache {
-    fetched_at_ms: f64,
+    fetched_at_ms: u64,
     document: Value,
     imported_keys: HashMap<String, JsValue>,
 }
@@ -29,11 +29,11 @@ std::thread_local! {
         const { RefCell::new(None) };
 }
 
-fn access_jwks_cache_is_fresh(fetched_at_ms: f64, now_ms: f64) -> bool {
+fn access_jwks_cache_is_fresh(fetched_at_ms: u64, now_ms: u64) -> bool {
     now_ms >= fetched_at_ms && now_ms - fetched_at_ms < ACCESS_JWKS_CACHE_TTL_MS
 }
 
-fn cached_jwks(now_ms: f64) -> Option<Value> {
+fn cached_jwks(now_ms: u64) -> Option<Value> {
     ACCESS_JWKS_CACHE.with(|cache| {
         let mut cache = cache.borrow_mut();
         let fresh = cache
@@ -48,7 +48,7 @@ fn cached_jwks(now_ms: f64) -> Option<Value> {
     })
 }
 
-fn replace_cached_jwks(document: Value, fetched_at_ms: f64) {
+fn replace_cached_jwks(document: Value, fetched_at_ms: u64) {
     ACCESS_JWKS_CACHE.with(|cache| {
         *cache.borrow_mut() = Some(AccessJwksCache {
             fetched_at_ms,
@@ -58,7 +58,7 @@ fn replace_cached_jwks(document: Value, fetched_at_ms: f64) {
     });
 }
 
-fn cached_imported_key(kid: &str, now_ms: f64) -> Option<JsValue> {
+fn cached_imported_key(kid: &str, now_ms: u64) -> Option<JsValue> {
     ACCESS_JWKS_CACHE.with(|cache| {
         let mut cache = cache.borrow_mut();
         let fresh = cache
@@ -74,7 +74,7 @@ fn cached_imported_key(kid: &str, now_ms: f64) -> Option<JsValue> {
     })
 }
 
-fn remember_imported_key(kid: &str, key: JsValue, now_ms: f64) {
+fn remember_imported_key(kid: &str, key: JsValue, now_ms: u64) {
     ACCESS_JWKS_CACHE.with(|cache| {
         let mut cache = cache.borrow_mut();
         let fresh = cache
@@ -541,9 +541,9 @@ mod tests {
     }
     #[test]
     fn access_jwks_cache_has_a_bounded_ttl_and_rejects_clock_rewind() {
-        assert!(access_jwks_cache_is_fresh(1_000.0, 1_000.0));
-        assert!(access_jwks_cache_is_fresh(1_000.0, 300_999.0));
-        assert!(!access_jwks_cache_is_fresh(1_000.0, 301_000.0));
-        assert!(!access_jwks_cache_is_fresh(1_000.0, 999.0));
+        assert!(access_jwks_cache_is_fresh(1_000, 1_000));
+        assert!(access_jwks_cache_is_fresh(1_000, 300_999));
+        assert!(!access_jwks_cache_is_fresh(1_000, 301_000));
+        assert!(!access_jwks_cache_is_fresh(1_000, 999));
     }
 }
