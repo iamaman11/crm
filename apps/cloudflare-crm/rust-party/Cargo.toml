@@ -34,22 +34,22 @@ opt-level = 2
 # Optimize only the host-side Connect generators and their Rust formatter.
 # These packages are absent from the normal WASM dependency graph.
 [profile.dev.package.buffa-codegen]
-opt-level = 2
+opt-level = 1
 
 [profile.dev.package.connectrpc-codegen]
-opt-level = 2
+opt-level = 1
 
 [profile.dev.package."prettyplease:0.2.37"]
-opt-level = 2
+opt-level = 1
 
 [profile.release.package.buffa-codegen]
-opt-level = 2
+opt-level = 1
 
 [profile.release.package.connectrpc-codegen]
-opt-level = 2
+opt-level = 1
 
 [profile.release.package."prettyplease:0.2.37"]
-opt-level = 2
+opt-level = 1
 
 [features]
 default = []
