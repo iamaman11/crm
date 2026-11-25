@@ -322,13 +322,24 @@ async fn read_run(
     rule_id: &str,
     event_id: &str,
 ) -> Result<Option<RunRow>, ConnectError> {
-    bind(db,
-      concat!("SELECT seq,rule_id,rule_version,source_event_id,interaction_id,task_id,",
-             "task_intent,status,requested_by,original_request_id,task_request_id,",
-             "created_at_unix_millis,completed_at_unix_millis FROM crm_activity_automation_runs",
-             " WHERE tenant=? AND rule_id=? AND source_event_id=?"),
-      &[JsValue::from_str(tenant),JsValue::from_str(rule_id),JsValue::from_str(event_id)]
-    ).map_err(|_|storage())?.first::<RunRow>(None).await.map_err(|_|storage())
+    bind(
+        db,
+        concat!(
+            "SELECT seq,rule_id,rule_version,source_event_id,interaction_id,task_id,",
+            "task_intent,status,requested_by,original_request_id,task_request_id,",
+            "created_at_unix_millis,completed_at_unix_millis FROM crm_activity_automation_runs",
+            " WHERE tenant=? AND rule_id=? AND source_event_id=?"
+        ),
+        &[
+            JsValue::from_str(tenant),
+            JsValue::from_str(rule_id),
+            JsValue::from_str(event_id),
+        ],
+    )
+    .map_err(|_| storage())?
+    .first::<RunRow>(None)
+    .await
+    .map_err(|_| storage())
 }
 pub(super) async fn list_runs(
     db: &D1Database,
@@ -337,15 +348,28 @@ pub(super) async fn list_runs(
     after: i64,
     limit: u32,
 ) -> Result<Vec<RunRow>, ConnectError> {
-    bind(db,
-      concat!("SELECT seq,rule_id,rule_version,source_event_id,interaction_id,task_id,",
-             "task_intent,status,requested_by,original_request_id,task_request_id,",
-             "created_at_unix_millis,completed_at_unix_millis FROM crm_activity_automation_runs",
-             " WHERE tenant=? AND (?='' OR rule_id=?) AND seq>? ORDER BY seq LIMIT ?"),
-      &[JsValue::from_str(tenant),JsValue::from_str(rule_id),JsValue::from_str(rule_id),
-        JsValue::from_f64(after as f64),JsValue::from_f64(limit as f64)]
-    ).map_err(|_|storage())?.all().await.map_err(|_|storage())?
-       .results::<RunRow>().map_err(|_|storage())
+    bind(
+        db,
+        concat!(
+            "SELECT seq,rule_id,rule_version,source_event_id,interaction_id,task_id,",
+            "task_intent,status,requested_by,original_request_id,task_request_id,",
+            "created_at_unix_millis,completed_at_unix_millis FROM crm_activity_automation_runs",
+            " WHERE tenant=? AND (?='' OR rule_id=?) AND seq>? ORDER BY seq LIMIT ?"
+        ),
+        &[
+            JsValue::from_str(tenant),
+            JsValue::from_str(rule_id),
+            JsValue::from_str(rule_id),
+            JsValue::from_f64(after as f64),
+            JsValue::from_f64(limit as f64),
+        ],
+    )
+    .map_err(|_| storage())?
+    .all()
+    .await
+    .map_err(|_| storage())?
+    .results::<RunRow>()
+    .map_err(|_| storage())
 }
 #[derive(Deserialize)]
 struct RunRequest {
