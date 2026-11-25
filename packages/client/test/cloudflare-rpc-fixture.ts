@@ -47,7 +47,7 @@ export async function fixtureRpc<I extends DescMessage, O extends DescMessage>(
 ) {
   const response = await sendFixtureRpc(dispatch, method, jwt, input, 200);
   const body = fromBinary(method.output, new Uint8Array(await response.arrayBuffer()));
-  return { headers: response.headers, body };
+  return { status: response.status, headers: response.headers, body };
 }
 
 export function decodeFixtureDetail<M extends DescMessage>(
