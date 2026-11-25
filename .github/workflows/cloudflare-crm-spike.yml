@@ -226,7 +226,7 @@ jobs:
           # Bound Cargo's jobserver on the 4-vCPU runner while workerd/Chromium run.
           echo "CRM_RUNNER_LOGICAL_CPUS=$(nproc)"
           rm -f rust-party/target/cargo-timings/cargo-timing.html
-          (cd rust-party && CARGO_BUILD_JOBS=2 worker-build --release --out-dir ../.release/native-build --locked --features native --timings &&
+          (cd rust-party && CARGO_BUILD_JOBS=3 worker-build --release --out-dir ../.release/native-build --locked --features native --timings &&
             cp target/cargo-timings/cargo-timing.html "$RUNNER_TEMP/crm-cargo-timings/native-release.html") &
           release_pid=$!
           status=0
