@@ -198,12 +198,14 @@ try{
  await sql("INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id,actor,search_name) "+
    "VALUES(?,?,?,?,?,?,?,?,?)","tenant-a","binary-rpc-proof-01",state,1,
    "fixture-key-01","fixture-digest-01",null,"native-a@example.test","Original Rust Party");
- // Reapplying through Wrangler must preserve the existing D1 data and ledger.
- await worker.applyD1Migrations("DB");
+ // The isolated denial harness proves idempotent migrations once. The
+ // separate business harness still initializes its own fresh D1 and checks
+ // the full migration ledger, without repeating that same reapply proof.
+ if(denialProof===undefined)await worker.applyD1Migrations("DB");
  assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_tenants"))[0].n,2,
-   "reapplying Wrangler migrations must preserve tenant fixtures");
+   "Wrangler D1 must preserve tenant fixtures");
  assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE id='binary-rpc-proof-01'"))[0].n,1,
-   "reapplying Wrangler migrations must preserve business data");
+   "Wrangler D1 must preserve original business data");
  const migrationDir=join(cwd,config.d1_databases[0].migrations_dir);
  const migrations=readdirSync(migrationDir).filter(name=>name.endsWith(".sql")).sort();
  assert.deepEqual((await sql("SELECT name FROM d1_migrations ORDER BY name")).map(row=>row.name),migrations,
@@ -2932,25 +2934,35 @@ console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:
     "load fixture must clone a valid domain-serialized Deal");
   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_sales_deal_records "+
     "WHERE tenant='tenant-a' AND id LIKE 'r7-scale-%'"))[0].n,0);
-  const insertSql="INSERT INTO crm_sales_deal_records "+
-    "(tenant,id,account_id,state,version,idem_key,idem_digest,request_id,actor,last_action) "+
-    "VALUES(?,?,?,?,?,?,?,?,?,?) RETURNING id";
+  // The two native D1 scale checkpoints (100 and 1000 Deals) used to bind
+  // and execute 1000 separate INSERT statements. SQLite can generate the exact
+  // same disposable records in one native INSERT per checkpoint.
+  const insertSql=`WITH RECURSIVE scale_ids(i) AS (
+    SELECT ?1 UNION ALL SELECT i+1 FROM scale_ids WHERE i<?2
+  )
+  INSERT INTO crm_sales_deal_records
+    (tenant,id,account_id,state,version,idem_key,idem_digest,request_id,actor,last_action)
+  SELECT 'tenant-a','r7-scale-'||printf('%04d',i),?3,
+    replace(?4,?5,'"'||'r7-scale-'||printf('%04d',i)||'"'),
+    ?6,'r7-scale-key-'||i,'load-fixture',lower(hex(randomblob(16))),?7,'sales_deals.create'
+  FROM scale_ids RETURNING id`;
   let inserted=0;
   const seedTo=async n=>{
-    while(inserted<n){
-      const ids=[],statements=[];
-      for(let i=inserted;i<Math.min(n,inserted+100);i++){
-        const id="r7-scale-"+String(i).padStart(4,"0");
-        const state=source.state.replaceAll('"'+sourceId+'"','"'+id+'"');
-        assert.ok(state!==source.state);
-        ids.push(id);
-        statements.push(statement(insertSql,"tenant-a",id,source.account_id,state,source.version,
-          "r7-scale-key-"+i,"load-fixture",randomUUID(),source.actor,"sales_deals.create"));
-      }
-      const results=await batch(statements);
-      assert.deepEqual(results.map(result=>result.results[0]?.id),ids);
-      inserted+=ids.length;
-    }
+    if(inserted>=n)return;
+    const began=performance.now(),from=inserted;
+    const rows=await sql(insertSql,from,n-1,source.account_id,source.state,
+      '"'+sourceId+'"',source.version,source.actor);
+    const expectedIds=Array.from({length:n-from},(_,offset)=>
+      "r7-scale-"+String(from+offset).padStart(4,"0"));
+    assert.deepEqual(rows.map(row=>row.id).sort(),expectedIds,
+      "native D1 must create precisely the required Deal fixture IDs");
+    const mismatches=await sql("SELECT COUNT(*) AS n FROM crm_sales_deal_records "+
+      "WHERE tenant='tenant-a' AND id LIKE 'r7-scale-%' "+
+      "AND json_extract(state,'$.deal_id')<>id");
+    assert.equal(mismatches[0].n,0,"every cloned domain state must retain its own Deal ID");
+    inserted=n;
+    console.log(JSON.stringify({event:"crm.native-r7-scale-fixture",result:"PASS",
+      total_deals:n,created:n-from,sql_inserts:1,elapsed_ms:Math.round(performance.now()-began)}));
   };
   const benchmark=async n=>{
     await seedTo(n);
