@@ -35,7 +35,7 @@ Buf проверяет текущий контракт; генерация и к
 Зависимости устанавливаются с frozen lockfile; Rust — с --locked и Cargo cache.
 Domain/workerd/D1/Chromium проверяют результат, права, tenant, CAS/replay/audit.
 `rust-party/test/typed-browser.mjs` выполняет реальные действия через generated client;
-`e2e/live.mjs` проверяет опубликованное приложение через Access. Doctor — только read-only
+`e2e/live.mts` проверяет опубликованное приложение через Access. Doctor — только read-only
 диагностика, не замена приёмки.
 
 Release использует artifact этого CI без пересборки. Production `native` и test-only
@@ -52,7 +52,7 @@ Release использует artifact этого CI без пересборки.
 - `cloudflare-crm-spike`: все архитектурные правила, типизированные Rust RPC и полный
   регрессионный сценарий `rust-party/test/typed-browser.mjs` на workerd/D1.
 - `deploy-crm-dev`: точный опубликованный SHA, реальные Cloudflare Access и D1,
-  короткий Chromium `e2e/published-smoke.mjs`, независимый audit/Trace readback.
+  короткий Chromium `e2e/published-smoke.mts`, независимый audit/Trace readback.
   Полный браузерный регрессионный сценарий **не повторяется** после публикации.
 - **Gate B — отдельная независимая приёмка новой пользовательской функции в
   реальном браузере после попадания кода в dev**, не job и не CI smoke. Её

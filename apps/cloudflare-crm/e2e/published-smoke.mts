@@ -2,40 +2,81 @@
 // the existing typed-browser.mjs and the independent post-merge Gate B.
 import assert from "node:assert/strict";
 import {chromium} from "playwright";
+import type {Locator, Page, Response, Route} from "playwright";
+import {string} from "../scripts/json-boundary.mts";
+
+type Restore = () => Promise<void>;
+type SmokeOptions = {
+  base: string;
+  sourceSha: string;
+  tenantA: string;
+  adminIdentity: string;
+  adminHeaders: Record<string, string>;
+  tenantBHeaders: Record<string, string>;
+  sql: (statement: string, params: string[]) => Promise<ReadonlyArray<Record<string, unknown>>>;
+  beforeViewer: () => Promise<Restore>;
+  directory: string;
+};
+type RpcEvidence = {
+  path: string;
+  status: number;
+  request_id?: string | undefined;
+  error_code?: string | null;
+  source_sha?: string | undefined;
+  runtime?: string | undefined;
+  headerError?: boolean;
+};
 
 export async function publishedSmoke({base,sourceSha,tenantA,adminIdentity,adminHeaders,
-  tenantBHeaders,sql,beforeViewer,directory}) {
+  tenantBHeaders,sql,beforeViewer,directory}: SmokeOptions) {
   const startedAt=Date.now(),runId=String(startedAt);
   const name="Browser Party "+runId,accountName="Browser Party Account "+runId;
   const deniedName="Browser Denied "+runId;
-  const requests=[],writes=[],syntheticPrivateProbes=[],steps=[],headerReads=[],pageErrors=[];
-  const record=response=>{
+  const requests: RpcEvidence[] = [];
+  const headerReads: Promise<void>[] = [];
+  const pageErrors: string[] = [];
+  const writes: Array<{path: string; request_id: string; audit: ReadonlyArray<Record<string, unknown>>}> = [];
+  const syntheticPrivateProbes=[],steps=[];
+  let drained = 0;
+  const flushHeaders = async () => {
+    while (drained < headerReads.length) {
+      const pending = headerReads.slice(drained);
+      drained = headerReads.length;
+      await Promise.all(pending);
+    }
+  };
+  const record=(response: Response)=>{
     const path=new URL(response.url()).pathname;
     if(!path.startsWith("/crm."))return;
-    const item={path,status:response.status()};
+    const item: RpcEvidence={path,status:response.status()};
     requests.push(item);
-    headerReads.push(response.allHeaders().then(headers=>{
+    const capture = (headers: Record<string, string>) => {
       item.request_id=headers["x-request-id"];
       item.error_code=headers["x-crm-error-code"]??null;
       item.source_sha=headers["x-crm-source-sha"];
       item.runtime=headers["x-crm-runtime"];
+    };
+    capture(response.headers());
+    headerReads.push(response.allHeaders().then(capture).catch(()=>{
+      if(!item.request_id||!item.source_sha||!item.runtime||(item.status>=400&&!item.error_code))
+        item.headerError=true;
     }));
   };
   const browser=await chromium.launch({headless:true});
-  let restoreViewer=async()=>{};
+  let restoreViewer: Restore=async()=>{};
   const context=await browser.newContext({extraHTTPHeaders:adminHeaders,timezoneId:"UTC"});
   context.on("response",record);
   const page=await context.newPage();
   page.on("pageerror",error=>pageErrors.push(error.message));
-  const responseFor=(targetPage,method)=>targetPage.waitForResponse(response=>
+  const responseFor=(targetPage: Page,method: string)=>targetPage.waitForResponse(response=>
     new URL(response.url()).pathname.endsWith("/"+method)&&response.request().method()==="POST");
-  const auditFor=async(requestId)=>{
+  const auditFor=async(requestId: string)=>{
     const result=await sql(
       "SELECT action,subject_id,actor FROM crm_audit WHERE tenant_id=? AND request_id=?",
       [tenantA,requestId]);
     return result;
   };
-  const mutation=async(button,method,action)=>{
+  const mutation=async(button: Locator,method: string,action: string)=>{
     const pending=responseFor(page,method);
     await button.click();
     const response=await pending;
@@ -43,7 +84,7 @@ export async function publishedSmoke({base,sourceSha,tenantA,adminIdentity,admin
     const headers=await response.allHeaders();
     assert.equal(headers["x-crm-source-sha"],sourceSha);
     assert.equal(headers["x-crm-runtime"],"native-workers-rs");
-    const requestId=headers["x-request-id"];
+    const requestId=string(headers["x-request-id"]);
     assert.match(requestId??"",/^[a-f0-9-]{36}$/i);
     const audit=await auditFor(requestId);
     assert.equal(audit.filter(item=>item.action===action).length,1,
@@ -57,7 +98,7 @@ export async function publishedSmoke({base,sourceSha,tenantA,adminIdentity,admin
     return requestId;
   };
   // Retry only demonstrably edge-owned asset/doc 404 on read-only navigation.
-  const open=async(targetPage,path,heading)=>{
+  const open=async(targetPage: Page,path: string,heading: string)=>{
     for(let attempt=1;attempt<=4;attempt++){
       // A same-hash page.goto() returns null in Playwright; use a real document
       // reload to prove the persisted Party remains visible after reopening.
@@ -112,7 +153,7 @@ export async function publishedSmoke({base,sourceSha,tenantA,adminIdentity,admin
     assert.equal(stableRpcEdges,2,"Published signed RPC edge never converged to the exact Worker SHA");
     let privateRequests=0;
     const writeRoute="**/crm.parties.v3.PartyService/CreateParty";
-    const privacyRoute=async route=>{
+    const privacyRoute=async (route: Route)=>{
       const headers=await route.request().headers();
       assert.ok((headers.cookie??"").includes("crm_s3_test_cookie="+privateCookie));
       privateRequests++;
@@ -143,7 +184,7 @@ export async function publishedSmoke({base,sourceSha,tenantA,adminIdentity,admin
       "SELECT id FROM crm_party_records WHERE tenant=? AND json_extract(state,'$.display_name')=?",
       [tenantA,name]);
     assert.equal(parties.length,1,"Signed CreateParty must persist exactly one record");
-    const partyId=parties[0].id;
+    const partyId=string(parties[0]?.id);
     steps.push("party-create");
     await open(page,"/#parties","Люди и организации");
     const heading=page.getByRole("heading",{name,exact:true});
@@ -162,7 +203,7 @@ export async function publishedSmoke({base,sourceSha,tenantA,adminIdentity,admin
       [tenantA,accountName]);
     assert.equal(accounts.length,1,"Signed CreateAccount must persist exactly one record");
     await page.getByRole("heading",{name:"Карточка клиента",exact:true}).waitFor();
-    assert.equal(new URL(page.url()).hash,"#accounts/"+accounts[0].id);
+    assert.equal(new URL(page.url()).hash,"#accounts/"+string(accounts[0]?.id));
     steps.push("account-create");
     // An actual persisted-role downgrade, not a fake role header or JS mock.
     restoreViewer=await beforeViewer();
@@ -180,8 +221,8 @@ export async function publishedSmoke({base,sourceSha,tenantA,adminIdentity,admin
       assert.equal((await forbidden).status(),403);
       await deniedPage.getByRole("heading",{name:/Недостаточно прав/}).waitFor();
       assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant=? "+
-        "AND json_extract(state,'$.display_name')=?",[tenantA,deniedName]))[0].n,0);
-    }finally{await denied.close();await restoreViewer();restoreViewer=async()=>{};}
+        "AND json_extract(state,'$.display_name')=?",[tenantA,deniedName]))[0]?.n,0);
+    }finally{await flushHeaders();await denied.close();await restoreViewer();restoreViewer=async()=>{};}
     steps.push("viewer-denial");
     const other=await browser.newContext({extraHTTPHeaders:tenantBHeaders});
     other.on("response",record);
@@ -197,18 +238,19 @@ export async function publishedSmoke({base,sourceSha,tenantA,adminIdentity,admin
       assert.equal(new URL(otherPage.url()).hash,"#accounts");
       await otherPage.getByText("Клиентов пока нет.",{exact:true}).waitFor();
       assert.equal(await otherPage.getByRole("heading",{name:accountName,exact:true}).count(),0);
-    }finally{await other.close();}
+    }finally{await flushHeaders();await other.close();}
     steps.push("tenant-isolation");
     const anonymous=await browser.newContext();
     try{
       const response=await anonymous.request.get(base+"/api/session",{maxRedirects:0});
       assert.equal(response.status(),302,"Anonymous public request must stop at Cloudflare Access");
-      assert.match(new URL(response.headers().location).hostname,/\.cloudflareaccess\.com$/);
+      assert.match(new URL(string(response.headers().location)).hostname,/\.cloudflareaccess\.com$/);
     }finally{await anonymous.close();}
     steps.push("anonymous-denial");
-    await Promise.all(headerReads);
+    await flushHeaders();
     assert.deepEqual(pageErrors,[],"Browser page must have no uncaught runtime errors");
     for(const response of requests){
+      assert.ok(!response.headerError,"Complete browser correlation evidence is required");
       assert.match(response.request_id??"",/^[a-f0-9-]{36}$/i);
       assert.equal(response.source_sha,sourceSha);
       assert.equal(response.runtime,"native-workers-rs");
@@ -228,7 +270,7 @@ export async function publishedSmoke({base,sourceSha,tenantA,adminIdentity,admin
     const {writeFileSync}=await import("node:fs");
     const {resolve}=await import("node:path");
     writeFileSync(resolve(directory,"failure.json"),JSON.stringify({
-      result:"FAIL",source_sha:sourceSha,error:String(error.message),steps,requests,writes
+      result:"FAIL",source_sha:sourceSha,error:error instanceof Error ? error.name : "UnknownError",steps,requests,writes
     },null,2)+"\n");
     await page.screenshot({path:resolve(directory,"failure.png"),fullPage:true}).catch(()=>{});
     throw error;

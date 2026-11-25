@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {verifyAnonymousDenial,verifyTracePrivacySettings,classifySignedSessionReadback,
-  isRetryableReadbackTransportError,waitForExactSourceSha,waitForNativeTelemetry} from "./release-readback.mjs";
+  isRetryableReadbackTransportError,waitForExactSourceSha,waitForNativeTelemetry} from "./release-readback.mts";
 
 const endpoint="https://example.test/api/version";
 

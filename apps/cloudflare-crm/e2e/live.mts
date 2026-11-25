@@ -1,9 +1,10 @@
 // Independent post-merge Gate B is separate; this runs only a compact CI release smoke.
 import assert from "node:assert/strict";
 import {readFileSync,writeFileSync,mkdirSync,existsSync} from "node:fs";
-import {publishedSmoke} from "./published-smoke.mjs";
-import {waitForExactSourceSha} from "../scripts/release-readback.mjs";
-const required=name=>{const value=process.env[name];if(!value)throw Error("Missing "+name);return value;};
+import {publishedSmoke} from "./published-smoke.mts";
+import {record, records, string} from "../scripts/json-boundary.mts";
+import {waitForExactSourceSha} from "../scripts/release-readback.mts";
+const required=(name: string)=>{const value=process.env[name];if(!value)throw Error("Missing "+name);return value;};
 const sha=required("GITHUB_SHA");
 assert.match(sha,/^[a-f0-9]{40}$/);
 assert.equal(process.env.GITHUB_REF,"refs/heads/dev");
@@ -12,29 +13,31 @@ const account="5bd5e1e1e813f061afc259e91334262d",database="35fc7ee9-9710-485f-8f
 assert.equal(required("CLOUDFLARE_ACCOUNT_ID"),account);
 assert.equal(required("CRM_D1_DATABASE_ID"),database);
 const token=required("CLOUDFLARE_API_TOKEN"),base="https://crm-dev.crm-5bd5e1e1.workers.dev";
-const access=name=>({"CF-Access-Client-Id":required("CRM_E2E_"+name+"_CLIENT_ID"),
+const access=(name: "A" | "B")=>({"CF-Access-Client-Id":required("CRM_E2E_"+name+"_CLIENT_ID"),
  "CF-Access-Client-Secret":required("CRM_E2E_"+name+"_CLIENT_SECRET")});
-const setup=JSON.parse(readFileSync("apps/cloudflare-crm/.release/e2e-tenants.json","utf8"));
+const setup=record(JSON.parse(readFileSync("apps/cloudflare-crm/.release/e2e-tenants.json","utf8")));
+const tenantA=string(setup.tenant_a);
 assert.equal(setup.source_sha,sha);assert.equal(setup.database,database);
 assert.equal(setup.run_id,required("GITHUB_RUN_ID"));
 assert.equal(setup.attempt,required("GITHUB_RUN_ATTEMPT"));
 const principal="service:"+access("A")["CF-Access-Client-Id"].toLowerCase();
 assert.equal(setup.actor_a,principal);
-async function query(sql,params=[]){
+async function query(sql: string,params: string[]=[]){
  const response=await fetch("https://api.cloudflare.com/client/v4/accounts/"+account+"/d1/database/"+database+"/query",{
    method:"POST",headers:{authorization:"Bearer "+token,"content-type":"application/json"},body:JSON.stringify({sql,params})});
- const body=await response.json();
+ const body=record(await response.json());
  assert.ok(response.ok&&body.success,"D1 readback HTTP "+response.status);
- assert.equal(body.result.length,1);assert.equal(body.result[0].success,true);
- return body.result[0];
+ const [result, ...extra]=records(body.result);
+ assert.ok(result && extra.length===0 && result.success===true);
+ return result;
 }
 const directory="apps/cloudflare-crm/e2e-evidence";
 mkdirSync(directory,{recursive:true});
 let roleMayHaveChanged=false;
 async function restoreRole(){
  if(!roleMayHaveChanged)return;
- await query("UPDATE crm_users SET role='admin' WHERE email=? AND tenant_id=? AND active=1 AND role='viewer'",[principal,setup.tenant_a]);
- const rows=(await query("SELECT role FROM crm_users WHERE email=? AND tenant_id=? AND active=1",[principal,setup.tenant_a])).results;
+ await query("UPDATE crm_users SET role='admin' WHERE email=? AND tenant_id=? AND active=1 AND role='viewer'",[principal,tenantA]);
+ const rows=(await query("SELECT role FROM crm_users WHERE email=? AND tenant_id=? AND active=1",[principal,tenantA])).results;
  assert.deepEqual(rows,[{role:"admin"}],"E2E administrator role must be restored");
  roleMayHaveChanged=false;
 }
@@ -43,38 +46,41 @@ try{
    headers:{...access("A"),"cache-control":"no-cache",connection:"close"}
  });
  await publishedSmoke({base,sourceSha:sha,adminHeaders:access("A"),
-   tenantBHeaders:access("B"),tenantA:setup.tenant_a,adminIdentity:principal,features:["native"],directory,
-   sql:async (statement,params=[])=>(await query(statement,params)).results,
+   tenantBHeaders:access("B"),tenantA:tenantA,adminIdentity:principal,directory,
+   sql:async (statement,params=[])=>records((await query(statement,params)).results),
    beforeViewer:async()=>{
      // Signed/enrolled test actor, real persisted role; no JWT fabrication or role header.
      // Register cleanup before UPDATE: its response can be lost after commit.
      roleMayHaveChanged=true;
-     const beforeFence=(await query(
-       "SELECT revision FROM crm_sales_forecast_revisions WHERE tenant=?",[setup.tenant_a])).results;
-     const changed=await query("UPDATE crm_users SET role='viewer' WHERE email=? AND tenant_id=? AND active=1 AND role='admin'",[principal,setup.tenant_a]);
+     const beforeFence=records((await query(
+       "SELECT revision FROM crm_sales_forecast_revisions WHERE tenant=?",[tenantA])).results);
+     const changed=await query("UPDATE crm_users SET role='viewer' WHERE email=? AND tenant_id=? AND active=1 AND role='admin'",[principal,tenantA]);
      // D1 meta.changes includes trigger writes (the forecast fence). Prove
      // the direct role transition and exactly one tenant-local fence instead
      // of assuming sqlite3_total_changes() counts only the target row.
-     assert.ok(Number.isInteger(changed.meta.changes)&&changed.meta.changes>=1,
+     const changes=record(changed.meta).changes;
+     assert.ok(typeof changes==="number"&&Number.isInteger(changes)&&changes>=1,
        "The isolated E2E actor role mutation must commit");
      const [roleRows,fenceRows]=await Promise.all([
-       query("SELECT role FROM crm_users WHERE email=? AND tenant_id=? AND active=1",[principal,setup.tenant_a]),
-       query("SELECT revision FROM crm_sales_forecast_revisions WHERE tenant=?",[setup.tenant_a])
+       query("SELECT role FROM crm_users WHERE email=? AND tenant_id=? AND active=1",[principal,tenantA]),
+       query("SELECT revision FROM crm_sales_forecast_revisions WHERE tenant=?",[tenantA])
      ]);
      assert.deepEqual(roleRows.results,[{role:"viewer"}],"The isolated actor must become viewer");
-     assert.equal(fenceRows.results[0]?.revision,beforeFence[0]?.revision+1,
+     const revision=beforeFence[0]?.revision;
+     assert.ok(typeof revision==="number");
+     assert.equal(records(fenceRows.results)[0]?.revision,revision+1,
        "The member update must advance exactly one tenant-local forecast fence");
      console.log(JSON.stringify({event:"crm.e2e-viewer-transition",result:"PASS",
-       direct_role:"viewer",d1_total_changes:changed.meta.changes,fence_advanced:1}));
+       direct_role:"viewer",d1_total_changes:changes,fence_advanced:1}));
      return restoreRole;
    }
  });
 }catch(error){
- // Browser errors are already recorded by typedBrowser; do not create a second report.
+ // Browser errors are already recorded by publishedSmoke; do not create a second report.
  // Only failures before the browser report exists need separate preflight evidence.
  if(!existsSync(directory+"/failure.json"))
    writeFileSync(directory+"/live-preflight-failure.json",
-     JSON.stringify({result:"FAIL",source_sha:sha,error:String(error.message)},null,2)+"\n");
+     JSON.stringify({result:"FAIL",source_sha:sha,error:error instanceof Error ? error.name : "UnknownError"},null,2)+"\n");
  throw error;
 }finally{
  await restoreRole();

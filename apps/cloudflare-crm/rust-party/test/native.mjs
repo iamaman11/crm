@@ -10,6 +10,7 @@ import {test} from "node:test";
 import {createFixtureDeal,dealCreationInput,updateFixtureDeal,dealUpdateInput} from "../../../../packages/client/test/cloudflare-deal-fixture.ts";
 import {formatRpcFailure,readRpcError} from "../../scripts/rpc-error-response.mts";
 import {verifyPartyNameQuality} from "./data-quality.mts";
+import {verifyIdentityResolution} from "./identity-resolution.mts";
 import {chromium} from "playwright";
 import {typedBrowser} from "./typed-browser.mjs";
 import {installUiDiagnostics,assertUiPanel} from "./ui-diagnostics.mts";
@@ -21,7 +22,6 @@ import {binaryPartyV3,decodePartyV3,partyV3Path,
   binaryMemberV2,decodeMemberV2,memberV2Path,
   binaryInteractionV2,decodeInteractionV2,interactionV2Path,
   binaryAutomationV2,decodeAutomationV2,automationV2Path,
-  binaryIdentityV2,decodeIdentityV2,identityV2Path,
   binaryConsentV2,decodeConsentV2,consentV2Path,
   binarySalesV2,decodeSalesV2,salesV2Path,
   binaryPrivacyV2,decodePrivacyV2,privacyV2Path,
@@ -1469,178 +1469,9 @@ console.log(JSON.stringify({event:"crm.native-g3-activities-tasks-v2",
    return {status:r.status,headers:r.headers,
      body:r.status<400?decode(method,new Uint8Array(await r.arrayBuffer())):await r.json()};
  };
- const identityV2=signedReadOnly(identityV2Path,binaryIdentityV2,decodeIdentityV2);
  await verifyPartyNameQuality(rpcFetch,sql,id,admin,viewer,tenantB);
 
- const beforeCandidates=await identityV2("FindSharedEmailCandidates",viewer,{page:{pageSize:1}});
- assert.equal(beforeCandidates.status,200,formatRpcFailure(beforeCandidates));
- assert.equal(beforeCandidates.body.candidates.length,0);
- const auditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"))[0].n;
- for(const [index,partyId] of [pagingPersonId,"binary-rpc-proof-01"].entries()){
-   const contact=await contactV2("CreateContactPoint",admin,{
-     contactPointId:"shared-email-"+index+"-"+randomUUID(),
-     partyId,kind:1,value:"later-timestamps@example.org",preferred:false,
-     precondition:{idempotencyKey:"shared-email-create-"+index}});
-   assert.equal(contact.status,200,formatRpcFailure(contact));
-   assert.equal(contact.body.contactPoint?.verified,false);
- }
- const auditAfter=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"))[0].n;
- assert.equal(auditAfter,auditBefore+2);
- assert.equal((await identityV2("FindSharedEmailCandidates",null,{})).status,401);
- assert.equal((await identityV2("FindSharedEmailCandidates",viewer,{page:{pageSize:101}})).status,400);
- assert.equal((await identityV2("FindSharedEmailCandidates",viewer,{
-   page:{pageSize:1,pageToken:"invalid"}})).status,400);
- assert.equal((await identityV2("FindSharedEmailCandidates",tenantB,{
-   page:{pageSize:1}})).body.candidates.length,0);
- const matches=await collectPages(identityV2,"FindSharedEmailCandidates","candidates");
- assert.equal(matches.length,3,"three canonical pair observations");
- assert.ok(matches.every(c=>!c.bothContactsVerified));
- const pairs=matches.map(c=>[c.firstParty?.partyId,c.secondParty?.partyId].join("|"));
- assert.equal(new Set(pairs).size,3);
- assert.ok(matches.every(c=>c.firstParty.partyId<c.secondParty.partyId));
- const compare={firstPartyId:pagingPersonId,secondPartyId:id};
- assert.equal((await identityV2("CompareParties",null,compare)).status,401);
- assert.equal((await identityV2("CompareParties",tenantB,compare)).status,404);
- assert.equal((await identityV2("CompareParties",viewer,{
-   firstPartyId:id,secondPartyId:id})).status,400);
- assert.equal((await identityV2("CompareParties",viewer,{
-   firstPartyId:id,secondPartyId:"missing-party"})).status,404);
- const compared=await identityV2("CompareParties",viewer,compare);
- assert.equal(compared.status,200,formatRpcFailure(compared));
- assert.equal(compared.body.firstParty?.partyId,pagingPersonId);
- assert.equal(compared.body.secondParty?.partyId,id);
- assert.equal(compared.body.samePartyId,false);
- assert.equal(compared.body.identityConfirmed,false);
- assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"))[0].n,
-   auditAfter,"read-only identity operations must not write audit");
- console.log(JSON.stringify({event:"crm.native-g3-identity-resolution-v2",
-   result:"PASS",rpc_methods:["FindSharedEmailCandidates","CompareParties"],
-   generated_binary:true,original_owner:"crm.identity-resolution",
-   tenant_ab:true,viewer_read:true,pagination:true,no_identity_verdict:true,
-   no_writes:true,published_active:true}));
-
- // L-03: a governed canonical merge is reversible lineage, not data reparenting.
- // The unchanged downstream D1 owner tables prove no Account/Contact/Deal/Task loss.
- const mergeSourceId="native-merge-source-"+randomUUID();
- const mergeSurvivorId="native-merge-survivor-"+randomUUID();
- for(const [p,name] of [[mergeSourceId,"Merge source"],[mergeSurvivorId,"Merge survivor"]]){
-   const created=await v3("CreateParty",admin,{
-     partyId:p,kind:1,displayName:name,
-     precondition:{idempotencyKey:"identity-l03-party-"+randomUUID()}});
-   assert.equal(created.status,200,formatRpcFailure(created));
- }
- const mergeOpId="native-merge-"+randomUUID();
- const mergeKey="identity-l03-merge-"+randomUUID();
- const intent={
-   operationId:mergeOpId,sourcePartyId:mergeSourceId,sourcePartyVersion:1n,
-   survivorPartyId:mergeSurvivorId,survivorPartyVersion:1n,
-   reason:"manual_identity_review",precondition:{idempotencyKey:mergeKey}
- };
- const downstreamTables=["crm_account_records","crm_contact_point_records",
-   "crm_party_relationship_records","crm_sales_deal_records",
-   "crm_activity_task_records","crm_consent_records"];
- const beforeDownstream=await Promise.all(downstreamTables.map(async table=>
-   (await sql("SELECT COUNT(*) AS n FROM "+table))[0].n));
- const beforeLineageAudit=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"))[0].n;
- assert.equal((await identityV2("MergeParty",viewer,intent)).status,403);
- assert.equal((await identityV2("MergeParty",tenantB,intent)).status,404);
- assert.equal((await identityV2("MergeParty",admin,{
-   ...intent,sourcePartyVersion:2n,
-   precondition:{idempotencyKey:"l03-stale-"+randomUUID()}
- })).status,409);
- await sql("CREATE TRIGGER fixture_identity_rollback BEFORE INSERT ON crm_audit "+
-   "WHEN NEW.action='identity_resolution.merge' BEGIN SELECT RAISE(ABORT,'fixture audit failure'); END;");
- try {
-   assertUnconfirmed(await identityV2("MergeParty",admin,intent),"IDENTITY_MERGE_COMMIT_UNCONFIRMED");
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_identity_merge_receipts WHERE tenant=? AND key=?",
-     "tenant-a",intent.precondition.idempotencyKey))[0].n,0);
- } finally {await sql("DROP TRIGGER fixture_identity_rollback");}
- const merged=await identityV2("MergeParty",admin,intent);
- if(merged.status!==200){
-   const rowProof=await sql("SELECT status,version FROM crm_identity_merge_records WHERE tenant='tenant-a' AND id='"+mergeOpId+"'");
-   const receiptProof=await sql("SELECT original_request_id FROM crm_identity_merge_receipts WHERE tenant='tenant-a' AND key='"+mergeKey+"'");
-   const partyProof=await sql("SELECT id,version FROM crm_party_records WHERE tenant='tenant-a' AND id IN ('"+mergeSourceId+"','"+mergeSurvivorId+"')");
-   console.error(JSON.stringify({event:"crm.l03.commit-proof-failure",status:merged.status,
-     domain_error:merged.body?.message,rows:rowProof,receipts:receiptProof.length,parties:partyProof}));
- }
- assert.equal(merged.status,200,formatRpcFailure(merged));
- assert.equal(merged.body.operation?.active,true);
- assert.equal(merged.body.operation?.version,1n);
- assert.equal(merged.body.receipt?.replayed,false);
- assert.equal(merged.body.receipt?.resourceVersion,1n);
- assert.equal((await identityV2("MergeParty",admin,intent)).body.receipt?.replayed,true);
- assert.equal((await identityV2("MergeParty",admin,{...intent,
-   reason:"different_reason"})).status,409);
- assert.equal((await identityV2("MergeParty",admin,{...intent,
-   operationId:"l03-double-"+randomUUID(),
-   precondition:{idempotencyKey:"identity-l03-duplicate-"+randomUUID()}
- })).status,409,"active source cannot be merged twice");
- assert.equal((await identityV2("MergeParty",admin,{
-   ...intent,operationId:"l03-reverse-"+randomUUID(),
-   sourcePartyId:mergeSurvivorId,survivorPartyId:mergeSourceId,
-   precondition:{idempotencyKey:"identity-l03-reverse-"+randomUUID()}
- })).status,409,"cycle or redirected survivor must fail");
- const got=await identityV2("GetMergeOperation",viewer,{
-   operationId:mergeOpId,receiptIdempotencyKey:mergeKey
- });
- assert.equal(got.status,200,formatRpcFailure(got));
- assert.equal(got.body.operation?.operationId,mergeOpId);
- assert.equal(got.body.confirmedMutation?.resourceVersion,1n);
- assert.ok(got.body.confirmedMutation?.originalRequestId);
- assert.equal((await identityV2("GetMergeOperation",tenantB,{operationId:mergeOpId})).status,404);
- const history=await identityV2("ListMergeOperationsByParty",viewer,{
-   partyId:mergeSourceId,page:{pageSize:10}
- });
- assert.equal(history.status,200,formatRpcFailure(history));
- assert.equal(history.body.operations.length,1);
- assert.equal(history.body.operations[0].operationId,mergeOpId);
- assert.equal((await identityV2("ListMergeOperationsByParty",tenantB,{
-   partyId:mergeSourceId,page:{pageSize:10}
- })).status,404);
- const resolved=await identityV2("ResolveCanonicalParty",viewer,{partyId:mergeSourceId});
- assert.equal(resolved.status,200,formatRpcFailure(resolved));
- assert.equal(resolved.body.canonicalPartyId,mergeSurvivorId);
- assert.deepEqual(resolved.body.partyPath,[mergeSourceId,mergeSurvivorId]);
- assert.deepEqual(resolved.body.mergeOperationPath,[mergeOpId]);
- assert.equal((await identityV2("ResolveCanonicalParty",tenantB,{
-   partyId:mergeSourceId
- })).status,404);
- const unmergeKey="identity-l03-unmerge-"+randomUUID();
- const undo={operationId:mergeOpId,sourcePartyVersion:1n,survivorPartyVersion:1n,
-   reason:"incorrect_merge",precondition:{expectedVersion:1n,idempotencyKey:unmergeKey}};
- assert.equal((await identityV2("UnmergeParty",viewer,undo)).status,403);
- assert.equal((await identityV2("UnmergeParty",admin,{
-   ...undo,precondition:{expectedVersion:2n,idempotencyKey:"l03-undo-stale-"+randomUUID()}
- })).status,409);
- await sql("CREATE TRIGGER fixture_identity_rollback BEFORE INSERT ON crm_audit "+
-   "WHEN NEW.action='identity_resolution.unmerge' BEGIN SELECT RAISE(ABORT,'fixture audit failure'); END;");
- try {
-   assertUnconfirmed(await identityV2("UnmergeParty",admin,undo),"IDENTITY_UNMERGE_COMMIT_UNCONFIRMED");
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_identity_merge_receipts WHERE tenant=? AND key=?",
-     "tenant-a",undo.precondition.idempotencyKey))[0].n,0);
- } finally {await sql("DROP TRIGGER fixture_identity_rollback");}
- const undone=await identityV2("UnmergeParty",admin,undo);
- assert.equal(undone.status,200,formatRpcFailure(undone));
- assert.equal(undone.body.operation?.active,false);
- assert.equal(undone.body.operation?.version,2n);
- assert.equal((await identityV2("UnmergeParty",admin,undo)).body.receipt?.replayed,true);
- const reverted=await identityV2("ResolveCanonicalParty",viewer,{partyId:mergeSourceId});
- assert.equal(reverted.status,200,formatRpcFailure(reverted));
- assert.equal(reverted.body.canonicalPartyId,mergeSourceId);
- assert.deepEqual(reverted.body.partyPath,[mergeSourceId]);
- assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_identity_merge_records "+
-   "WHERE tenant='tenant-a' AND id='"+mergeOpId+"' AND status='unmerged' AND version=2"))[0].n,1);
- assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_identity_merge_receipts "+
-   "WHERE tenant='tenant-a'"))[0].n,2,"one immutable receipt per original mutation");
- assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"))[0].n,
-   beforeLineageAudit+2,"one merge and one unmerge audit, reads and replays do not write");
- const afterDownstream=await Promise.all(downstreamTables.map(async table=>
-   (await sql("SELECT COUNT(*) AS n FROM "+table))[0].n));
- assert.deepEqual(afterDownstream,beforeDownstream,"canonical lineage never rewires other owners");
- console.log(JSON.stringify({event:"crm.native-l03-merge-lineage",result:"PASS",
-   generated_binary:true,role_policy:true,tenant_isolation:true,stale_party_guard:true,
-   replay_receipt:true,immutable_history:true,canonical_resolve:true,
-   reversible:true,downstream_unchanged:true,audit_atomic:true}));
+ await verifyIdentityResolution(rpcFetch,sql,id,pagingPersonId,admin,viewer,tenantB);
 
 // Original crm-consents v2: operator may DENY, never self-attest GRANT.
 // Every RPC is generated binary Protobuf through signed native workerd/D1.

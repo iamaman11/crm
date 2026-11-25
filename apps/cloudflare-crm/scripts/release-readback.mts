@@ -1,4 +1,20 @@
 import assert from "node:assert/strict";
+import {isRecord, string} from "./json-boundary.mts";
+
+type ReadbackOptions = {
+  request?: typeof fetch;
+  pause?: (ms: number) => Promise<unknown>;
+  log?: (entry: Record<string, string | number | null>) => void;
+  now?: () => number;
+};
+type SourceOptions = ReadbackOptions & {
+  headers?: Record<string, string>;
+  maxAttempts?: number;
+  stableReads?: number;
+  intervalMs?: number;
+  timeoutMs?: number;
+  deadlineMs?: number;
+};
 
 // A read-only anonymous GET can be replayed after transport or edge propagation failure.
 // Never replay a write, accept a network error as denial, or accept an
@@ -7,7 +23,7 @@ import assert from "node:assert/strict";
 
  // Retry-After applies only to replayable read-only Cloudflare API calls.
  // Return null for invalid or absent headers; never clip a valid server delay.
- export function parseRetryAfterMs(value,now=Date.now()){
+ export function parseRetryAfterMs(value: unknown,now=Date.now()){
    if(typeof value!=="string")return null;
    const text=value.trim();
    if(/^\d+$/.test(text)){
@@ -26,16 +42,29 @@ const retryableReadbackCodes = new Set([
   "UND_ERR_CONNECT_TIMEOUT","UND_ERR_HEADERS_TIMEOUT","EAI_AGAIN"
 ]);
 
-export function isRetryableReadbackTransportError(error) {
-  const code=error?.cause?.code;
-  return ["TimeoutError","AbortError"].includes(error?.name)||
-    (error?.name==="TypeError"&&retryableReadbackCodes.has(code));
+function readbackErrorCode(error: unknown): string | undefined {
+  return isRecord(error) && isRecord(error.cause) && typeof error.cause.code === "string" ?
+    error.cause.code : undefined;
+}
+
+export function isRetryableReadbackTransportError(error: unknown): boolean {
+  if (!isRecord(error) || typeof error.name !== "string") return false;
+  const code = readbackErrorCode(error);
+  return ["TimeoutError","AbortError"].includes(error.name) ||
+    (error.name === "TypeError" && code !== undefined && retryableReadbackCodes.has(code));
+}
+
+function transportReason(error: unknown): string {
+  const code = readbackErrorCode(error);
+  if (code && retryableReadbackCodes.has(code)) return code;
+  return isRecord(error) && (error.name === "TimeoutError" || error.name === "AbortError") ?
+    error.name : "TransportError";
 }
 
 // The live browser suite starts only after three consecutive signed GETs prove
 // the exact deployed source. Transport failures and edge propagation may be
 // retried; authorization failures and unexpected responses remain fail-closed.
-export async function waitForExactSourceSha(endpoint,expectedSha,{
+export async function waitForExactSourceSha(endpoint: string,expectedSha: string,{
   headers={},
   request=fetch,
   pause=ms=>new Promise(resolve=>setTimeout(resolve,ms)),
@@ -46,7 +75,7 @@ export async function waitForExactSourceSha(endpoint,expectedSha,{
   timeoutMs=10000,
   deadlineMs=90000,
   now=Date.now
-}={}) {
+}: SourceOptions = {}) {
   if(!/^[a-f0-9]{40}$/.test(expectedSha))
     throw Error("CRM_E2E_VERSION_EXPECTED_SHA_INVALID");
   if(![maxAttempts,stableReads,intervalMs,timeoutMs,deadlineMs].every(Number.isInteger)||
@@ -55,7 +84,8 @@ export async function waitForExactSourceSha(endpoint,expectedSha,{
     throw Error("CRM_E2E_VERSION_READBACK_OPTIONS_INVALID");
 
   const started=now(),deadline=started+deadlineMs;
-  let stable=0,attempts=0,lastStatus=null,lastSource=null,lastTransportError=null;
+  let stable=0,attempts=0,lastStatus: number | null=null,lastSource: string | null=null;
+  let lastTransportError: string | null=null;
   while(attempts<maxAttempts&&stable<stableReads&&now()<deadline) {
     attempts++;
     let response;
@@ -66,11 +96,11 @@ export async function waitForExactSourceSha(endpoint,expectedSha,{
     } catch(error) {
       if(!isRetryableReadbackTransportError(error))throw error;
       stable=0;
-      lastTransportError=error;
+      lastTransportError=transportReason(error);
       if(attempts<maxAttempts&&now()<deadline) {
         const delayMs=Math.min(intervalMs,Math.max(0,deadline-now()));
         log({event:"crm.e2e-version-readback",result:"RETRY",attempt:attempts,
-          reason:error?.cause?.code??error.name,delay_ms:delayMs});
+          reason:transportReason(error),delay_ms:delayMs});
         if(delayMs>0)await pause(delayMs);
       }
       continue;
@@ -82,8 +112,8 @@ export async function waitForExactSourceSha(endpoint,expectedSha,{
     if(response.status===401||response.status===403)
       throw Error("CRM_E2E_VERSION_ACCESS_HTTP_"+response.status);
     if(response.status===200) {
-      const body=await response.json();
-      lastSource=typeof body?.source==="string"?body.source:null;
+      const body: unknown=await response.json();
+      lastSource=isRecord(body)&&typeof body.source==="string"&&/^[a-f0-9]{40}$/i.test(body.source)?body.source:null;
     } else if(response.status!==404&&response.status!==429&&
       !(response.status>=500&&response.status<=599)) {
       throw Error("CRM_E2E_VERSION_HTTP_"+response.status);
@@ -104,7 +134,7 @@ export async function waitForExactSourceSha(endpoint,expectedSha,{
 
   if(stable!==stableReads) {
     const detail=lastTransportError
-      ?" transport="+(lastTransportError?.cause?.code??lastTransportError.name)
+      ?" transport="+(lastTransportError)
       :" http_status="+(lastStatus??"none")+" observed_sha="+(lastSource??"none");
     throw Error("CRM_E2E_VERSION_READBACK_UNSTABLE expected="+expectedSha+
       " stable="+stable+"/"+stableReads+" attempts="+attempts+detail);
@@ -112,12 +142,12 @@ export async function waitForExactSourceSha(endpoint,expectedSha,{
   log({event:"crm.e2e-version-readback",result:"PASS",source_sha:expectedSha,
     attempts,elapsed_ms:now()-started});
 }
-export async function verifyAnonymousDenial(endpoint,{
+export async function verifyAnonymousDenial(endpoint: string,{
   request=fetch,
   pause=ms=>new Promise(resolve=>setTimeout(resolve,ms)),
   log=entry=>console.log(JSON.stringify(entry)),
   now=Date.now
-}={}){
+}: ReadbackOptions = {}){
   // Workers.dev routing and Access enforcement converge separately. A 404
   // is never accepted as a protection proof, even after signed SHA readback.
   const started=now(),deadline=started+90000,maxAttempts=40;
@@ -133,7 +163,7 @@ export async function verifyAnonymousDenial(endpoint,{
       const delayMs=Math.min(1000*transportFailures,Math.max(0,deadline-now()));
       if(delayMs<=0)throw error;
       log({event:"crm.anonymous-denial-readback",result:"RETRY",attempt,
-        reason:error?.cause?.code??error.name,delay_ms:delayMs});
+        reason:transportReason(error),delay_ms:delayMs});
       await pause(delayMs);
       continue;
     }
@@ -160,10 +190,10 @@ export async function verifyAnonymousDenial(endpoint,{
 }
 // One-time migration precondition, not a second production normalization path.
 // Check only; SQL copies already-canonical strings byte-for-byte. Never log names.
-export async function verifyNfcMigrationNames(query){
+export async function verifyNfcMigrationNames(query: (sql: string, params: string[]) => Promise<unknown>){
   const pageSize=200;
   for(const [table,field] of [["crm_party_records","display_name"],["crm_account_records","name"]]){
-    let after=null;
+    let after: [string, string] | null=null;
     for(;;){
       const sql="SELECT tenant,id,json_extract(state,'$."+field+"') AS name FROM "+table+
         (after?" WHERE (tenant,id)>(?,?)":"")+" ORDER BY tenant,id LIMIT "+pageSize;
@@ -171,12 +201,14 @@ export async function verifyNfcMigrationNames(query){
       if(!Array.isArray(rows)||rows.length>pageSize)
         throw Error("CRM_NFC_MIGRATION_READBACK_INVALID "+table);
       for(const row of rows){
-        if(typeof row.tenant!=="string"||typeof row.id!=="string"||
+        if(!isRecord(row)||typeof row.tenant!=="string"||typeof row.id!=="string"||
            typeof row.name!=="string"||!row.name||row.name!==row.name.normalize("NFC"))
           throw Error("CRM_NFC_MIGRATION_NONCANONICAL_EXISTING_NAME "+table);
       }
       if(rows.length<pageSize)break;
-      const last=rows.at(-1),next=[last.tenant,last.id];
+      const last: unknown=rows.at(-1);
+      assert.ok(isRecord(last), "Missing last migration row");
+      const next: [string, string]=[string(last.tenant),string(last.id)];
       if(after&&next[0]===after[0]&&next[1]===after[1])
         throw Error("CRM_NFC_MIGRATION_CURSOR_STALLED "+table);
       after=next;
@@ -189,12 +221,14 @@ export async function verifyNfcMigrationNames(query){
 // version propagation. Retry only a well-formed, authenticated admin session
 // whose explicit source SHA is stale. Invalid auth/role or missing provenance
 // must fail immediately; an old version is never accepted as release proof.
-export function classifySignedSessionReadback({status,source,session,expectedSha}) {
+export function classifySignedSessionReadback({status,source,session,expectedSha}: {
+  status: number; source: unknown; session: unknown; expectedSha: string;
+}) {
   if(status===404&&source===null)
     return {kind:"retry",reason:"edge_not_ready"};
   if(status!==200)
     throw Error("CRM_SIGNED_E2E_ACCESS_HTTP_"+status);
-  if(session?.authenticated!==true||session?.role!=="admin")
+  if(!isRecord(session)||session.authenticated!==true||session?.role!=="admin")
     throw Error("CRM_SIGNED_E2E_ACCESS_SESSION_INVALID");
   if(source===expectedSha)
     return {kind:"pass"};
@@ -209,10 +243,10 @@ export function classifySignedSessionReadback({status,source,session,expectedSha
 // $workers.event.request.headers. A live synthetic-header probe demonstrated
 // this can include credentials; disable invocation logs, keep app logs/spans.
 // Refuse release when settings drift or header capture is re-enabled.
-export function verifyTracePrivacySettings(observability) {
-  if(observability?.enabled!==true||observability?.redact_query_string!==true||
-    observability?.logs?.enabled!==true||observability?.logs?.invocation_logs!==false||
-    observability?.traces?.enabled!==true||
+export function verifyTracePrivacySettings(observability: unknown) {
+  if(!isRecord(observability)||observability.enabled!==true||observability.redact_query_string!==true||
+    !isRecord(observability.logs)||observability.logs.enabled!==true||observability.logs.invocation_logs!==false||
+    !isRecord(observability.traces)||observability.traces.enabled!==true||
     observability.traces.head_sampling_rate!==1)
     throw Error("CRM_TRACE_PRIVACY_SETTINGS_UNSAFE");
   return {traces_enabled:true,query_string_redacted:true,logs_enabled:true,

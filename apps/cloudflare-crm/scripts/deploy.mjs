@@ -12,7 +12,7 @@ import {
   waitForNativeTelemetry,
   classifySignedSessionReadback,
   parseRetryAfterMs
-} from "./release-readback.mjs";
+} from "./release-readback.mts";
 const required=n=>{if(!process.env[n])throw Error("Missing "+n);return process.env[n];};
 const sha=required("GITHUB_SHA");
 if(!/^[0-9a-f]{40}$/.test(sha)||process.env.GITHUB_REF!=="refs/heads/dev"||process.env.GITHUB_EVENT_NAME!=="push")throw Error("Untrusted deployment");

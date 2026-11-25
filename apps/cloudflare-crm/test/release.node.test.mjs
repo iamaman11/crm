@@ -274,7 +274,7 @@ function run(mode,variant="valid"){
  const dir=mkdtempSync(join(tmpdir(),"crm-release-test-"));
  const app=join(dir,"apps/cloudflare-crm"),out=join(app,".release");
  mkdirSync(out,{recursive:true});mkdirSync(join(app,"e2e-evidence"));
- for(const name of ["deploy.mjs","release-readback.mjs","native-telemetry.mts","json-boundary.mts"])
+ for(const name of ["deploy.mjs","release-readback.mts","native-telemetry.mts","json-boundary.mts"])
    copyFileSync(new URL("../scripts/"+name,import.meta.url),join(dir,name));
  const save=(path,value)=>writeFileSync(path,JSON.stringify(value));
  if(variant!=="no-checkpoint"&&mode!=="deploy")save(join(out,"checkpoint.json"),{git_sha:sha,previous_sha:previous,d1_database:database});
@@ -411,7 +411,7 @@ test("repeating a Cloudflare telemetry cursor cannot pass release acceptance",()
  assert.ok(result.state.telemetryAttempts<=3);
 });
 test("Retry-After delta-seconds, HTTP-date and invalid headers are parsed safely",async()=>{
- const {parseRetryAfterMs}=await import("../scripts/release-readback.mjs");
+ const {parseRetryAfterMs}=await import("../scripts/release-readback.mts");
  const now=Date.parse("Fri, 20 Nov 2026 18:00:00 GMT");
  assert.equal(parseRetryAfterMs("3",now),3000);
  assert.equal(parseRetryAfterMs("Fri, 20 Nov 2026 18:00:04 GMT",now),4000);
@@ -583,7 +583,7 @@ test("failure cleanup refuses to change a role in an unrelated tenant",()=>{
 test("NFC schema migration copies canonical names without changing receipts or audit",async()=>{
  const {DatabaseSync}=await import("node:sqlite");
  const {readdirSync}=await import("node:fs");
- const {verifyNfcMigrationNames}=await import("../scripts/release-readback.mjs");
+ const {verifyNfcMigrationNames}=await import("../scripts/release-readback.mts");
  const db=new DatabaseSync(":memory:");
  try{
    const dir=new URL("../migrations/",import.meta.url);
@@ -613,7 +613,7 @@ test("NFC schema migration copies canonical names without changing receipts or a
  }finally{db.close();}
 });
 test("NFC migration preflight fails closed and does not expose names",async()=>{
- const {verifyNfcMigrationNames}=await import("../scripts/release-readback.mjs");
+ const {verifyNfcMigrationNames}=await import("../scripts/release-readback.mts");
  await assert.rejects(verifyNfcMigrationNames(async()=>[{tenant:"tenant-a",id:"p",name:"private-Cafe\u0301"}]),
   error=>error.message==="CRM_NFC_MIGRATION_NONCANONICAL_EXISTING_NAME crm_party_records");
  let calls=0;
