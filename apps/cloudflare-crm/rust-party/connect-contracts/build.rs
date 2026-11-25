@@ -70,6 +70,11 @@ fn main() {
         .files(&files)
         .includes(&["../../../../proto"])
         .include_file("_connectrpc.rs")
+        // Rust Worker implements the generated Connect servers. The browser uses
+        // generated TypeScript clients, so compiling unused Rust clients into
+        // every WASM feature/profile adds work without testing another RPC path.
+        // Upstream client code remains available via the crate's opt-in feature.
+        .gate_client_feature(true)
         .compile()
         .expect("CRM Connect code generation");
 }

@@ -13,6 +13,12 @@ buffa-types = { version = "=0.9.2", features = ["json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
+[features]
+default = []
+# Native Rust consumers can opt in to the generated client transport. The
+# deployed Worker needs only the generated server/router and message types.
+client = ["connectrpc/client"]
+
 [build-dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
