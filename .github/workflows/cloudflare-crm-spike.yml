@@ -465,6 +465,14 @@ jobs:
         run: |
           npm install --global pnpm@12.21.0
           pnpm install --frozen-lockfile
+      # Generated Protobuf-ES files are ignored build outputs, not checkout files.
+      # Recreate them from this exact source and frozen Buf toolchain for the
+      # published smoke; the build job's generated workspace is not shared.
+      - name: Generate Buf descriptors required by the published smoke
+        run: |
+          pnpm web:generate
+          test -s packages/client/gen/crm/parties/v3/party_pb.js
+          test -s packages/client/gen/crm/accounts/v2/account_pb.js
       # The deploy smoke also uses chromium.launch({headless:true}).
       - name: Install headless Chromium for browser smoke
         working-directory: apps/cloudflare-crm
