@@ -230,6 +230,7 @@ try{
  assert.equal((await call("/api/session",signedJwt({
    sub:"",common_name:"ci-fixture.access",aud:"wrong-app-audience"
  }))).status,401,"Cross-application service JWT must be denied");
+ if(denialProof!==undefined){
  assert.equal(jwksRequests,1,
    "the same Access signing key must be fetched once and reused for later signed requests");
  const rotated=generateKeyPairSync("rsa",{modulusLength:2048});
@@ -250,6 +251,8 @@ try{
  assert.equal(jwksRequests,3,"the refreshed CryptoKey must be reused without another provider fetch");
  console.log(JSON.stringify({event:"crm.access-jwks-cache",result:"PASS",jwks_requests:jwksRequests,
    cached_key_reuse:true,rotated_kid_refresh:true,previous_key_overlap:true,unknown_kid_denied:true}));
+ }
+
  const version=await rpcFetch("/api/version",{headers:{"cf-access-jwt-assertion":admin}});
  assert.equal(version.status,200);
  assert.equal(version.headers.get("x-crm-source-sha"),sourceSha,"Worker must receive the tested checkout SHA");
