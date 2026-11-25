@@ -131,7 +131,8 @@ fn production_acceptance_is_bound_to_exact_inventory_and_real_process_evidence()
         "retired PostgreSQL process CI must remain absent"
     );
     let workflow = read_text(&root.join(".github/workflows/cloudflare-crm-spike.yml"));
-    assert!(workflow.contains("node --test rust-party/test/native.mjs"));
+    let command = "node --test --test-concurrency=1 \"rust-party/test/native-*.test.mjs\"";
+    assert!(workflow.contains(command));
     assert!(workflow.contains("CRM_RPC_RUNTIME_PROOF: /tmp/crm-rpc-runtime.json"));
     assert!(!workflow.contains("cargo check --locked -p crm-api"));
 

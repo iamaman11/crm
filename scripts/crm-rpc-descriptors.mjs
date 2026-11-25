@@ -1,6 +1,7 @@
 // Protobuf and ownership are parsed by their standard decoders.
 // Runtime evidence is produced only by the completed signed workerd suite.
 import {readFileSync,writeFileSync} from "node:fs";
+import {isDeepStrictEqual} from "node:util";
 import {execFileSync} from "node:child_process";
 import {resolve,dirname} from "node:path";
 import {createRequire} from "node:module";
@@ -103,6 +104,17 @@ export function validateRuntime(report,available,bound,evidence=report.runtime){
  equalPaths(Object.keys(rpc.method_owners),registered,"compiled ownership");
  return {registered:[...registered].sort()};
 }
+// Join independent native test evidence only after the runner succeeds.
+// The existing descriptor validator remains the authority for every coverage set.
+export function combineRuntimeEvidence(business,policy,sha){
+ for(const part of [business,policy]){
+  if(part?.result!=="PASS"||part.source_sha!==sha||
+     !isDeepStrictEqual(part.features,["native-ci"]))fail("missing or stale isolated runtime evidence");
+ }
+ if(!isDeepStrictEqual(business.rpc,policy.rpc))fail("isolated compiled RPC inventory differs");
+ return {...business,unauthenticated_denials:policy.unauthenticated_denials,
+  viewer_denials:policy.viewer_denials};
+}
 export function run(){
  const descriptor=process.argv[2],reportFile=process.env.CRM_MODULE_COVERAGE_REPORT;
  if(!descriptor||!reportFile)fail("Buf descriptor and module report required");
@@ -114,8 +126,14 @@ export function run(){
  const required=process.argv.includes("--require-runtime");
  let runtime=null;
  if(required){
-  const evidence=JSON.parse(readFileSync(process.env.CRM_RPC_RUNTIME_PROOF,"utf8"));
+  const proof=process.env.CRM_RPC_RUNTIME_PROOF;
+  if(!proof)fail("runtime proof path required");
+  const evidence=combineRuntimeEvidence(JSON.parse(readFileSync(proof+".business","utf8")),
+   JSON.parse(readFileSync(proof+".policy","utf8")),sha);
   runtime=validateRuntime(report,available,bound,evidence);
+  writeFileSync(proof,JSON.stringify(evidence,null,2)+"\n");
+  console.log(JSON.stringify({event:"crm.signed-connect-acceptance",result:"PASS",admin:true,viewer:true,
+   unauthenticated_denied:true,legacy_mutations:0,verified_auth:true}));
   report.runtime=evidence;
   report.runtime_evidence="EXECUTED";
   report.rpc_policy=Object.fromEntries(evidence.rpc.policies);

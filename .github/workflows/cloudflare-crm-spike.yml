@@ -42,10 +42,7 @@ jobs:
           python scripts/check_ci_event_policy.py
           python -m unittest tests.test_ci_event_policy
           python scripts/check_action_pinning.py
-          node --check apps/cloudflare-crm/rust-party/test/native.mjs
-          node --check apps/cloudflare-crm/rust-party/test/production-access.mjs
-          node --check apps/cloudflare-crm/rust-party/test/typed-browser.mjs
-          node --check apps/cloudflare-crm/rust-party/test/ui-diagnostics.mjs
+          for file in apps/cloudflare-crm/rust-party/test/*.mjs; do node --check "$file"; done
           node --check apps/cloudflare-crm/e2e/live.mjs
           node --check apps/cloudflare-crm/e2e/published-smoke.mjs
           node --check apps/cloudflare-crm/scripts/deploy.mjs
@@ -267,7 +264,8 @@ jobs:
             cp target/cargo-timings/cargo-timing.html "$RUNNER_TEMP/crm-cargo-timings/native-release.html") &
           release_pid=$!
           status=0
-          node --test rust-party/test/native.mjs || status=$?
+          rm -f "$CRM_RPC_RUNTIME_PROOF" "$CRM_RPC_RUNTIME_PROOF.policy" "$CRM_RPC_RUNTIME_PROOF.business"
+          node --test --test-concurrency=1 "rust-party/test/native-*.test.mjs" || status=$?
           wait "$release_pid" || status=$?
           exit "$status"
       - name: Preserve Cargo build timing reports

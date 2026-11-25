@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
-import {descriptorMethods,validateBindings,validateRuntime,targetMethods,MethodOptions_IdempotencyLevel} from "./crm-rpc-descriptors.mjs";
+import {descriptorMethods,validateBindings,validateRuntime,combineRuntimeEvidence,targetMethods,MethodOptions_IdempotencyLevel} from "./crm-rpc-descriptors.mjs";
 const descriptor=process.env.CRM_PROTO_DESCRIPTOR_FILE;
 const source=process.env.CRM_MODULE_COVERAGE_REPORT;
 if(!descriptor||!source)throw Error("compiled Buf descriptor and module report required");
@@ -90,4 +90,18 @@ test("future v4 and v10 RPCs must enter the required scope without a registry ed
   report.modules.find(module=>module.module_id==="crm.parties").rpc_bindings.push({path:future});
   assert.throws(()=>validateRuntime(report,extended,validateBindings(report,extended)),/full contract differs/);
  }
+});
+
+test("independent native proofs must match SHA, feature and compiled inventory",()=>{
+ const report=fixture(),business=structuredClone(report.runtime),policy=structuredClone(report.runtime);
+ delete business.unauthenticated_denials;delete business.viewer_denials;
+ const combined=combineRuntimeEvidence(business,policy,report.source_sha);
+ assert.deepEqual(combined,report.runtime);
+ assert.doesNotThrow(()=>validateRuntime(report,available,validateBindings(report,available),combined));
+ assert.throws(()=>combineRuntimeEvidence(business,null,report.source_sha),/missing or stale/);
+ assert.throws(()=>combineRuntimeEvidence(business,{...policy,source_sha:"0".repeat(40)},report.source_sha),/missing or stale/);
+ assert.throws(()=>combineRuntimeEvidence(business,{...policy,features:["native"]},report.source_sha),/missing or stale/);
+ assert.throws(()=>combineRuntimeEvidence(business,{...policy,rpc:{}},report.source_sha),/inventory differs/);
+ const missing=combineRuntimeEvidence(business,{...policy,viewer_denials:[]},report.source_sha);
+ assert.throws(()=>validateRuntime(report,available,validateBindings(report,available),missing),/permission denial coverage/);
 });
