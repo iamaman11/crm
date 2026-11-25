@@ -85,6 +85,7 @@
     "packages/client/src/cloudflare-*.test.ts",
     "packages/client/src/**/cloudflare-*.test.ts",
     "packages/client/src/cloudflare.ts",
+    "packages/client/test/cloudflare-deal-fixture.ts",
     "packages/client/src/contract_hashes.ts",
     "packages/ui/src/DataPresentation.tsx",
     "packages/ui/src/Forms.module.css",

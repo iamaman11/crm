@@ -15,7 +15,7 @@
     "web:test": "pnpm web:test:contracts && pnpm web:test:client && pnpm --filter cloudflare-crm test",
     "web:build": "pnpm web:generate && pnpm --filter cloudflare-crm build",
     "web:check": "pnpm web:typecheck:tools && node apps/cloudflare-crm/scripts/check-web.mts",
-    "web:typecheck:active": "pnpm --recursive --filter cloudflare-crm... --fail-if-no-match --workspace-concurrency=2 exec tsc -p tsconfig.json --noEmit",
+    "web:typecheck:active": "pnpm --recursive --filter cloudflare-crm... --fail-if-no-match --workspace-concurrency=2 exec tsc -p tsconfig.json --noEmit && tsc -p apps/cloudflare-crm/tsconfig.native-tests.json",
     "web:typecheck:tools": "tsc -p apps/cloudflare-crm/tsconfig.tools.json --noEmit",
     "web:contract:lint": "buf format -d --exit-code proto && buf lint proto",
     "web:contract:compatibility": "buf breaking . --against .git#ref=2c5f20eeb4185d16d2edec957965d8d50ec3d756 --path proto/crm/core/v1/common.proto --path proto/crm/activities/v1/task.proto --path proto/crm/sales/v1/deal.proto",

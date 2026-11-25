@@ -44,7 +44,8 @@ function runNodeTests(patterns: string[]): void {
 
 function checkWeb(): void {
   for (const project of ["packages/client/tsconfig.json", "packages/ui/tsconfig.json",
-    "apps/cloudflare-crm/tsconfig.json", "apps/cloudflare-crm/tsconfig.tools.json"]) checkTsconfig(project);
+    "apps/cloudflare-crm/tsconfig.json", "apps/cloudflare-crm/tsconfig.tools.json",
+    "apps/cloudflare-crm/tsconfig.native-tests.json"]) checkTsconfig(project);
   const temporary = mkdtempSync(join(tmpdir(), "crm-web-check-"));
   try {
     const report = process.env.CRM_MODULE_COVERAGE_REPORT ?? join(temporary, "modules.json");

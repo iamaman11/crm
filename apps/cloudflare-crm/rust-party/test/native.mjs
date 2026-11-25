@@ -7,6 +7,8 @@ import {dirname,join} from "node:path";
 import {fileURLToPath} from "node:url";
 import assert from "node:assert/strict";
 import {test} from "node:test";
+import {createFixtureDeal,dealCreationInput} from "../../../../packages/client/test/cloudflare-deal-fixture.ts";
+import {readRpcError} from "../../scripts/rpc-error-response.mts";
 import {chromium} from "playwright";
 import {typedBrowser} from "./typed-browser.mjs";
 import {installUiDiagnostics,assertUiPanel} from "./ui-diagnostics.mjs";
@@ -21,7 +23,7 @@ import {binaryPartyV3,decodePartyV3,partyV3Path,
   binaryQualityV2,decodeQualityV2,qualityV2Path,
   binaryIdentityV2,decodeIdentityV2,identityV2Path,
   binaryConsentV2,decodeConsentV2,consentV2Path,
-  binarySalesV2,decodeSalesV2,salesV2Path,
+  binarySalesV2,decodeSalesV2,salesV2Path,describeSalesV2Method,
   binaryPrivacyV2,decodePrivacyV2,privacyV2Path,
   binaryEnrichmentV2,decodeEnrichmentV2,enrichmentV2Path,
   binaryCsvV2,decodeCsvV2,csvV2Path,
@@ -101,17 +103,7 @@ const rpcFetch=async(path,options)=>{
    successfulCalls.add(path);
  }
  if(path.startsWith("/crm.")&&!response.ok){
-   const raw=await response.clone().text();
-   let error;
-   try{error=JSON.parse(raw);}
-   catch{
-     const evidence={event:"crm.native-ci.non-connect-response",path,
-       method:options?.method??"GET",status:response.status,
-       content_type:response.headers.get("content-type"),
-       body_excerpt:raw.slice(0,600),request_id:response.headers.get("x-request-id")};
-     console.error(JSON.stringify(evidence));
-     throw new Error("Non-Connect RPC response: "+JSON.stringify(evidence));
-   }
+   const error=await readRpcError(response.clone(),path,options?.method??"GET");
    if(mutationPaths.has(path)){
      const detail=decodeDomainErrorDetail(error.details?.find(d=>d.type==="crm.core.v2.DomainErrorDetail"));
      assert.ok(detail.domainCode && [1,2].includes(detail.commitOutcome),path);
@@ -2183,11 +2175,7 @@ console.log(JSON.stringify({event:"crm.native-r73-saved-views",result:"PASS",
 const dealId="sales-mid-"+randomUUID();
 const stageLead={pipelineId:"pipeline.enterprise",stageId:"lead",ordinal:1};
 const stageQualified={pipelineId:"pipeline.enterprise",stageId:"qualified",ordinal:2};
-const saleCreate={dealId,name:"Connect Deal",accountId,
-  stage:{...stageLead,ordinal:999},amount:{minorUnits:12500n,currencyCode:"USD"},
-  probabilityBasisPoints:2500,primaryContactId:contactId,
-  expectedCloseDate:{year:2027,month:2,day:28},
-  precondition:{idempotencyKey:"connect-sales-create-main"}};
+const saleCreate=dealCreationInput(dealId,accountId,contactId);
 const foreignSaleContactId="sales-contact-foreign-"+randomUUID();
 const foreignSaleContact=await contactV2("CreateContactPoint",admin,{
   contactPointId:foreignSaleContactId,partyId:pagingPersonId,kind:1,
@@ -2244,24 +2232,7 @@ assert.equal(invalidNameDetail.domainCode,"SALES_DEAL_NAME_INVALID");
 assert.equal(invalidNameDetail.commitOutcome,1);
 assert.equal(invalidNameDetail.requestId,invalidDealName.headers.get("x-request-id"));
 assert.equal(invalidNameDetail.fieldViolations[0].fieldPath,"deal.name");
-const salesCreated=await salesV2("CreateDeal",admin,saleCreate);
-assert.equal(salesCreated.status,200,describeProtobuf(salesCreated.body));
-assert.equal(salesCreated.body.deal?.dealId,dealId);
-assert.equal(salesCreated.body.deal?.name,"Connect Deal");
-assert.equal(salesCreated.body.deal?.stage?.ordinal,1,
-  "The catalog, not caller ordinal 999, assigns the rank");
-assert.equal(salesCreated.body.deal?.amount?.minorUnits,12500n);
-assert.equal(salesCreated.body.deal?.amount?.currencyCode,"USD");
-assert.equal(salesCreated.body.deal?.status,1);
-assert.equal(salesCreated.body.deal?.primaryContactId,contactId);
-assert.equal(salesCreated.body.deal?.expectedCloseDate?.year,2027);
-assert.equal(salesCreated.body.deal?.expectedCloseDate?.month,2);
-assert.equal(salesCreated.body.deal?.expectedCloseDate?.day,28);
-assert.ok(salesCreated.body.deal?.createdAt);
-assert.ok(salesCreated.body.deal?.updatedAt);
-assert.equal(salesCreated.body.receipt?.resourceVersion,1n);
-assert.equal(salesCreated.body.receipt?.replayed,false);
-assert.equal(salesCreated.body.receipt?.requestId,salesCreated.headers.get("x-request-id"));
+const salesCreated=await createFixtureDeal(describeSalesV2Method("CreateDeal"),rpcFetch,admin,saleCreate);
 const saleReplayed=await salesV2("CreateDeal",admin,saleCreate);
 assert.equal(saleReplayed.status,200);
 assert.equal(saleReplayed.body.receipt?.replayed,true);
