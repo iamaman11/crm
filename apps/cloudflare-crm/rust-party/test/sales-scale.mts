@@ -166,8 +166,10 @@ const integer=(value: unknown): bigint=>{
         ...ids)).map(row=>[row.kind,row.units]);
       const baseline=metrics.body.currencies;
       const forecastBaseline=metrics.body.forecastCurrencies;
+      const swaps=12;
+      const started=performance.now();
       assert.deepEqual(await readBalances(),[["text","2345"],["text","2345"]]);
-      for(let attempt=0;attempt<12;attempt++){
+      for(let attempt=0;attempt<swaps;attempt++){
         const amounts=attempt%2===0?["2346","2344"] as const:["2345","2345"] as const;
         const statements=ids.map((id,i)=>statement(updateSql,string(amounts[i]),
           "r7-scale-key-swap-"+attempt+"-"+i,randomUUID(),id));
@@ -192,19 +194,24 @@ const integer=(value: unknown): bigint=>{
           "a concurrent atomic balance swap must not create a mixed money snapshot");
         assert.deepEqual(snapshotBody.forecastCurrencies,forecastBaseline,
           "forecast must share the same consistent snapshot");
-        const whole=await fixtureRpc(dispatch,sales.getSalesPortfolio,viewer,{pipelineId:"pipeline.other"});
-        assert.equal(whole.status,200,formatRpcFailure(whole));
-        assert.deepEqual(whole.body.forecastCurrencies.map(x=>[
-          x.currencyCode,x.totalMinorUnits,x.weightedMinorUnitsTimesBasisPoints,x.amountDealCount
-        ]),forecastBaseline.map(x=>[
-          x.currencyCode,x.totalMinorUnits,x.weightedMinorUnitsTimesBasisPoints,x.amountDealCount
-        ]));
+        // Portfolio is read after the swap, so test both committed money
+        // distributions while retaining the concurrent metrics read on every swap.
+        if(attempt===0 || attempt===swaps-1){
+          const whole=await fixtureRpc(dispatch,sales.getSalesPortfolio,viewer,{pipelineId:"pipeline.other"});
+          assert.equal(whole.status,200,formatRpcFailure(whole));
+          assert.deepEqual(whole.body.forecastCurrencies.map(x=>[
+            x.currencyCode,x.totalMinorUnits,x.weightedMinorUnitsTimesBasisPoints,x.amountDealCount
+          ]),forecastBaseline.map(x=>[
+            x.currencyCode,x.totalMinorUnits,x.weightedMinorUnitsTimesBasisPoints,x.amountDealCount
+          ]));
+        }
       }
       const after=await fixtureRpc(dispatch,sales.getPipelineMetrics,viewer,filter);
       assert.equal(after.status,200,formatRpcFailure(after));
       assert.deepEqual(after.body.currencies,baseline);
       console.log(JSON.stringify({event:"crm.native-r73d-concurrent-metrics",result:"PASS",
-        committed_atomic_swaps:12,concurrent_reads:12,final_read:true,exact_totals:true,d1_binding:true}));
+        committed_atomic_swaps:swaps,concurrent_reads:swaps,portfolio_states_checked:2,
+        elapsed_ms:Math.round(performance.now()-started),final_read:true,exact_totals:true,d1_binding:true}));
       // Corrupt a disposable record outside the visible page. Both analytics
       // and Kanban must reject it through the original Rust persistence owner.
       // D1 permits only a catalog rank rebase without a version increment.
