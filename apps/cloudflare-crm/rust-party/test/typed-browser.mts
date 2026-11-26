@@ -1615,10 +1615,22 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const alternateDealCard=page.locator("section").filter({
      has:page.getByRole("heading",{name:"Browser Alternate Deal "+runId,exact:true})
    }).last();
-   await alternateDealCard.getByRole("button",{name:"Раскрыть карточку",exact:true}).click();
-   await alternateDealCard.getByText(
-     "Воронка: Browser Alternate Pipeline "+runId+" · этап: Первичный контакт",
-     {exact:true}).last().waitFor();
+   const ownerCatalogPaths=[MemberService.method.listMembers,MemberService.method.listTeams].map(fixtureRpcPath);
+   const ownerCatalogRequests: string[]=[];
+   const trackOwnerCatalog=(request: Request)=>{
+     const path=new URL(request.url()).pathname;
+     if(request.method()==="POST"&&ownerCatalogPaths.includes(path))ownerCatalogRequests.push(path);
+   };
+   page.on("request",trackOwnerCatalog);
+   try {
+     await alternateDealCard.getByRole("button",{name:"Раскрыть карточку",exact:true}).click();
+     await alternateDealCard.getByText(
+       "Воронка: Browser Alternate Pipeline "+runId+" · этап: Первичный контакт",
+       {exact:true}).last().waitFor();
+     assert.deepEqual(ownerCatalogRequests,[],"Opening inline Deal details must reuse the Sales owner catalog");
+   }finally{
+     page.off("request",trackOwnerCatalog);
+   }
    checkpoint("M2-01 inline Deal name matches stage catalog, no second pipeline or event read owner");
    checkpoint("Second pipeline Deal under same Account persisted in D1");
    // M2 sales lookup: find a Deal across pipelines even when a Kanban board

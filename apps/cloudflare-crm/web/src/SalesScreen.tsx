@@ -369,7 +369,8 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
     <QueryNotice query={editorRead}/>
     {focusedDealId?<section>
       <PageHeader title="Карточка сделки" actions={<a href="#sales">К списку сделок</a>}/>
-      <DealDetails currencies={currencyDefinitions} pipelines={pipelines} key={focusedDealId+":"+detailRevision} dealId={focusedDealId}
+      <DealDetails currencies={currencyDefinitions} pipelines={pipelines} choices={ownerChoices}
+        key={focusedDealId+":"+detailRevision} dealId={focusedDealId}
         onEdit={()=>void open(focusedDealId,"edit")}
         onAdvance={()=>void open(focusedDealId,"advance")}
         onClose={()=>void open(focusedDealId,"close")}
@@ -628,7 +629,8 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
             capabilities={allDealsQuery.data?.dealCapabilities.find(p=>p.dealId===deal.dealId)?.capabilities}
             onEdit={()=>void open(deal.dealId,"edit")} onClose={()=>void open(deal.dealId,"close")}
             onReopen={()=>void open(deal.dealId,"reopen")}/>}
-          {expandedDeal===deal.dealId&&<DealDetails currencies={currencyDefinitions} pipelines={pipelines} key={deal.dealId+":"+detailRevision}
+          {expandedDeal===deal.dealId&&<DealDetails currencies={currencyDefinitions} pipelines={pipelines} choices={ownerChoices}
+            key={deal.dealId+":"+detailRevision}
             dealId={deal.dealId} onEdit={()=>void open(deal.dealId,"edit")}
             onAdvance={()=>void open(deal.dealId,"advance")}
             onClose={()=>void open(deal.dealId,"close")}
@@ -708,7 +710,8 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
               capabilities={boardPage.dealCapabilities.find(p=>p.dealId===d.dealId)?.capabilities}
               onEdit={()=>void open(d.dealId,"edit")} onAdvance={()=>void open(d.dealId,"advance")}
               onClose={()=>void open(d.dealId,"close")} onReopen={()=>void open(d.dealId,"reopen")}/>}
-            {expandedDeal===d.dealId&&<DealDetails currencies={currencyDefinitions} pipelines={pipelines} key={d.dealId+":"+detailRevision}
+            {expandedDeal===d.dealId&&<DealDetails currencies={currencyDefinitions} pipelines={pipelines} choices={ownerChoices}
+              key={d.dealId+":"+detailRevision}
               dealId={d.dealId} onEdit={()=>void open(d.dealId,"edit")}
               onAdvance={()=>void open(d.dealId,"advance")}
               onClose={()=>void open(d.dealId,"close")}

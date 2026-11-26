@@ -233,12 +233,12 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='te
  await verifyWorkforce({dispatch:rpcFetch,sql,jwt,accountId,admin,viewer,tenantB,knownService});
  await typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,adminIdentity:"native-a@example.test"});
  const salesAuditBeforeFilter=number((await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0]?.n);
- const collectDeals=(filter:{accountId?:string}={})=>collectFixturePages(async pageToken=>{
-   const {body}=await fixtureRpc(rpcFetch,sales.listDeals,viewer,{...filter,page:{pageSize:1,pageToken}});
+ const collectDeals=(pageSize:number,filter:{accountId?:string}={})=>collectFixturePages(async pageToken=>{
+   const {body}=await fixtureRpc(rpcFetch,sales.listDeals,viewer,{...filter,page:{pageSize,pageToken}});
    return {items:body.deals,nextPageToken:body.pageInfo?.nextPageToken};
  });
- assert.deepEqual((await collectDeals({accountId})).map(d=>d.dealId),
-   (await collectDeals()).filter(d=>d.accountId===accountId).map(d=>d.dealId));
+ assert.deepEqual((await collectDeals(1,{accountId})).map(d=>d.dealId),
+   (await collectDeals(100)).filter(d=>d.accountId===accountId).map(d=>d.dealId));
  assert.deepEqual((await fixtureRpc(rpcFetch,sales.listDeals,tenantB,{accountId})).body.deals,[]);
  assert.deepEqual((await fixtureRpc(rpcFetch,sales.listDeals,viewer,{accountId:"missing-account"})).body.deals,[]);
  assert.equal((await fixtureRpcError(rpcFetch,sales.listDeals,viewer,{accountId:"bad/id"})).status,400);

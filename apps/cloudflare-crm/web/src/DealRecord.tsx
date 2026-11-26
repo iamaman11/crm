@@ -13,7 +13,7 @@ import {inputDate} from "./calendarInput";
 import {scopeHref,contactHref,taskHref,dealTasksHref} from "./routes";
 import {stageName as stageLabel} from "./salesPipelineCatalog";
 import {InteractionTimeline} from "./InteractionTimeline";
-import {allOwners,ownerLabel} from "./ownerCatalog";
+import {ownerLabel,type ownerChoices} from "./ownerCatalog";
 import {RoutingExplanation} from "./SalesRouting";
 import {enumValue} from "./enumFields";
 import {TeamDistribution} from "./TeamDistribution";
@@ -28,7 +28,9 @@ function opportunityRoleText(role:OpportunityTeamRole):string {
   }
 }
 
-function OpportunityTeam({deal,canManage,choices,refresh}:{deal:Deal;canManage:boolean;choices:Awaited<ReturnType<typeof allOwners>>["choices"];refresh:()=>Promise<unknown>}){
+type DealOwnerChoices=ReturnType<typeof ownerChoices>;
+
+function OpportunityTeam({deal,canManage,choices,refresh}:{deal:Deal;canManage:boolean;choices:DealOwnerChoices;refresh:()=>Promise<unknown>}){
   const [email,setEmail]=useState("");
   const [role,setRole]=useState<OpportunityTeamRole>(OpportunityTeamRole.CONTRIBUTOR);
   const mutation=useMutation({
@@ -161,7 +163,7 @@ function CommercialAttribution({fact,currencies,reversal=false}:{fact:Commercial
 }
 
 export function DealHistory({dealId,accountId,pipeline,currencies,choices=[]}:{
-  dealId:string;accountId:string;pipeline:SalesPipeline|undefined;currencies:CurrencyCatalog;choices?:Awaited<ReturnType<typeof allOwners>>["choices"];
+  dealId:string;accountId:string;pipeline:SalesPipeline|undefined;currencies:CurrencyCatalog;choices?:DealOwnerChoices;
 }){
   const [cursor,setCursor]=useState("");
   const history=useQuery(useCallback(
@@ -208,8 +210,8 @@ export function DealActions({capabilities,variant="record",onEdit,onAdvance,onCl
 }
 
 // One canonical GetDeal/ContactPoint read projection for inline/full page.
-export function DealDetails({dealId,currencies,pipelines,onEdit,onAdvance,onClose,onReopen}:{
- dealId:string;currencies:CurrencyCatalog;pipelines:readonly SalesPipeline[];
+export function DealDetails({dealId,currencies,pipelines,choices,onEdit,onAdvance,onClose,onReopen}:{
+ dealId:string;currencies:CurrencyCatalog;pipelines:readonly SalesPipeline[];choices:DealOwnerChoices;
  onEdit?:()=>void;onAdvance?:()=>void;onClose?:()=>void;onReopen?:()=>void;
 }) {
   const details=useQuery(useCallback(async(signal:AbortSignal)=>{
@@ -228,10 +230,7 @@ export function DealDetails({dealId,currencies,pipelines,onEdit,onAdvance,onClos
     lookup:async({resourceId,key},signal)=>(await api.deals.getDeal({dealId:resourceId,receiptIdempotencyKey:key},{signal})).confirmedMutation,
     refresh:async()=>{await details.reload();}
   });
-  const owners=useQuery(useCallback(allOwners,[]));
-  const choices=owners.data?.choices??[];
-  // The parent SalesScreen already owns the paginated ListPipelines read.
-  // Use that catalog for all three Deal projections, no extra RPC.
+  // SalesScreen supplies the pipeline and owner catalogs for all Deal views.
   const pipeline=pipelines.find(p=>p.pipelineId===deal?.stage?.pipelineId);
   return <section aria-label={"Подробности сделки "+dealId}>
     <QueryNotice query={details}/>
