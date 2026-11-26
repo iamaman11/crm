@@ -44,6 +44,15 @@ function runNodeTests(patterns: string[]): void {
 }
 
 function checkWeb(): void {
+  // Validate the Vite source tree before the test runner creates lint fixtures.
+  const webRoot = join(root, "apps/cloudflare-crm/web");
+  if (!globSync("src/**/*.tsx", {cwd: webRoot}).length) {
+    throw new Error("CRM_ARCHITECTURE_VIOLATION: React TSX missing");
+  }
+  const javascript = globSync("**/*.{js,jsx,mjs,cjs}", {cwd: webRoot}).sort();
+  if (javascript.length) {
+    throw new Error("CRM_ARCHITECTURE_VIOLATION: JavaScript in CRM web sources: " + javascript.join(", "));
+  }
   for (const project of ["packages/client/tsconfig.json", "packages/ui/tsconfig.json",
     "apps/cloudflare-crm/tsconfig.json", "apps/cloudflare-crm/tsconfig.tools.json",
     "apps/cloudflare-crm/tsconfig.native-tests.json"]) checkTsconfig(project);

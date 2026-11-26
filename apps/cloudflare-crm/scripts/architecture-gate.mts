@@ -150,11 +150,6 @@ check(tomlScalar("apps/cloudflare-crm/rust-party/Cargo.toml","package","edition"
 const dependencies=record(record(readJson("apps/cloudflare-crm/package.json")).dependencies);
 check(typeof dependencies["@ultimate-crm/client"]==="string"&&typeof dependencies["@ultimate-crm/ui"]==="string",
  "existing typed client and UI packages required");
-{
- const sources=readdirSync(resolve(repo,"apps/cloudflare-crm/web/src"),{recursive:true,encoding:"utf8"});
- check(sources.some(path=>path.endsWith(".tsx")),"React TSX missing");
- check(!sources.some(path=>/\.(js|jsx|mjs)$/.test(path)),"legacy JS/JSX remains");
-}
 console.log(JSON.stringify({event:"crm.architecture-gate",result:"PASS",
  scope:"configuration and manifest/Cargo inventory",runtime_evidence:runtimeEvidence,
  policy_schema:policy.schema_version}));
