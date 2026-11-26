@@ -120,17 +120,18 @@ export function decodeFixtureDetail<M extends DescMessage>(
 
 export async function collectFixturePages<T>(
   read: (pageToken: string) => Promise<{ items: readonly T[]; nextPageToken: string | undefined }>,
+  pageSize = 1,
 ): Promise<T[]> {
   const items: T[] = [];
   const seen = new Set<string>();
   let token = "";
   for (let index = 0; index < 256; index++) {
     const page = await read(token);
-    assert.ok(page.items.length <= 1, "page_size=1 must bound the filtered result");
+    assert.ok(page.items.length <= pageSize, `page_size=${pageSize} must bound the result`);
     items.push(...page.items);
     const next = page.nextPageToken;
     if (!next) return items;
-    assert.equal(page.items.length, 1, "filtered cursor skipped a matching row");
+    assert.equal(page.items.length, pageSize, "cursor skipped a matching row");
     assert.ok(!seen.has(next), "cursor cycle in filtered pagination");
     seen.add(next);
     token = next;

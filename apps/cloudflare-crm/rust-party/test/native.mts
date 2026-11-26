@@ -236,7 +236,7 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='te
  const collectDeals=(pageSize:number,filter:{accountId?:string}={})=>collectFixturePages(async pageToken=>{
    const {body}=await fixtureRpc(rpcFetch,sales.listDeals,viewer,{...filter,page:{pageSize,pageToken}});
    return {items:body.deals,nextPageToken:body.pageInfo?.nextPageToken};
- });
+ },pageSize);
  assert.deepEqual((await collectDeals(1,{accountId})).map(d=>d.dealId),
    (await collectDeals(100)).filter(d=>d.accountId===accountId).map(d=>d.dealId));
  assert.deepEqual((await fixtureRpc(rpcFetch,sales.listDeals,tenantB,{accountId})).body.deals,[]);
