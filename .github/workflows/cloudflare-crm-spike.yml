@@ -81,6 +81,22 @@ jobs:
           set -euo pipefail
           cargo fmt --all -- --check
           cargo fmt --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml --all -- --check
+      - name: Install pinned shared contract toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --global pnpm@12.21.0
+          pnpm --version | grep -Fx '12.21.0'
+          pnpm install --frozen-lockfile
+      # Reject contract and frontend changes before restoring the large Cargo cache.
+      - name: Validate typed schema and frontend
+        env:
+          CRM_PROTO_DESCRIPTOR_FILE: /tmp/crm-proto-descriptors.binpb
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm web:check
+          git diff --exit-code -- pnpm-lock.yaml
       # The Mozilla compiler cache reuses Rust object results across source SHA changes.
       # Cargo still checks fingerprints and compiles changed sources and native feature graphs.
       - name: Install pinned sccache for Rust compilation
@@ -167,32 +183,11 @@ jobs:
           "$deny" --locked --config deny.toml --target x86_64-unknown-linux-gnu --target x86_64-pc-windows-msvc check --show-stats
           (cd apps/cloudflare-crm/rust-party && "$deny" --locked --config "$GITHUB_WORKSPACE/deny.toml" --target wasm32-unknown-unknown check --show-stats)
           echo "CRM_ROOT_AND_WORKER_DEPENDENCY_SECURITY=PASS"
-      # Fail before the expensive WASM pipeline if the shared contract breaks.
-      # The repo's existing frozen workspace provides Buf, Protobuf-ES, and TS.
-      - name: Install pinned shared contract toolchain
+      # Keep Clippy after Buf/TypeScript to avoid runner process exhaustion.
+      - name: Check Worker with WASM Clippy
         shell: bash
         run: |
           set -euo pipefail
-          npm install --global pnpm@12.21.0
-          pnpm --version | grep -Fx '12.21.0'
-          pnpm install --frozen-lockfile
-      # Report actual compiler-cache hits/misses, rather than assuming cache speedup.
-      # The Mozilla action also emits end-of-job statistics for the complete job.
-      # Clippy checks WASM compilation, so a separate cargo check repeats the work.
-      # The parallel pnpm codegen/tsc + Rust compilation occasionally exhausts
-      # GitHub runner process slots (EAGAIN/os error 11), wasting entire heavy
-      # attempts. Run the cheaper contract/frontend gate first, then Clippy
-      # within the SAME job; no duplicate CI, checker or compilation.
-      - name: Validate typed schema and frontend, then WASM Clippy
-        env:
-          CRM_PROTO_DESCRIPTOR_FILE: /tmp/crm-proto-descriptors.binpb
-        shell: bash
-        run: |
-          set -euo pipefail
-          pnpm web:check
-          git diff --exit-code -- pnpm-lock.yaml
-          # TypeScript/Buf has finished: allow three compiler jobs on the four-vCPU runner.
-          # Preserve the serial gate boundary that avoids codegen/Clippy EAGAIN.
           # Use the same upstream async wasm-bindgen codegen mode as worker-build 0.9.0.
           WASM_BINDGEN_USE_JS_SYS=1 cargo clippy --jobs 3 --locked --workspace --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml --target wasm32-unknown-unknown --features native -- -D clippy::all -D unfulfilled_lint_expectations
       # Installer binaries are cached separately from Cargo compilation outputs.

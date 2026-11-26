@@ -11,7 +11,7 @@
     "web:generate": "buf generate --template buf.gen.web.yaml",
     "gen": "pnpm web:generate",
     "web:typecheck": "pnpm web:generate && pnpm web:typecheck:active && pnpm web:typecheck:tools",
-    "web:lint": "pnpm exec oxlint -c .oxlintrc.json apps/cloudflare-crm/web/src packages/client/src packages/ui/src",
+    "web:lint": "pnpm exec oxlint -c .oxlintrc.json apps/cloudflare-crm/web packages/client/src packages/ui/src",
     "web:test": "pnpm web:test:contracts && pnpm web:test:client && pnpm --filter cloudflare-crm test",
     "web:build": "pnpm web:generate && pnpm --filter cloudflare-crm build",
     "web:check": "pnpm web:typecheck:tools && node apps/cloudflare-crm/scripts/check-web.mts",

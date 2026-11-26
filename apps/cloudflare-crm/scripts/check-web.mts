@@ -19,7 +19,8 @@ function checkTsconfig(project: string): void {
   }
   const options = config.compilerOptions;
   const required = ["strict", "noUncheckedIndexedAccess", "exactOptionalPropertyTypes",
-    "isolatedModules", "verbatimModuleSyntax"];
+    "isolatedModules", "verbatimModuleSyntax", "noFallthroughCasesInSwitch",
+    "noImplicitOverride", "noUnusedLocals", "noUnusedParameters"];
   const strictFamily = ["noImplicitAny", "noImplicitThis", "strictNullChecks", "strictFunctionTypes",
     "strictBindCallApply", "strictPropertyInitialization", "strictBuiltinIteratorReturn",
     "useUnknownInCatchVariables", "alwaysStrict"];

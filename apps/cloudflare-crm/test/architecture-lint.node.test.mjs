@@ -11,6 +11,8 @@ const root=resolve(fileURLToPath(new URL("../../../",import.meta.url)));
 const ui=join(root,"apps/cloudflare-crm/web/src");
 const probes=[
  ["bare-fetch",'export const request=()=>fetch("/api/manual-business");',"no-restricted-globals"],
+ ["javascript-fetch",'export const request=()=>fetch("/api/manual-business");',"no-restricted-globals",".js"],
+ ["module-transport",'import {createConnectTransport} from "@connectrpc/connect-web"; export {createConnectTransport};',"no-restricted-imports",".mjs"],
  ["aliased-fetch",'export const request=fetch;',"no-restricted-globals"],
  ["window-fetch",'export const request=window.fetch;',"no-restricted-properties"],
  ["computed-fetch",'export const request=globalThis["fetch"];',"no-restricted-properties"],
@@ -34,8 +36,8 @@ function lint(path){
 test("native Oxlint rejects forbidden CRM UI code and permits the typed client",()=>{
  const directory=mkdtempSync(join(ui,"crm-oxlint-fixtures-"));
  try{
-  for(const [id,source,rule] of probes){
-   const file=join(directory,id+".ts");
+  for(const [id,source,rule,extension=".ts"] of probes){
+   const file=join(directory,id+extension);
    writeFileSync(file,source+"\n");
    const result=lint(file);
    assert.notEqual(result.status,0,id+" must FAIL Oxlint: "+result.output);
@@ -57,8 +59,10 @@ test("Oxlint checks the reusable UI and only permits the native Connect transpor
  try{
   const cases=[
    [join(uiDirectory,"network.ts"),'export const read=()=>fetch("/api/manual-business");',"no-restricted-globals"],
+   [join(uiDirectory,"network.jsx"),'export const read=()=>fetch("/api/manual-business");',"no-restricted-globals"],
    [join(uiDirectory,"client.ts"),'import {createCloudflareCrmClient} from "@ultimate-crm/client/cloudflare"; export {createCloudflareCrmClient};',"no-restricted-imports"],
    [join(clientDirectory,"network.ts"),'export const read=globalThis["fetch"];',"no-restricted-properties"],
+   [join(clientDirectory,"network.cjs"),'module.exports=globalThis["fetch"];',"no-restricted-properties"],
    [join(clientDirectory,"legacy-transport.ts"),'import {createGrpcWebTransport} from "@connectrpc/connect-web"; export {createGrpcWebTransport};',"no-restricted-imports"],
    [join(clientDirectory,"legacy-gateway.ts"),'import {createApplicationGatewayClient} from "../transport"; export {createApplicationGatewayClient};',"no-restricted-imports"],
   ];
@@ -95,6 +99,8 @@ test("TypeScript itself rejects disabled strict compiler options",()=>{
   for(const override of [
    {noCheck:true}, {strict:false}, {strictNullChecks:false},
    {noUncheckedIndexedAccess:false}, {exactOptionalPropertyTypes:false},
+   {noFallthroughCasesInSwitch:false}, {noImplicitOverride:false},
+   {noUnusedLocals:false}, {noUnusedParameters:false},
    {allowJs:true},
   ]){
    const result=verify(override);
