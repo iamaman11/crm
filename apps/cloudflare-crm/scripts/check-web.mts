@@ -1,9 +1,9 @@
 // Native command entry point: only shared artifact lifetime and unique fail-closed checks.
 import {execFileSync} from "node:child_process";
 import {isRecord} from "./json-boundary.mts";
-import {globSync, mkdtempSync, rmSync} from "node:fs";
+import {globSync, mkdtempSync, readdirSync, rmSync} from "node:fs";
 import {tmpdir} from "node:os";
-import {join} from "node:path";
+import {extname, join, relative, sep} from "node:path";
 import {fileURLToPath} from "node:url";
 import {performance} from "node:perf_hooks";
 
@@ -46,10 +46,14 @@ function runNodeTests(patterns: string[]): void {
 function checkWeb(): void {
   // Validate the Vite source tree before the test runner creates lint fixtures.
   const webRoot = join(root, "apps/cloudflare-crm/web");
-  if (!globSync("src/**/*.tsx", {cwd: webRoot}).length) {
+  const sources = readdirSync(webRoot, {recursive: true, withFileTypes: true})
+    .filter(file => file.isFile() || file.isSymbolicLink())
+    .map(file => relative(webRoot, join(file.parentPath, file.name)));
+  if (!sources.some(path => path.startsWith("src" + sep) && extname(path) === ".tsx")) {
     throw new Error("CRM_ARCHITECTURE_VIOLATION: React TSX missing");
   }
-  const javascript = globSync("**/*.{js,jsx,mjs,cjs}", {cwd: webRoot}).sort();
+  const javascript = sources.filter(path => [".js", ".jsx", ".mjs", ".cjs"]
+    .includes(extname(path).toLowerCase())).sort();
   if (javascript.length) {
     throw new Error("CRM_ARCHITECTURE_VIOLATION: JavaScript in CRM web sources: " + javascript.join(", "));
   }
