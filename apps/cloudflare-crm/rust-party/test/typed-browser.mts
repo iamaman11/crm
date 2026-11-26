@@ -20,7 +20,8 @@ import {PartyRelationshipService} from "../../../../packages/client/gen/crm/part
 import {ContactPointService} from "../../../../packages/client/gen/crm/contact_points/v2/contact_point_pb.js";
 import {TaskService} from "../../../../packages/client/gen/crm/activities/v2/task_pb.js";
 import {PartyService} from "../../../../packages/client/gen/crm/parties/v3/party_pb.js";
-import {fixtureRpcPath} from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
+import {DomainErrorDetailSchema, MutationCommitOutcome} from "../../../../packages/client/gen/crm/core/v2/operation_pb.js";
+import {decodeFixtureDetail, fixtureRpcPath} from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
 
 import {ConsentAuthorizationService} from "../../../../packages/client/gen/crm/consents/v2/consent_pb.js";
 import {Customer360Service} from "../../../../packages/client/gen/crm/customer_360/v2/customer_360_pb.js";
@@ -2396,9 +2397,50 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    };
    await editParty(stalePage);await editParty(page);
    await page.getByLabel("Имя или название",{exact:true}).fill("Browser Winner "+runId);
-   await mutation(page.getByRole("button",{name:"Сохранить участника",exact:true}),PartyService.method.updateParty);
+   const partyUpdate=PartyService.method.updateParty;
+   const partyUpdateResponse=(response: Response)=>matchesRpcPath(response,fixtureRpcPath(partyUpdate));
+   const partyVersion=(async()=>(await sql("SELECT version FROM crm_party_records WHERE tenant=? AND id=?",
+     tenantA,partyId))[0]?.version);
+   const privateAuditError="fixture-private-browser-audit-error";
+   let originalBody: Buffer|null=null;
+   await sql("CREATE TRIGGER fixture_browser_party_update_audit BEFORE INSERT ON crm_audit "+
+     "WHEN NEW.action='parties.update' BEGIN SELECT RAISE(ABORT,'fixture-private-browser-audit-error'); END;");
+   try {
+     const [failed]=await Promise.all([
+       page.waitForResponse(partyUpdateResponse),
+       page.getByRole("button",{name:"Сохранить участника",exact:true}).click(),
+     ]);
+     assert.equal(failed.status(),503);
+     const body=record(await failed.json());
+     assert.equal(body.code,"unavailable");
+     assert.ok(!JSON.stringify(body).includes(privateAuditError),"Worker error must omit raw D1 text");
+     const detail=decodeFixtureDetail(DomainErrorDetailSchema,records(body.details));
+     assert.equal(detail.commitOutcome,MutationCommitOutcome.UNCONFIRMED);
+     assert.equal(detail.domainCode,"PARTIES_WRITE_UNCONFIRMED");
+     const failedRequestId=failed.headers()["x-request-id"];
+     assert.match(failedRequestId??"",/^[a-f0-9-]{36}$/i);
+     assert.equal(detail.requestId,failedRequestId);
+     const warning=page.getByRole("dialog").getByRole("heading",{name:/Результат записи не подтверждён/});
+     await expect(warning).toHaveText("Результат записи не подтверждён. Сервис временно недоступен. "+
+       "Повторите тот же запрос. Запрос: "+failedRequestId+" Повторите именно исходную операцию.");
+     await expect(page.getByRole("button",{name:"Сохранить участника",exact:true})).toBeDisabled();
+     assert.equal(await partyVersion(),2);
+     assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_party_receipts WHERE tenant=? AND original_request_id=?",
+       tenantA,detail.requestId))[0]?.n,0);
+     assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id=? AND request_id=?",
+       tenantA,detail.requestId))[0]?.n,0);
+     originalBody=failed.request().postDataBuffer();
+     assert.ok(originalBody?.length);
+   } finally {
+     await sql("DROP TRIGGER fixture_browser_party_update_audit");
+   }
+   const [retried]=await Promise.all([
+     page.waitForResponse(partyUpdateResponse),
+     mutation(page.getByRole("dialog").getByRole("button",{name:"Повторить исходную операцию",exact:true}),partyUpdate),
+   ]);
+   assert.ok(retried.request().postDataBuffer()?.equals(originalBody),"Retry must preserve the exact generated command");
    await stalePage.getByLabel("Имя или название",{exact:true}).fill("Browser Lost Update "+runId);
-   const conflict=stalePage.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(PartyService.method.updateParty)));
+   const conflict=stalePage.waitForResponse(partyUpdateResponse);
    await stalePage.getByRole("button",{name:"Сохранить участника",exact:true}).click();
    const conflictResponse=await conflict;
    assert.equal(conflictResponse.status(),409);
@@ -2406,14 +2448,21 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal(conflictHeaders["x-crm-error-code"],"aborted");
    const conflictRequestId=conflictHeaders["x-request-id"];
    assert.match(conflictRequestId??"",/^[a-f0-9-]{36}$/i);
+   const conflictBody=record(await conflictResponse.json());
+   assert.equal(conflictBody.code,"aborted");
+   const conflictDetail=decodeFixtureDetail(DomainErrorDetailSchema,records(conflictBody.details));
+   assert.equal(conflictDetail.commitOutcome,MutationCommitOutcome.REJECTED);
+   assert.equal(conflictDetail.requestId,conflictRequestId);
    await stalePage.getByRole("heading",{name:new RegExp("Конфликт изменения.*"+conflictRequestId)}).waitFor();
     assert.equal(await stalePage.getByRole("heading",{name:new RegExp("Конфликт изменения.*"+conflictRequestId)}).count(),1,
       "a conflict is shown once in the active panel, not behind it");
    assert.equal(await firstId("crm_party_records","display_name","Browser Winner "+runId),partyId);
-   assert.equal(record((await sql("SELECT version FROM crm_party_records WHERE tenant='"+tenantSql+"' AND id='"+partyId+"'"))[0]).version,3);
+   await expect(stalePage.getByRole("button",{name:"Повторить исходную операцию",exact:true})).toHaveCount(0);
+   assert.equal(await partyVersion(),3);
    await flushHeaderReads();
    await stalePage.close();
    checkpoint("Two browser forms enforce CAS and show generated-client conflict");
+   checkpoint("Party D1 failure and CAS rejection display correlated typed outcomes and recover safely");
 
    // Lose the response AFTER the server commits; retry the unchanged form.
    await navigate("parties","Люди и организации");

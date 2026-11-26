@@ -23,6 +23,13 @@ export function fixtureRpcPath(method: DescMethod): string {
   return `/${method.parent.typeName}/${method.name}`;
 }
 
+export function encodeFixtureRpcInput<I extends DescMessage>(
+  method: DescMethodUnary<I, DescMessage>,
+  input: MessageInitShape<NoInfer<I>>,
+): Uint8Array<ArrayBuffer> {
+  return new Uint8Array(toBinary(method.input, create(method.input, input)));
+}
+
 export async function dispatchFixtureRpc<I extends DescMessage, O extends DescMessage>(
   dispatch: RpcDispatch,
   method: DescMethodUnary<I, O>,
@@ -38,7 +45,7 @@ export async function dispatchFixtureRpc<I extends DescMessage, O extends DescMe
       "connect-protocol-version": "1",
       ...(jwt ? { "cf-access-jwt-assertion": jwt } : {}),
     },
-    body: new Uint8Array(toBinary(method.input, create(method.input, input))),
+    body: encodeFixtureRpcInput(method, input),
   });
 }
 

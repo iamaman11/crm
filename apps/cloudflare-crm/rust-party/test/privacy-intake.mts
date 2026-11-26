@@ -2,8 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { PrivacyCaseService } from "../../../../packages/client/gen/crm/customer_privacy/v2/case_pb.js";
 import { DomainErrorDetailSchema, MutationCommitOutcome } from "../../../../packages/client/gen/crm/core/v2/operation_pb.js";
-import { binaryPrivacyV2 } from "../../../../packages/client/test/cloudflare-binary-rpc-fixture.ts";
-import { collectFixturePages, decodeFixtureDetail, fixtureRpc, fixtureRpcError, fixtureRpcPath } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
+import { collectFixturePages, decodeFixtureDetail, encodeFixtureRpcInput, fixtureRpc, fixtureRpcError, fixtureRpcPath } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
 import type { RpcDispatch } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
 import { record, records } from "../../scripts/json-boundary.mts";
 import { formatRpcFailure } from "../../scripts/rpc-error-response.mts";
@@ -37,7 +36,7 @@ export async function verifyPrivacyIntake({dispatch,sql,admin,viewer,tenantB,kno
  // Unknown enum 999 is an intentional malformed wire value, not a typed request.
  const unknownKind=await dispatch(fixtureRpcPath(privacy.createPrivacyCase),{method:"POST",headers:{
    "content-type":"application/proto","connect-protocol-version":"1","cf-access-jwt-assertion":admin},
-   body:new Uint8Array([...binaryPrivacyV2("CreatePrivacyCase",{...draftInput,kind:0}),0x10,0xe7,0x07])});
+   body:new Uint8Array([...encodeFixtureRpcInput(privacy.createPrivacyCase,{...draftInput,kind:0}),0x10,0xe7,0x07])});
  assert.equal(record(await unknownKind.json()).code,"invalid_argument");
  assert.equal((await fixtureRpcError(dispatch,privacy.createPrivacyCase,admin,{...draftInput,
    precondition:{idempotencyKey:"privacy-create-invalid",expectedVersion:1n}})).body.code,"invalid_argument");

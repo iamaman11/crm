@@ -3,8 +3,7 @@ import { randomUUID } from "node:crypto";
 import { TaskService } from "../../../../packages/client/gen/crm/activities/v2/task_pb.js";
 import type { ListTasksRequest } from "../../../../packages/client/gen/crm/activities/v2/task_pb.js";
 import { DomainErrorDetailSchema, MutationCommitOutcome } from "../../../../packages/client/gen/crm/core/v2/operation_pb.js";
-import { collectFixturePages, decodeFixtureDetail, fixtureRpc, fixtureRpcError, fixtureRpcPath } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
-import { binaryTaskV2 } from "../../../../packages/client/test/cloudflare-binary-rpc-fixture.ts";
+import { collectFixturePages, decodeFixtureDetail, encodeFixtureRpcInput, fixtureRpc, fixtureRpcError, fixtureRpcPath } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
 import type { RpcDispatch } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
 import { record, records } from "../../scripts/json-boundary.mts";
 import { formatRpcFailure } from "../../scripts/rpc-error-response.mts";
@@ -127,7 +126,7 @@ export async function verifyTasks({dispatch,sql,accountId,accountNextId,admin,vi
  // Field 4 is deliberately encoded as an unknown TaskPriority enum value.
  const unknownPriority=await dispatch(fixtureRpcPath(task.updateTask),{method:"POST",headers:{
    "content-type":"application/proto","connect-protocol-version":"1","cf-access-jwt-assertion":admin},
-   body:new Uint8Array([...binaryTaskV2("UpdateTask",baseUpdate),0x20,99])});
+   body:new Uint8Array([...encodeFixtureRpcInput(task.updateTask,baseUpdate),0x20,99])});
  assert.equal(unknownPriority.status,400);
  assert.equal((await fixtureRpcError(dispatch,task.updateTask,admin,{...baseUpdate,priority:0})).status,400);
  const rejected=await fixtureRpcError(dispatch,task.updateTask,admin,{...baseUpdate,
