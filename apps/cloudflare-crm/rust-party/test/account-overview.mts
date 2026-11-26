@@ -102,14 +102,46 @@ export async function verifyAccountOverview({
   assert.equal(completed?.accountId, accountId);
   assert.equal(completed?.status, TaskStatus.COMPLETED);
 
-  for (let index = 0; index < 101 - card.contactPoints.length; index++) {
-    const suffix = String(index).padStart(3, "0");
-    await fixtureRpc(dispatch, ContactPointService.method.createContactPoint, admin, {
-      contactPointId: "overview-boundary-" + suffix, partyId, kind: ContactPointKind.EMAIL,
-      value: "overview-" + index + "@example.org",
-      precondition: {idempotencyKey: "overview-contact-" + suffix},
-    });
+  const boundaryFixtureStarted = performance.now();
+  const boundarySeedId = "overview-boundary-000";
+  const boundaryContactCount = 101;
+  const fixtureRows = boundaryContactCount - card.contactPoints.length;
+  assert.equal((await fixtureRpc(dispatch, ContactPointService.method.createContactPoint, admin, {
+    contactPointId: boundarySeedId, partyId, kind: ContactPointKind.EMAIL,
+    value: "overview-0@example.org",
+    precondition: {idempotencyKey: "overview-contact-000"},
+  })).status, 200);
+  const paddingCount = fixtureRows - 1;
+  if (paddingCount > 0) {
+    // Keep one owner-created canonical row, then clone its persisted domain
+    // state in this isolated D1 fixture. INSERT still runs the normal receipt
+    // and audit trigger; every synthetic row gets distinct identity/provenance.
+    await sql(
+      "WITH RECURSIVE pad(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM pad WHERE n<CAST(? AS INTEGER)) " +
+      "INSERT INTO crm_contact_point_records(tenant,id,party_id,state,version,idem_key,idem_digest,request_id,actor) " +
+      "SELECT source.tenant,'overview-boundary-'||printf('%03d',pad.n),source.party_id," +
+      "json_set(source.state,'$.contact_point_id','overview-boundary-'||printf('%03d',pad.n)," +
+      "'$.normalized_value','overview-'||pad.n||'@example.org','$.display_value','overview-'||pad.n||'@example.org')," +
+      "source.version,'overview-contact-'||printf('%03d',pad.n),'fixture-only'," +
+      "printf('00000000-0000-4000-9001-%012d',pad.n),source.actor " +
+      "FROM pad CROSS JOIN crm_contact_point_records AS source " +
+      "WHERE source.tenant='tenant-a' AND source.id=? AND source.party_id=?",
+      String(paddingCount), boundarySeedId, partyId,
+    );
   }
+  const [boundaryProof] = await sql(
+    "SELECT COUNT(*) AS total," +
+    "COUNT(CASE WHEN id LIKE 'overview-boundary-%' THEN 1 END) AS fixture_rows," +
+    "COUNT(DISTINCT CASE WHEN id LIKE 'overview-boundary-%' THEN idem_key END) AS distinct_receipt_keys," +
+    "COUNT(DISTINCT CASE WHEN id LIKE 'overview-boundary-%' THEN request_id END) AS distinct_requests " +
+    "FROM crm_contact_point_records " +
+    "WHERE tenant='tenant-a' AND party_id=?",
+    partyId,
+  );
+  assert.deepEqual(boundaryProof, {total: boundaryContactCount, fixture_rows: fixtureRows,
+    distinct_receipt_keys: fixtureRows, distinct_requests: fixtureRows},
+    "Customer360 truncation fixture must contain exactly 101 contacts with distinct fixture keys and request IDs");
+  const boundaryFixtureElapsedMs = Math.round(performance.now() - boundaryFixtureStarted);
   const boundedAudit = await auditCount();
   const {body: {overview: bounded}} = await fixtureRpc(dispatch, method, viewer, {accountId});
   assert.ok(bounded && bounded.truncated);
@@ -119,7 +151,8 @@ export async function verifyAccountOverview({
   assert.equal(await auditCount(), boundedAudit);
   console.log(JSON.stringify({event: "crm.native-account-overview-v2", result: "PASS",
     owner: "crm.customer360", account_rooted: true, original_owners: true,
-    tenant_ab: true, read_only: true, bounded: true}));
+    tenant_ab: true, read_only: true, bounded: true, boundary_contacts: boundaryContactCount,
+    typed_owner_creates: 1, cloned_fixture_rows: paddingCount, boundary_fixture_elapsed_ms: boundaryFixtureElapsedMs}));
   return {linkedTaskId};
 }
 
