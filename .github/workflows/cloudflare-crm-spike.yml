@@ -106,10 +106,11 @@ jobs:
             ~/.cargo/git/db
             target
             apps/cloudflare-crm/rust-party/target
-          # Cache entries are immutable. Refresh when manifests or codegen inputs
-          # change; ordinary source edits still use Cargo fingerprints and sccache.
-          key: ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}-${{ hashFiles('Cargo.toml', 'apps/cloudflare-crm/rust-party/Cargo.toml', 'apps/cloudflare-crm/rust-party/connect-contracts/Cargo.toml', 'crates/*/Cargo.toml', 'modules/*/Cargo.toml') }}-${{ hashFiles('proto/**/*.proto', 'apps/cloudflare-crm/active-proto-versions.json', 'apps/cloudflare-crm/rust-party/connect-contracts/build.rs', 'crates/crm-proto-contracts/build.rs') }}
+          # The owner test plan can add host build outputs to this immutable cache.
+          # Ordinary source edits still use Cargo fingerprints and sccache.
+          key: ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}-${{ hashFiles('Cargo.toml', 'apps/cloudflare-crm/rust-party/Cargo.toml', 'apps/cloudflare-crm/rust-party/connect-contracts/Cargo.toml', 'crates/*/Cargo.toml', 'modules/*/Cargo.toml') }}-${{ hashFiles('proto/**/*.proto', 'apps/cloudflare-crm/active-proto-versions.json', 'apps/cloudflare-crm/rust-party/connect-contracts/build.rs', 'crates/crm-proto-contracts/build.rs') }}-${{ hashFiles('apps/cloudflare-crm/scripts/test-rust-owners.mts') }}
           restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}-${{ hashFiles('Cargo.toml', 'apps/cloudflare-crm/rust-party/Cargo.toml', 'apps/cloudflare-crm/rust-party/connect-contracts/Cargo.toml', 'crates/*/Cargo.toml', 'modules/*/Cargo.toml') }}-${{ hashFiles('proto/**/*.proto', 'apps/cloudflare-crm/active-proto-versions.json', 'apps/cloudflare-crm/rust-party/connect-contracts/build.rs', 'crates/crm-proto-contracts/build.rs') }}
             ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}-${{ hashFiles('Cargo.toml', 'apps/cloudflare-crm/rust-party/Cargo.toml', 'apps/cloudflare-crm/rust-party/connect-contracts/Cargo.toml', 'crates/*/Cargo.toml', 'modules/*/Cargo.toml') }}-
             ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}-
             ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}
@@ -227,7 +228,27 @@ jobs:
             cargo install --locked worker-build --version 0.9.0
           fi
           worker-build --version
-      - name: Build Workers and run Rust owner, workerd/D1 and Chromium tests
+      - name: Build the test Worker, run Rust owner tests and prepare Chromium
+        env:
+          CARGO_PROFILE_TEST_DEBUG: line-tables-only
+          RUST_LOG: worker_build::build=info
+        working-directory: apps/cloudflare-crm
+        shell: bash
+        run: |
+          # Cargo's own HTML report; no second compilation or custom profiler.
+          mkdir -p "$RUNNER_TEMP/crm-cargo-timings"
+          rm -f rust-party/target/cargo-timings/cargo-timing.html
+          (cd rust-party && worker-build --dev --locked --features native-ci --timings &&
+            cp target/cargo-timings/cargo-timing.html "$RUNNER_TEMP/crm-cargo-timings/native-ci.html") &
+          worker_pid=$!
+          (cd "$GITHUB_WORKSPACE" && node apps/cloudflare-crm/scripts/test-rust-owners.mts) &
+          owners_pid=$!
+          status=0
+          bash scripts/prepare-chromium.sh || status=$?
+          wait "$owners_pid" || status=$?
+          wait "$worker_pid" || status=$?
+          exit "$status"
+      - name: Build the release Worker and test signed workerd/D1/Chromium
         id: crm_native_workerd
         working-directory: apps/cloudflare-crm
         env:
@@ -236,32 +257,18 @@ jobs:
           CRM_RPC_RUNTIME_PROOF: /tmp/crm-rpc-runtime.json
         shell: bash
         run: |
-          # Cargo's own HTML report; no second compilation or custom profiler.
+          # Workerd reads the completed native-ci build. The release has its own output directory.
+          # Three Cargo jobs is the measured best on this 4-vCPU runner: four slowed the
+          # release, test build, and concurrent workerd/Chromium compared with three.
           echo "CRM_RUNNER_LOGICAL_CPUS=$(nproc)"
-          mkdir -p "$RUNNER_TEMP/crm-cargo-timings"
-          rm -f rust-party/target/cargo-timings/cargo-timing.html "$CRM_RPC_RUNTIME_PROOF"
-          (cd rust-party && worker-build --dev --locked --features native-ci --timings &&
-            cp target/cargo-timings/cargo-timing.html "$RUNNER_TEMP/crm-cargo-timings/native-ci.html") &
-          worker_pid=$!
-          (cd "$GITHUB_WORKSPACE" &&
-            CARGO_PROFILE_TEST_DEBUG=line-tables-only node apps/cloudflare-crm/scripts/test-rust-owners.mts) &
-          owners_pid=$!
+          rm -f rust-party/target/cargo-timings/cargo-timing.html
+          (cd rust-party && CARGO_BUILD_JOBS=3 worker-build --release --out-dir ../.release/native-build --locked --features native --timings &&
+            cp target/cargo-timings/cargo-timing.html "$RUNNER_TEMP/crm-cargo-timings/native-release.html") &
+          release_pid=$!
           status=0
-          bash scripts/prepare-chromium.sh || status=$?
-          wait "$worker_pid" || status=$?
-          if (( status == 0 )); then
-            # The test Worker and Chromium are ready. Host tests can finish
-            # independently while workerd uses native-ci and release builds.
-            printf '{"event":"crm.ci.native-ready","elapsed_seconds":%d}\n' "$SECONDS"
-            echo "ran_workerd=true" >> "$GITHUB_OUTPUT"
-            rm -f rust-party/target/cargo-timings/cargo-timing.html
-            (cd rust-party && CARGO_BUILD_JOBS=3 worker-build --release --out-dir ../.release/native-build --locked --features native --timings &&
-              cp target/cargo-timings/cargo-timing.html "$RUNNER_TEMP/crm-cargo-timings/native-release.html") &
-            release_pid=$!
-            node --test rust-party/test/native.mts || status=$?
-            wait "$release_pid" || status=$?
-          fi
-          wait "$owners_pid" || status=$?
+          rm -f "$CRM_RPC_RUNTIME_PROOF"
+          node --test rust-party/test/native.mts || status=$?
+          wait "$release_pid" || status=$?
           exit "$status"
       - name: Preserve Cargo build timing reports
         if: ${{ always() && steps.crm_native_workerd.outcome != 'skipped' }}
@@ -286,10 +293,10 @@ jobs:
           if-no-files-found: error
           retention-days: 7
       - name: Preserve native browser acceptance or safe failure evidence
-        # An earlier preparation failure may skip workerd/browser in the build step.
-        # A successful build/test step without mandatory evidence still fails the
+        # No misleading second FAIL when an earlier gate skipped workerd/browser.
+        # A successful workerd test without mandatory evidence still fails the
         # explicit "Require actual browser acceptance" step below.
-        if: ${{ always() && steps.crm_native_workerd.outputs.ran_workerd == 'true' }}
+        if: ${{ always() && steps.crm_native_workerd.outcome != 'skipped' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: crm-native-party-proof-${{ github.sha }}-attempt-${{ github.run_attempt }}
