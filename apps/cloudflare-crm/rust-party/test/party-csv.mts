@@ -20,6 +20,8 @@ type CsvFixture = {
  unknownService: string;
 };
 
+// Source identity regression coverage: stable reimports, mixed conflicts, tenant isolation,
+// stale previews, concurrent Apply, receipt recovery and atomic workerd/D1 rollback.
 export async function verifyPartyCsv({dispatch,rpcFetch,sql,partySnapshot,admin,viewer,tenantB,knownService,unknownService}: CsvFixture) {
  const methods=PartyCsvService.method;
  const parties=PartyService.method;
