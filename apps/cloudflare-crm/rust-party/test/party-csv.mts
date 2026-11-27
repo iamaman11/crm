@@ -273,8 +273,10 @@ export async function verifyPartyCsv({dispatch,rpcFetch,sql,partySnapshot,admin,
    row_errors:true,atomic:true,replay:true,quoted_values:true,audit:true}));
 
  // Optional named sources bind a stable external-ID digest to the original Party owner.
- const registeredSource=await fixtureRpc(dispatch,methods.registerPartyImportSource,admin,{displayName:"Pilot CRM"});
+ const registerSourceInput={displayName:"Pilot CRM",precondition:{idempotencyKey:"csv-source-register"}};
+ const registeredSource=await fixtureRpc(dispatch,methods.registerPartyImportSource,admin,registerSourceInput);
  assert.equal(registeredSource.status,200,formatRpcFailure(registeredSource));
+ assert.equal(registeredSource.body.receipt?.replayed,false);
  const sourceId=registeredSource.body.source?.sourceId;
  assert.ok(typeof sourceId==="string"&&sourceId.startsWith("csv-source-"));
  const listedSources=await fixtureRpc(dispatch,methods.listPartyImportSources,admin,{});
@@ -284,8 +286,13 @@ export async function verifyPartyCsv({dispatch,rpcFetch,sql,partySnapshot,admin,
  assert.equal((await sendFixtureRpc(dispatch,methods.registerPartyImportSource,viewer,{displayName:"Forbidden"},403)).status,403);
  assert.equal((await sendFixtureRpc(dispatch,methods.listPartyImportSources,null,{},401)).status,401);
  assert.equal((await sendFixtureRpc(dispatch,methods.registerPartyImportSource,null,{displayName:"Unauthenticated"},401)).status,401);
- const sameSource=await fixtureRpc(dispatch,methods.registerPartyImportSource,admin,{displayName:"  pilot crm  "});
+ const sameSourceInput={displayName:"  pilot crm  ",precondition:{idempotencyKey:"csv-source-register-alias"}};
+ const sameSource=await fixtureRpc(dispatch,methods.registerPartyImportSource,admin,sameSourceInput);
  assert.equal(sameSource.body.source?.sourceId,sourceId,"Source registration is stable and case-insensitive");
+ assert.equal(sameSource.body.receipt?.replayed,false);
+ const sameSourceReplay=await fixtureRpc(dispatch,methods.registerPartyImportSource,admin,sameSourceInput);
+ assert.equal(sameSourceReplay.body.source?.sourceId,sourceId);
+ assert.equal(sameSourceReplay.body.receipt?.replayed,true);
 
  const sourceCsv1=new TextEncoder().encode(
    "party_id,kind,display_name,resource_version\r\nsource-ext-1,person,Source Person,1\r\nsource-ext-2,organization,Source Org,1\r\n");
@@ -304,6 +311,7 @@ export async function verifyPartyCsv({dispatch,rpcFetch,sql,partySnapshot,admin,
  assert.equal(sourceApply1.status,200,formatRpcFailure(sourceApply1));
  assert.equal(sourceApply1.body.createdCount,2);
  assert.equal(sourceApply1.body.replayedCount,0);
+ assert.equal(sourceApply1.body.receipt?.replayed,false);
  const sourceReplay=await fixtureRpc(dispatch,methods.applyPartyImport,knownService,{
    csv:sourceCsv1,sourceId,expectedSha256Hex:sourcePreview1.body.csvSha256Hex,
    expectedPreviewFingerprint:sourcePreview1.body.previewFingerprint,
@@ -311,6 +319,7 @@ export async function verifyPartyCsv({dispatch,rpcFetch,sql,partySnapshot,admin,
  });
  assert.equal(sourceReplay.body.createdCount,0);
  assert.equal(sourceReplay.body.replayedCount,2);
+ assert.equal(sourceReplay.body.receipt?.replayed,true);
 
  // Different file bytes, same source and same external IDs: old Party IDs survive;
  // only the genuinely new external ID creates another Party.
@@ -329,6 +338,7 @@ export async function verifyPartyCsv({dispatch,rpcFetch,sql,partySnapshot,admin,
  assert.equal(sourceApply2.status,200,formatRpcFailure(sourceApply2));
  assert.equal(sourceApply2.body.createdCount,1);
  assert.equal(sourceApply2.body.replayedCount,2);
+ assert.equal(sourceApply2.body.receipt?.replayed,false);
  assert.equal(await count("SELECT COUNT(*) AS n FROM crm_party_source_identities WHERE tenant='tenant-a' AND source_id='"+sourceId+"'"),3);
 
  // A changed known ID is a visible, non-committable preview; it never silently updates Party.
