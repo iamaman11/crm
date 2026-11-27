@@ -4,7 +4,7 @@
 use super::{
     bind,
     diagnostics::{MutationFailure, ReadFailureReason, ReceiptUncertainty},
-    now_nanos,
+    now_nanos, sales_leads,
 };
 use crm_core_contracts::{BasisPoints, CalendarDate, CurrencyCode, Money, Patch};
 use crm_module_sdk::{ErrorCategory, RecordId, ResourceRef, SdkError};
@@ -468,15 +468,50 @@ pub(super) async fn create_typed(
     actor: &str,
     trace: &str,
 ) -> Result<std::result::Result<SalesSaved, MutationFailure>> {
+    let ctx = sales_leads::Context {
+        db,
+        tenant,
+        actor,
+        request_id: trace,
+        key: k,
+    };
+    let digest = hash("create", &input.id, &input)?;
+    create_with(&ctx, input, &digest, None).await
+}
+
+pub(super) async fn create_from_lead(
+    ctx: &sales_leads::Context<'_>,
+    input: CreateInput,
+    conversion: sales_leads::ConversionInput<'_>,
+) -> Result<super::d1_write::WriteResult<sales_leads::Saved>> {
+    let digest = hash("convert_lead", conversion.id, &(conversion.version, &input))?;
+    match create_with(ctx, input, &digest, Some(conversion)).await? {
+        Ok(saved) => {
+            let mut lead = sales_leads::converted(ctx, &digest, saved.replayed).await?;
+            if let Ok(lead) = &mut lead {
+                lead.d1_statement_changes = saved.d1_statement_changes;
+            }
+            Ok(lead)
+        }
+        Err(failure) => Ok(Err(failure)),
+    }
+}
+
+async fn create_with(
+    ctx: &sales_leads::Context<'_>,
+    input: CreateInput,
+    digest: &str,
+    conversion: Option<sales_leads::ConversionInput<'_>>,
+) -> Result<std::result::Result<SalesSaved, MutationFailure>> {
+    let (db, tenant, actor, trace, k) = (ctx.db, ctx.tenant, ctx.actor, ctx.request_id, ctx.key);
     if !(8..=120).contains(&k.len()) {
         return Ok(rejected(
             "IDEMPOTENCY_KEY_REQUIRED",
             ErrorCategory::InvalidArgument,
         ));
     }
-    let digest = hash("create", &input.id, &input)?;
     match prior(db, tenant, k).await {
-        Ok(Some(p)) => return Ok(replay(p, &digest)),
+        Ok(Some(p)) => return Ok(replay(p, digest)),
         Ok(None) => (),
         Err(_) => return Ok(Err(unconfirmed(ReceiptUncertainty::ReadFailed))),
     }
@@ -504,6 +539,20 @@ pub(super) async fn create_typed(
             ErrorCategory::InvalidArgument,
         ));
     }
+    let conversion_guard = if let Some(conversion) = &conversion {
+        match sales_leads::prepare_conversion(ctx, conversion, account_id.as_str()).await? {
+            Ok(guard) => Some(guard),
+            Err(error) => {
+                return Ok(match prior(db, tenant, k).await {
+                    Ok(Some(receipt)) => replay(receipt, digest),
+                    Ok(None) => Err(error),
+                    Err(_) => Err(unconfirmed(ReceiptUncertainty::ReadFailed)),
+                });
+            }
+        }
+    } else {
+        None
+    };
     if input.owner.is_some() && input.automatic_routing.is_some() {
         return Ok(rejected(
             "SALES_ROUTING_MANUAL_AUTO_CONFLICT",
@@ -521,7 +570,7 @@ pub(super) async fn create_typed(
         };
         let resolved = match super::sales_routing::resolve(db, tenant, &facts).await? {
             Ok(value) => value,
-            Err(error) => return Ok(routing_rejection(db, tenant, k, &digest, error).await),
+            Err(error) => return Ok(routing_rejection(db, tenant, k, digest, error).await),
         };
         if auto
             .expected_decision
@@ -534,7 +583,7 @@ pub(super) async fn create_typed(
                 false,
                 "Routing preview changed.",
             );
-            return Ok(routing_rejection(db, tenant, k, &digest, error).await);
+            return Ok(routing_rejection(db, tenant, k, digest, error).await);
         }
         Some(resolved)
     } else {
@@ -644,7 +693,7 @@ pub(super) async fn create_typed(
     };
     let saved = encode(&deal)?;
     let mut sql = format!(
-        "INSERT INTO crm_sales_deal_records(tenant,id,account_id,state,version,idem_key,idem_digest,request_id,actor) SELECT ?,?,?,?,?,?,?,?,? WHERE 1=1{}",
+        "INSERT INTO crm_sales_deal_records(tenant,id,account_id,state,version,idem_key,idem_digest,request_id,actor,source_lead_id) SELECT ?,?,?,?,?,?,?,?,?,? WHERE 1=1{}",
         owner_guard(guarded_owner)
     );
     let mut values = vec![
@@ -654,13 +703,20 @@ pub(super) async fn create_typed(
         JsValue::from_str(&saved),
         JsValue::from_f64(deal.version() as f64),
         JsValue::from_str(k),
-        JsValue::from_str(&digest),
+        JsValue::from_str(digest),
         JsValue::from_str(trace),
         JsValue::from_str(actor),
+        conversion
+            .as_ref()
+            .map(|lead| JsValue::from_str(lead.id))
+            .unwrap_or(JsValue::NULL),
     ];
     owner_parameters(&mut values, tenant, guarded_owner);
     if let Some(resolved) = &resolution {
         resolved.append_guard(&mut sql, &mut values, tenant);
+    }
+    if let Some((guard, conversion)) = conversion_guard.as_ref().zip(conversion.as_ref()) {
+        guard.append(&mut sql, &mut values, ctx, conversion, account_id.as_str())?;
     }
     sql.push_str(" ON CONFLICT(tenant,id) DO NOTHING");
     let r = bind(db, &sql, &values)?.run().await;
@@ -668,13 +724,20 @@ pub(super) async fn create_typed(
         // Discard the genuine D1 write acknowledgement in isolated CI only.
         #[cfg(feature = "native-ci")]
         if matches!(k, "r471-ci-ack-lost" | "r471-ci-receipt-read-fail") {
-            return Ok(reconcile(db, tenant, k, &digest, false).await);
+            return Ok(reconcile(db, tenant, k, digest, false).await);
         }
         return Ok(Ok(acknowledged(deal, trace, count)));
     }
+    if conversion.is_some() && r.as_ref().ok().and_then(changes) == Some(0) {
+        return Ok(match prior(db, tenant, k).await {
+            Ok(Some(receipt)) => replay(receipt, digest),
+            Ok(None) => rejected("SALES_LEAD_CONVERSION_CONFLICT", ErrorCategory::Conflict),
+            Err(_) => Err(unconfirmed(ReceiptUncertainty::ReadFailed)),
+        });
+    }
     if resolution.is_some() && r.as_ref().ok().and_then(changes) == Some(0) {
         return Ok(match prior(db, tenant, k).await {
-            Ok(Some(receipt)) => replay(receipt, &digest),
+            Ok(Some(receipt)) => replay(receipt, digest),
             Ok(None) => rejected("SALES_ROUTING_WRITE_CONFLICT", ErrorCategory::Conflict),
             Err(_) => Err(unconfirmed(ReceiptUncertainty::ReadFailed)),
         });
@@ -683,7 +746,7 @@ pub(super) async fn create_typed(
         db,
         tenant,
         k,
-        &digest,
+        digest,
         r.as_ref().ok().and_then(changes) == Some(0),
     )
     .await)

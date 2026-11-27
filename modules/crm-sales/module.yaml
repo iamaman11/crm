@@ -274,6 +274,41 @@ provides:
       binding:
         kind: protobuf_rpc
         rpc: crm.sales.v2.DealService.ListSalesPerformanceReports
+    - id: sales.lead.create
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.LeadService.CreateLead
+    - id: sales.lead.get
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.LeadService.GetLead
+    - id: sales.lead.list
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.LeadService.ListLeads
+    - id: sales.lead.qualify
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.LeadService.QualifyLead
+    - id: sales.lead.reject
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.LeadService.RejectLead
+    - id: sales.lead.convert
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.LeadService.ConvertLead
+    - id: sales.lead.history
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.LeadService.ListLeadEvents
   events:
     - id: sales.deal.created
       version: 1.0.0

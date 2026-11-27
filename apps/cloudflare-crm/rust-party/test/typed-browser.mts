@@ -27,6 +27,7 @@ import {ConsentAuthorizationService} from "../../../../packages/client/gen/crm/c
 import {Customer360Service} from "../../../../packages/client/gen/crm/customer_360/v2/customer_360_pb.js";
 import {DataQualityService} from "../../../../packages/client/gen/crm/data_quality/v2/quality_pb.js";
 import {DealService} from "../../../../packages/client/gen/crm/sales/v2/deal_pb.js";
+import {LeadService} from "../../../../packages/client/gen/crm/sales/v2/lead_pb.js";
 import {EnrichmentConfigurationService} from "../../../../packages/client/gen/crm/customer_enrichment/v2/config_pb.js";
 import {IdentityResolutionService} from "../../../../packages/client/gen/crm/identity_resolution/v2/identity_pb.js";
 import {InteractionService} from "../../../../packages/client/gen/crm/activities/v2/interaction_pb.js";
@@ -3302,6 +3303,33 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
 
    await verifyBrowserAutomation({page,sql,tenantA,dealId,laterCall,runId,navigate,
      reloadDocument,checkpoint,assertMutation});
+
+   await navigate("leads","Лиды");
+   const leadName="Browser referral "+runId;
+   await page.getByRole("button",{name:"Новый лид",exact:true}).click();
+   await selectPagedPicker(page,"Участник",partyId);
+   await page.getByLabel("Тема интереса",{exact:true}).fill(leadName);
+   const saveLead=()=>page.getByRole("button",{name:"Сохранить",exact:true});
+   const leadCard=page.locator("section").filter({has:page.getByRole("heading",{name:leadName,exact:true})});
+   await mutation(saveLead(),LeadService.method.createLead);
+   await leadCard.getByRole("button",{name:"Квалифицировать",exact:true}).click();
+   await page.getByLabel("Причина",{exact:true}).fill("Browser confirmed need");
+   await mutation(saveLead(),LeadService.method.qualifyLead);
+   await leadCard.getByRole("button",{name:"Создать сделку",exact:true}).click();
+   await selectPagedPicker(page,"Клиент",accountId,"account");
+   await page.getByLabel("Воронка",{exact:true}).selectOption(newPipelineId);
+   const stageOptions=page.getByLabel("Этап",{exact:true}).locator("option");
+   await expect(stageOptions.nth(1)).toBeAttached();
+   const leadStage=await stageOptions.nth(1).getAttribute("value");
+   assert.ok(leadStage);
+   await page.getByLabel("Этап",{exact:true}).selectOption(leadStage);
+   await mutation(saveLead(),LeadService.method.convertLead);
+   await reloadDocument();
+   await leadCard.getByRole("button",{name:"История лида",exact:true}).click();
+   await expect(page.getByText("Квалифицирован — Browser confirmed need",{exact:true})).toBeVisible();
+   await leadCard.getByRole("link",{name:"Открыть сделку",exact:true}).click();
+   await page.getByRole("heading",{name:"Карточка сделки",exact:true}).waitFor();
+   checkpoint("S0-03 Lead create, qualify, convert and history after reload");
 
    restoreViewer=await beforeViewer();
    const denied=await browser.newContext({extraHTTPHeaders:viewerHeaders});

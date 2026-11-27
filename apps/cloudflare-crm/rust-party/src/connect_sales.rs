@@ -62,6 +62,7 @@ mod consent_handlers;
 mod contact_handlers;
 mod identity_handlers;
 mod interaction_handlers;
+mod lead_handlers;
 mod member_handlers;
 mod overview_handlers;
 mod party_handlers;
@@ -910,6 +911,7 @@ impl ConsentV2Service {
 // Sales v2 wraps the EXISTING crm-sales aggregate, D1 persistence and atomic
 // sales->activities delivery. Neither generated wire nor React implements
 // Deal transitions, price rounding, CAS or new business policy.
+#[derive(Clone)]
 struct SalesV2Service {
     env: Arc<Env>,
     tenant: String,
@@ -1644,6 +1646,13 @@ pub(super) fn router(
     let env = Arc::new(env);
     let tenant = &verified.tenant;
     let actor = &verified.identity;
+    let sales = SalesV2Service {
+        env: Arc::clone(&env),
+        tenant: tenant.to_owned(),
+        actor: actor.to_owned(),
+        admin: verified.role == "admin",
+        request_id: request_id.to_owned(),
+    };
     ServiceRegistry {
         router: ConnectRouter::new(),
         owners,
@@ -1724,13 +1733,8 @@ pub(super) fn router(
         actor: verified.clone(),
         request_id: request_id.to_owned(),
     }))
-    .add_service(Arc::new(SalesV2Service {
-        env: Arc::clone(&env),
-        tenant: tenant.to_owned(),
-        actor: actor.to_owned(),
-        admin: verified.role == "admin",
-        request_id: request_id.to_owned(),
-    }))
+    .add_service(Arc::new(sales.clone()))
+    .add_service(Arc::new(lead_handlers::LeadV2Service(sales)))
     .router
 }
 

@@ -1432,6 +1432,56 @@ fn closed_outcome_metric(
     }
 }
 
+pub(super) fn deal_create_input(
+    input: sale_wire::CreateDealRequest,
+) -> std::result::Result<sales_deals::CreateInput, ConnectError> {
+    let id = SalesV2Service::id(&input.deal_id)?;
+    let stage = input
+        .stage
+        .as_option()
+        .ok_or_else(|| ConnectError::invalid_argument("stage required"))?;
+    let (pipeline_id, stage_id) = SalesV2Service::stage(stage);
+    let probability_bps = input
+        .probability_basis_points
+        .map(|value| {
+            u16::try_from(value)
+                .map_err(|_| ConnectError::invalid_argument("invalid probability basis points"))
+        })
+        .transpose()?;
+    let forecast_category =
+        SalesV2Service::forecast_category(input.forecast_category)?.unwrap_or_default();
+    let (amount_minor_units, currency) = match input.amount.as_option() {
+        Some(money) => (Some(money.minor_units), Some(money.currency_code.clone())),
+        None => (None, None),
+    };
+    Ok(sales_deals::CreateInput {
+        id,
+        name: input.name,
+        account_id: input.account_id,
+        owner: SalesV2Service::owner_scope(input.owner.as_option())?,
+        automatic_routing: input.automatic_routing.as_option().map(|routing| {
+            sales_routing::AutomaticRouting {
+                territory_id: routing.territory_id.clone(),
+                expected_decision: routing.expected_decision.clone(),
+            }
+        }),
+        pipeline_id,
+        stage_id,
+        probability_bps,
+        forecast_category,
+        amount_minor_units,
+        currency,
+        primary_contact_id: input.primary_contact_id,
+        expected_close_date: input.expected_close_date.as_option().map(|d| {
+            sales_deals::DateInput {
+                year: d.year,
+                month: d.month,
+                day: d.day,
+            }
+        }),
+    })
+}
+
 impl sale_wire::DealService for SalesV2Service {
     #[worker::send]
     async fn get_sales_portfolio(
@@ -2988,54 +3038,10 @@ impl sale_wire::DealService for SalesV2Service {
         req: ServiceRequest<'_, sale_wire::CreateDealRequest>,
     ) -> ServiceResult<sale_wire::CreateDealResponse> {
         let input = req.to_owned_message();
-        let id = Self::id(&input.deal_id)?;
         let (key, _) = wire_precondition(input.precondition.as_option(), true)?;
-        let stage = input
-            .stage
-            .as_option()
-            .ok_or_else(|| ConnectError::invalid_argument("stage required"))?;
-        let (pipeline_id, stage_id) = Self::stage(stage);
-        let probability_bps = input
-            .probability_basis_points
-            .map(|value| {
-                u16::try_from(value)
-                    .map_err(|_| ConnectError::invalid_argument("invalid probability basis points"))
-            })
-            .transpose()?;
-        let forecast_category =
-            Self::forecast_category(input.forecast_category)?.unwrap_or_default();
-        let (amount_minor_units, currency) = match input.amount.as_option() {
-            Some(money) => (Some(money.minor_units), Some(money.currency_code.clone())),
-            None => (None, None),
-        };
         let db = self.d1()?;
         let saved = sales_deals::create_typed(
-            sales_deals::CreateInput {
-                id,
-                name: input.name,
-                account_id: input.account_id,
-                owner: Self::owner_scope(input.owner.as_option())?,
-                automatic_routing: input.automatic_routing.as_option().map(|routing| {
-                    sales_routing::AutomaticRouting {
-                        territory_id: routing.territory_id.clone(),
-                        expected_decision: routing.expected_decision.clone(),
-                    }
-                }),
-                pipeline_id,
-                stage_id,
-                probability_bps,
-                forecast_category,
-                amount_minor_units,
-                currency,
-                primary_contact_id: input.primary_contact_id,
-                expected_close_date: input.expected_close_date.as_option().map(|d| {
-                    sales_deals::DateInput {
-                        year: d.year,
-                        month: d.month,
-                        day: d.day,
-                    }
-                }),
-            },
+            deal_create_input(input)?,
             &key,
             &db,
             &self.tenant,

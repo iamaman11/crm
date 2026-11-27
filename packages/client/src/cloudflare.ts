@@ -12,6 +12,7 @@ import { AutomationService } from "../gen/crm/activities/v2/automation_pb";
 import { DataQualityService } from "../gen/crm/data_quality/v2/quality_pb";
 import { IdentityResolutionService } from "../gen/crm/identity_resolution/v2/identity_pb";
 import { ConsentAuthorizationService } from "../gen/crm/consents/v2/consent_pb";
+import { LeadService } from "../gen/crm/sales/v2/lead_pb";
 import { DealService as DealServiceV2 } from "../gen/crm/sales/v2/deal_pb";
 
 import { PrivacyCaseService } from "../gen/crm/customer_privacy/v2/case_pb";
@@ -28,6 +29,8 @@ export type { Member, Team } from "../gen/crm/access/v2/member_pb";
 export type { Interaction } from "../gen/crm/activities/v2/interaction_pb";
 export type { AutomationRule, AutomationRun } from "../gen/crm/activities/v2/automation_pb";
 export { AutomationTrigger, AutomationRunStatus, AutomationRunDisposition } from "../gen/crm/activities/v2/automation_pb";
+export type { Lead } from "../gen/crm/sales/v2/lead_pb";
+export { LeadStatus } from "../gen/crm/sales/v2/lead_pb";
 export type { Deal, DealCapabilities, OpportunityParticipant } from "../gen/crm/sales/v2/deal_pb";
 export { OpportunityTeamRole } from "../gen/crm/sales/v2/deal_pb";
 export type { SalesQuota, SalesQuotaConfiguration, SalesQuotaScope, SalesQuotaFactCursor, GetSalesQuotaPerformanceResponse } from "../gen/crm/sales/v2/deal_pb";
@@ -75,6 +78,7 @@ export function createCloudflareCrmClient(baseUrl: string) {
     dataQuality: createClient(DataQualityService, transport),
     identityResolution: createClient(IdentityResolutionService, transport),
     consents: createClient(ConsentAuthorizationService, transport),
+    leads: createClient(LeadService, transport),
     deals: createClient(DealServiceV2, transport),
     privacy: createClient(PrivacyCaseService, transport),
     enrichment: createClient(EnrichmentConfigurationService, transport),

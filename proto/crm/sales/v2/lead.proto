@@ -1,0 +1,141 @@
+syntax = "proto3";
+
+package crm.sales.v2;
+
+import "crm/core/v2/operation.proto";
+import "crm/sales/v2/deal.proto";
+import "google/protobuf/timestamp.proto";
+
+enum LeadStatus {
+  LEAD_STATUS_UNSPECIFIED = 0;
+  LEAD_STATUS_NEW = 1;
+  LEAD_STATUS_QUALIFIED = 2;
+  LEAD_STATUS_REJECTED = 3;
+  LEAD_STATUS_CONVERTED = 4;
+}
+
+message Lead {
+  string lead_id = 1;
+  string original_party_id = 2;
+  string name = 3;
+  LeadStatus status = 4;
+  string reason = 5;
+  string deal_id = 6;
+  int64 version = 7;
+}
+
+message LeadCapabilities {
+  bool qualify = 1;
+  bool reject = 2;
+  bool convert = 3;
+}
+
+message LeadEntry {
+  Lead lead = 1;
+  LeadCapabilities capabilities = 2;
+}
+
+message CreateLeadRequest {
+  string lead_id = 1;
+  string party_id = 2;
+  string name = 3;
+  crm.core.v2.MutationPrecondition precondition = 4;
+}
+
+message CreateLeadResponse {
+  Lead lead = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+message GetLeadRequest {
+  string lead_id = 1;
+  optional string receipt_idempotency_key = 2;
+}
+
+message GetLeadResponse {
+  LeadEntry entry = 1;
+  crm.core.v2.MutationCommitEvidence confirmed_mutation = 2;
+}
+
+message ListLeadsRequest {
+  crm.core.v2.PageRequest page = 1;
+}
+
+message ListLeadsResponse {
+  repeated LeadEntry entries = 1;
+  crm.core.v2.PageInfo page_info = 2;
+  bool can_create = 3;
+}
+
+message QualifyLeadRequest {
+  string lead_id = 1;
+  string reason = 2;
+  crm.core.v2.MutationPrecondition precondition = 3;
+}
+
+message QualifyLeadResponse {
+  Lead lead = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+message RejectLeadRequest {
+  string lead_id = 1;
+  string reason = 2;
+  crm.core.v2.MutationPrecondition precondition = 3;
+}
+
+message RejectLeadResponse {
+  Lead lead = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+message ConvertLeadRequest {
+  string lead_id = 1;
+  // Standard Deal fields and routing. The nested precondition must be omitted;
+  // the outer precondition governs both writes as one operation.
+  CreateDealRequest deal = 2;
+  crm.core.v2.MutationPrecondition precondition = 3;
+}
+
+message ConvertLeadResponse {
+  Lead lead = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+message ListLeadEventsRequest {
+  string lead_id = 1;
+}
+
+message LeadEvent {
+  Lead snapshot = 1;
+  string request_id = 2;
+  google.protobuf.Timestamp occurred_at = 3;
+}
+
+message ListLeadEventsResponse {
+  repeated LeadEvent events = 1;
+}
+
+service LeadService {
+  rpc CreateLead(CreateLeadRequest) returns (CreateLeadResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc GetLead(GetLeadRequest) returns (GetLeadResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListLeads(ListLeadsRequest) returns (ListLeadsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc QualifyLead(QualifyLeadRequest) returns (QualifyLeadResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc RejectLead(RejectLeadRequest) returns (RejectLeadResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc ConvertLead(ConvertLeadRequest) returns (ConvertLeadResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc ListLeadEvents(ListLeadEventsRequest) returns (ListLeadEventsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}

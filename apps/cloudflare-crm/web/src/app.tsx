@@ -11,6 +11,7 @@ import {AutomationScreen} from "./AutomationScreen";
 import {MemberScreen} from "./MemberScreen";
 import {WorkdayScreen} from "./WorkdayScreen";
 import {IntelligenceScreen} from "./IntelligenceScreen";
+import {LeadScreen} from "./LeadScreen";
 import {SalesScreen} from "./SalesScreen";
 import {ConsentScreen} from "./ConsentScreen";
 import {ReviewScreen} from "./ReviewScreen";
@@ -56,6 +57,7 @@ function App() {
       initialOverdue={route.overdue??false}
       initialAssigneeEmail={route.assigneeEmail??""} initialMine={route.mine??false} initialTeamId={route.teamId??""}/>:
     route.screen==="team"?<MemberScreen key={route.reportId??""} reportId={route.reportId??""} scorecard={route.scorecard}/>:
+    route.screen==="leads"?<LeadScreen/>:
     route.screen==="sales"?<SalesScreen
       initialAccountId={route.accountId} initialSearch={route.search??""}
       initialViewId={route.viewId??""} initialPipelineId={route.pipelineId??""} initialOwner={route.owner??""}/>:

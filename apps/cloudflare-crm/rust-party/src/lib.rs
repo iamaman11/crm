@@ -55,6 +55,8 @@ mod sales_contract;
 #[cfg(feature = "native")]
 mod sales_deals;
 #[cfg(feature = "native")]
+mod sales_leads;
+#[cfg(feature = "native")]
 mod sales_performance;
 #[cfg(feature = "native")]
 mod sales_pipelines;
@@ -1065,6 +1067,48 @@ const RPC_POLICIES: &[(&str, RpcPolicy)] = &[
     ),
     (
         "/crm.sales.v2.DealService/GetSalesPortfolio",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.sales.v2.LeadService/CreateLead",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.sales.v2.LeadService/GetLead",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.sales.v2.LeadService/ListLeads",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.sales.v2.LeadService/QualifyLead",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.sales.v2.LeadService/RejectLead",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.sales.v2.LeadService/ConvertLead",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.sales.v2.LeadService/ListLeadEvents",
         RpcPolicy {
             permission: RpcPermission::Read,
         },

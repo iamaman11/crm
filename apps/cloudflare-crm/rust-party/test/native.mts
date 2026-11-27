@@ -25,6 +25,7 @@ import {typedBrowser} from "./typed-browser.mts";
 import {fixtureRpc,fixtureRpcError,collectFixturePages} from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
 import {DealService} from "../../../../packages/client/gen/crm/sales/v2/deal_pb.js";
 import {number} from "../../scripts/json-boundary.mts";
+import {verifySalesLeads} from "./sales-leads.mts";
 import {verifySalesCreate} from "./sales-create.mts";
 import {verifySalesUpdate} from "./sales-update.mts";
 import {verifySalesPages} from "./sales-pages.mts";
@@ -256,5 +257,6 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='te
  await verifySalesCommercial({dispatch:rpcFetch,sql,statement,batch,accountId,admin,viewer,tenantB});
  await verifyLifecycle({dispatch:rpcFetch,sql,jwt,accountId,admin,viewer,tenantB});
  await verifyAutomation({dispatch:rpcFetch,sql,accountId,admin,viewer,tenantB});
+ await verifySalesLeads({dispatch:rpcFetch,sql,admin,viewer,tenantB});
 
 });
