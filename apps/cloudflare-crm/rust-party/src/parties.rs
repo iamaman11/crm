@@ -243,7 +243,9 @@ pub(super) async fn register_import_source(
             }
             let source = import_source_by_id(db, tenant, source_id)
                 .await?
-                .ok_or_else(|| worker::Error::RustError("CSV source receipt target missing".into()))?;
+                .ok_or_else(|| {
+                    worker::Error::RustError("CSV source receipt target missing".into())
+                })?;
             return Ok(Ok((
                 source,
                 ImportSaved {

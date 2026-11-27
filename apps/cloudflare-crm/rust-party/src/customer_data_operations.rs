@@ -610,7 +610,9 @@ pub(super) async fn register_import_source(
     requested_name: &str,
     operation_key: &str,
     trace: &str,
-) -> Result<std::result::Result<(parties::ImportSource, parties::ImportSaved), parties::MutationFailure>> {
+) -> Result<
+    std::result::Result<(parties::ImportSource, parties::ImportSaved), parties::MutationFailure>,
+> {
     let display_name = requested_name.trim().to_owned();
     if display_name.is_empty()
         || display_name.len() > 240
