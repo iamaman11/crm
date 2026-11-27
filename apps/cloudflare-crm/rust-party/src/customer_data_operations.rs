@@ -2,8 +2,8 @@
 //! crm-customer-data-operations scope/profile/specification/CSV functions.
 //! One signed Access tenant, one original Party D1 owner; NO shadow export
 //! business rules, persisted export job, file store or background service.
-use super::{access, bind, parties};
 pub(super) use super::parties::SourceImportProof as ImportProof;
+use super::{access, bind, parties};
 use crm_customer_data_operations::{
     CreateImportRow, ExternalPartyIdentifierDigest, ImportJobId, ImportParserProfile, ImportRow,
     PartyImportKind, PartyImportMapping, PreparedPartyRow, RowDiagnostic, SourceSystemId,
