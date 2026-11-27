@@ -704,7 +704,7 @@ pub(super) async fn import_source_batch(
     Ok(Ok(ImportSaved {
         created,
         replayed,
-        operation_replayed: replayed > 0,
+        operation_replayed: false,
         original_request_id: trace.to_owned(),
     }))
 }

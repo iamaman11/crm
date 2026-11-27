@@ -98,9 +98,9 @@ export function DataScreen() {
         {sources.map(source=><option key={source.sourceId} value={source.sourceId}>{source.displayName}</option>)}
       </SelectField>
       <TextField label="Название нового источника" value={sourceName}
-        disabled={sourceBusy||mutation.busy||mutation.pending}
+        disabled={sourceBusy||previewBusy||mutation.busy||mutation.pending}
         onChange={e=>{setSourceName(e.target.value);mutation.changed();}}/>
-      <p><Button disabled={!sourceName.trim()||sourceBusy||mutation.busy||mutation.pending} onClick={async()=>{
+      <p><Button disabled={!sourceName.trim()||sourceBusy||previewBusy||mutation.busy||mutation.pending} onClick={async()=>{
         setSourceBusy(true);setSourceError("");
         try {
           const registered=await api.csv.registerPartyImportSource({
@@ -116,7 +116,7 @@ export function DataScreen() {
         } finally {setSourceBusy(false);}
       }}>Добавить источник</Button></p>
       {sourceError&&<FeedbackPanel tone="danger" title={sourceError}/>}
-      <TextField key={fileInputRevision} label="CSV-файл" type="file" accept=".csv,text/csv" disabled={mutation.busy||mutation.pending||previewBusy} onChange={async e=>{
+      <TextField key={fileInputRevision} label="CSV-файл" type="file" accept=".csv,text/csv" disabled={mutation.busy||mutation.pending||previewBusy||sourceBusy} onChange={async e=>{
         const file=e.target.files?.[0],revision=++fileRevision.current;
         setBytes(undefined);setPreview(undefined);setPreviewBusy(false);
         setFileError("");mutation.changed();
@@ -133,7 +133,7 @@ export function DataScreen() {
       <p>Простой CSV: две колонки <code>kind,display_name</code>. Тип: <code>person</code> для человека или <code>organization</code> для организации. Существующий формат с четырьмя колонками <code>party_id,kind,display_name,resource_version</code> тоже поддерживается.</p>
       <p><a download="crm-parties-template.csv" href={"data:text/csv;charset=utf-8,"+encodeURIComponent("kind,display_name\r\nperson,Пример человека\r\norganization,Пример организации\r\n")}>Скачать простой шаблон CSV</a></p>
       <p>Файл UTF-8, до 20 строк и 16 КиБ. Без источника действует прежний create-only импорт. С выбранным источником нужен четырёхколоночный файл: CRM сопоставит внешний ID, найдёт прежнего участника и покажет расхождения до записи.</p>
-      <Button disabled={!bytes||previewBusy||mutation.busy||mutation.pending} onClick={async()=>{
+      <Button disabled={!bytes||previewBusy||sourceBusy||mutation.busy||mutation.pending} onClick={async()=>{
         if(!bytes)return;
         const revision=fileRevision.current,selectedBytes=bytes;
         setPreviewBusy(true);setFileError("");
@@ -161,7 +161,7 @@ export function DataScreen() {
           </li>)}</ol>
         </section>:<>
           <details><summary>{sourceId?"ID участников (новые и найденные)":"Создаваемые ID"}</summary><ul>{preview.targetPartyIds.map(id=><li key={id}>{id}</li>)}</ul></details>
-          <p><Button disabled={mutation.busy||mutation.pending||!bytes} onClick={()=>void mutation.runIntent(()=>{
+          <p><Button disabled={mutation.busy||mutation.pending||sourceBusy||!bytes} onClick={()=>void mutation.runIntent(()=>{
             if(!bytes)throw Error("Выберите файл");
             return prepareMutation(api.csv.applyPartyImport,{
               csv:bytes,sourceId:sourceId||undefined,
