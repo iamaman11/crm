@@ -20,6 +20,8 @@ type CsvFixture = {
  unknownService: string;
 };
 
+// Source identity regression coverage: stable reimports, mixed conflicts, tenant isolation,
+// stale previews, concurrent Apply, receipt recovery and atomic workerd/D1 rollback.
 export async function verifyPartyCsv({dispatch,rpcFetch,sql,partySnapshot,admin,viewer,tenantB,knownService,unknownService}: CsvFixture) {
  const methods=PartyCsvService.method;
  const parties=PartyService.method;
@@ -517,7 +519,8 @@ export async function verifyPartyCsv({dispatch,rpcFetch,sql,partySnapshot,admin,
  assert.equal(rollbackSourceRetry.status,200,formatRpcFailure(rollbackSourceRetry));
  assert.equal(rollbackSourceRetry.body.createdCount,2);
  assert.equal(await count("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' AND action='customer_data.csv_import_identity.bind'"),7);
- assert.equal(await count("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' AND action='customer_data.csv_import_source.register'"),3);
+ // Pilot CRM, Other Pilot, Atomic Receipt Source and Rollback Source are tenant-A sources.
+ assert.equal(await count("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' AND action='customer_data.csv_import_source.register'"),4);
  assert.equal(await count("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' AND subject_id IN ('source-ext-1','source-ext-2','source-ext-3','stale-ext','concurrent-ext','rollback-ext-1','rollback-ext-2')"),0);
  console.log(JSON.stringify({event:"crm.native-party-csv-source-identity",result:"PASS",
    source_registry:true,stable_external_id:true,changed_bytes:true,mixed_new_and_known:true,
