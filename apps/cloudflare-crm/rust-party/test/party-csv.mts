@@ -385,7 +385,10 @@ export async function verifyPartyCsv({dispatch,rpcFetch,sql,partySnapshot,admin,
  assert.equal(await count("SELECT COUNT(*) AS n FROM crm_party_import_receipts WHERE key='csv-source-mixed-conflict-denied'"),0);
 
  // A different source and a different tenant never inherit this source's mapping.
- const secondSource=await fixtureRpc(dispatch,methods.registerPartyImportSource,admin,{displayName:"Other Pilot"});
+ const secondSource=await fixtureRpc(dispatch,methods.registerPartyImportSource,admin,{
+   displayName:"Other Pilot",precondition:{idempotencyKey:"csv-source-other-source"}
+ });
+ assert.equal(secondSource.body.receipt?.replayed,false);
  const secondSourceId=secondSource.body.source?.sourceId;
  assert.ok(typeof secondSourceId==="string"&&secondSourceId!==sourceId);
  const independent=await fixtureRpc(dispatch,methods.previewPartyImport,admin,{
@@ -394,7 +397,10 @@ export async function verifyPartyCsv({dispatch,rpcFetch,sql,partySnapshot,admin,
  });
  assert.equal(independent.body.newCount,1);
  assert.notEqual(independent.body.targetPartyIds[0],sourceIds1[0]);
- const tenantBSource=await fixtureRpc(dispatch,methods.registerPartyImportSource,tenantB,{displayName:"Pilot CRM"});
+ const tenantBSource=await fixtureRpc(dispatch,methods.registerPartyImportSource,tenantB,{
+   displayName:"Pilot CRM",precondition:{idempotencyKey:"csv-source-tenant-b"}
+ });
+ assert.equal(tenantBSource.body.receipt?.replayed,false);
  const tenantBSourceId=tenantBSource.body.source?.sourceId;
  assert.ok(typeof tenantBSourceId==="string"&&tenantBSourceId!==sourceId);
  const tenantBPreview=await fixtureRpc(dispatch,methods.previewPartyImport,tenantB,{
@@ -476,7 +482,10 @@ export async function verifyPartyCsv({dispatch,rpcFetch,sql,partySnapshot,admin,
    sourceId+"' AND external_id_sha256='"+concurrentDigest+"'"),1);
 
  // A late identity-row failure rolls back Party, identity, receipt and audit together.
- const rollbackSource=await fixtureRpc(dispatch,methods.registerPartyImportSource,admin,{displayName:"Rollback Source"});
+ const rollbackSource=await fixtureRpc(dispatch,methods.registerPartyImportSource,admin,{
+   displayName:"Rollback Source",precondition:{idempotencyKey:"csv-source-rollback"}
+ });
+ assert.equal(rollbackSource.body.receipt?.replayed,false);
  const rollbackSourceId=rollbackSource.body.source?.sourceId;
  assert.ok(typeof rollbackSourceId==="string");
  const rollbackSourceCsv=new TextEncoder().encode(
