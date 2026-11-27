@@ -8,6 +8,12 @@ on:
     paths-ignore:
       - '*.md'
       - '**/*.md'
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Exact 40-character HEAD SHA of the selected integration branch.
+        required: true
+        type: string
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
@@ -25,6 +31,27 @@ jobs:
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0 # JSON packet policy checks Git paths; no Markdown inputs
+      - name: Validate exact manual integration candidate
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          EXPECTED_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          SELECTED_REF: ${{ github.ref }}
+          SELECTED_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$SELECTED_REF" in
+            refs/heads/integration/parallel/*) ;;
+            *) echo "Manual preflight requires integration/parallel/* branch" >&2; exit 1 ;;
+          esac
+          [[ "$EXPECTED_CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "candidate_sha must be a full 40-character commit SHA" >&2
+            exit 1
+          }
+          [[ "$EXPECTED_CANDIDATE_SHA" == "$SELECTED_SHA" ]] || {
+            echo "Selected branch HEAD differs from candidate_sha" >&2
+            exit 1
+          }
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '26.13.1'
@@ -42,28 +69,33 @@ jobs:
           python scripts/check_ci_event_policy.py
           python -m unittest tests.test_ci_event_policy
           python scripts/check_action_pinning.py
-          node --check apps/cloudflare-crm/rust-party/test/native.mjs
-          node --check apps/cloudflare-crm/rust-party/test/typed-browser.mjs
-          node --check apps/cloudflare-crm/rust-party/test/ui-diagnostics.mjs
-          node --check apps/cloudflare-crm/e2e/live.mjs
-          node --check apps/cloudflare-crm/e2e/published-smoke.mjs
-          node --check apps/cloudflare-crm/scripts/deploy.mjs
+          node --check apps/cloudflare-crm/rust-party/test/native.mts
+          node --check apps/cloudflare-crm/e2e/live.mts
+          node --check apps/cloudflare-crm/e2e/published-smoke.mts
+          node --check apps/cloudflare-crm/scripts/deploy.mts
       - name: Verify Python governance and affected-scope tests using declared dependencies
         env:
           PUSH_BEFORE: ${{ github.event.before }}
         shell: bash
         run: |
           set -euo pipefail
-          python -m pip install --disable-pip-version-check --requirement requirements-dev.txt
-          python -m pip check
+          TIMEFORMAT='crm.governance pip-install elapsed_seconds=%3R'
+          # Install only active governance dependencies; keep the existing pinned
+          # versions as constraints. Historical Python tools retain their dev requirements.
+          time python -m pip install --disable-pip-version-check --constraint requirements-dev.txt jsonschema ruamel.yaml
+          TIMEFORMAT='crm.governance pip-check elapsed_seconds=%3R'
+          time python -m pip check
           # Machine-readable policies, executable schemas, contracts and owners.
           # Product documentation and status live in GitHub Issues, not .md.
-          python -m unittest tests.test_affected_scope tests.test_crm_module_coverage
-          python scripts/repo.py packet-check --base origin/dev --before "$PUSH_BEFORE"
-          python scripts/crm-module-coverage.py --output /tmp/crm-module-coverage.json
+          TIMEFORMAT='crm.governance unit-tests elapsed_seconds=%3R'
+          time python -m unittest tests.test_affected_scope tests.test_crm_module_coverage tests.test_module_manifest_validation
+          TIMEFORMAT='crm.governance packet-check elapsed_seconds=%3R'
+          time python scripts/repo.py packet-check --base origin/dev --before "$PUSH_BEFORE"
+          TIMEFORMAT='crm.governance module-coverage elapsed_seconds=%3R'
+          time python scripts/crm-module-coverage.py --output /tmp/crm-module-coverage.json
           echo "CRM_MODULE_COVERAGE_REPORT=/tmp/crm-module-coverage.json" >> "$GITHUB_ENV"
           CRM_MODULE_COVERAGE_REPORT=/tmp/crm-module-coverage.json \
-            node apps/cloudflare-crm/scripts/architecture-gate.mjs
+            node apps/cloudflare-crm/scripts/architecture-gate.mts
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # pinned existing Rust CI
         with:
           toolchain: 1.100.0
@@ -75,7 +107,23 @@ jobs:
           cargo --version | grep -F "cargo 1.100.0 "
           set -euo pipefail
           cargo fmt --all -- --check
-          cargo fmt --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml -- --check
+          cargo fmt --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml --all -- --check
+      - name: Install pinned shared contract toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --global pnpm@12.21.0
+          pnpm --version | grep -Fx '12.21.0'
+          pnpm install --frozen-lockfile
+      # Reject contract and frontend changes before restoring the large Cargo cache.
+      - name: Validate typed schema and frontend
+        env:
+          CRM_PROTO_DESCRIPTOR_FILE: /tmp/crm-proto-descriptors.binpb
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm web:check
+          git diff --exit-code -- pnpm-lock.yaml
       # The Mozilla compiler cache reuses Rust object results across source SHA changes.
       # Cargo still checks fingerprints and compiles changed sources and native feature graphs.
       - name: Install pinned sccache for Rust compilation
@@ -90,6 +138,55 @@ jobs:
           echo 'SCCACHE_GHA_ENABLED=true' >> "$GITHUB_ENV"
           echo "RUSTC_WRAPPER=$SCCACHE_PATH" >> "$GITHUB_ENV"
           "$SCCACHE_PATH" --version
+      # Cargo unpacks registry/cache and git/db on demand. Keep compiled dependencies
+      # and fingerprints, but avoid transferring a second copy of dependency sources.
+      - name: Restore Cargo compilation cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+            apps/cloudflare-crm/rust-party/target
+          # The owner test plan can add host build outputs to this immutable cache.
+          # Ordinary source edits still use Cargo fingerprints and sccache.
+          key: ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}-${{ hashFiles('Cargo.toml', 'apps/cloudflare-crm/rust-party/Cargo.toml', 'apps/cloudflare-crm/rust-party/connect-contracts/Cargo.toml', 'crates/*/Cargo.toml', 'modules/*/Cargo.toml') }}-${{ hashFiles('proto/**/*.proto', 'apps/cloudflare-crm/active-proto-versions.json', 'apps/cloudflare-crm/rust-party/connect-contracts/build.rs', 'crates/crm-proto-contracts/build.rs') }}-${{ hashFiles('apps/cloudflare-crm/scripts/test-rust-owners.mts') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}-${{ hashFiles('Cargo.toml', 'apps/cloudflare-crm/rust-party/Cargo.toml', 'apps/cloudflare-crm/rust-party/connect-contracts/Cargo.toml', 'crates/*/Cargo.toml', 'modules/*/Cargo.toml') }}-${{ hashFiles('proto/**/*.proto', 'apps/cloudflare-crm/active-proto-versions.json', 'apps/cloudflare-crm/rust-party/connect-contracts/build.rs', 'crates/crm-proto-contracts/build.rs') }}
+            ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}-${{ hashFiles('Cargo.toml', 'apps/cloudflare-crm/rust-party/Cargo.toml', 'apps/cloudflare-crm/rust-party/connect-contracts/Cargo.toml', 'crates/*/Cargo.toml', 'modules/*/Cargo.toml') }}-
+            ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}-
+            ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}
+            ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-
+      # Measure before changing Cargo's native target/build cache layout.
+      - name: Measure restored Cargo cache components
+        shell: bash
+        run: |
+          set -euo pipefail
+          paths=(
+            "$HOME/.cargo/registry/index"
+            "$HOME/.cargo/registry/cache"
+            "$HOME/.cargo/git/db"
+            target
+            target/debug/deps
+            target/debug/build
+            target/debug/incremental
+            target/wasm32-unknown-unknown/debug/deps
+            target/wasm32-unknown-unknown/debug/build
+            target/wasm32-unknown-unknown/release/deps
+            target/wasm32-unknown-unknown/release/build
+            apps/cloudflare-crm/rust-party/target
+            apps/cloudflare-crm/rust-party/target/debug/deps
+            apps/cloudflare-crm/rust-party/target/debug/build
+            apps/cloudflare-crm/rust-party/target/wasm32-unknown-unknown/debug/deps
+            apps/cloudflare-crm/rust-party/target/wasm32-unknown-unknown/release/deps
+          )
+          for path in "${paths[@]}"; do
+            if [ -e "$path" ]; then
+              bytes=$(du -sb "$path" | cut -f1)
+              printf '{"event":"crm.cargo-cache-size","path":"%s","bytes":%s}\n' "$path" "$bytes"
+            fi
+          done
       # The scanner is pinned independently of application dependencies.
       # Cache only its executable, not a security result: every run still
       # evaluates both the root and Worker Cargo.lock files from this SHA.
@@ -113,45 +210,13 @@ jobs:
           "$deny" --locked --config deny.toml --target x86_64-unknown-linux-gnu --target x86_64-pc-windows-msvc check --show-stats
           (cd apps/cloudflare-crm/rust-party && "$deny" --locked --config "$GITHUB_WORKSPACE/deny.toml" --target wasm32-unknown-unknown check --show-stats)
           echo "CRM_ROOT_AND_WORKER_DEPENDENCY_SECURITY=PASS"
-      # Fail before the expensive WASM pipeline if the shared contract breaks.
-      # The repo's existing frozen workspace provides Buf, Protobuf-ES, and TS.
-      - name: Install pinned shared contract toolchain
+      # Keep Clippy after Buf/TypeScript to avoid runner process exhaustion.
+      - name: Check Worker with WASM Clippy
         shell: bash
         run: |
           set -euo pipefail
-          npm install --global pnpm@12.21.0
-          pnpm --version | grep -Fx '12.21.0'
-          pnpm install --frozen-lockfile
-      # Cargo unpacks registry/cache and git/db on demand. Keep compiled dependencies
-      # and fingerprints, but avoid transferring a second copy of dependency sources.
-      - name: Restore Cargo compilation cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            target
-            apps/cloudflare-crm/rust-party/target
-          key: ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-
-      # Report actual compiler-cache hits/misses, rather than assuming cache speedup.
-      # The Mozilla action also emits end-of-job statistics for the complete job.
-      # Clippy checks WASM compilation, so a separate cargo check repeats the work.
-      # The parallel pnpm codegen/tsc + Rust compilation occasionally exhausts
-      # GitHub runner process slots (EAGAIN/os error 11), wasting entire heavy
-      # attempts. Run the cheaper contract/frontend gate first, then Clippy
-      # within the SAME job; no duplicate CI, checker or compilation.
-      - name: Validate typed schema and frontend, then WASM Clippy
-        env:
-          CRM_PROTO_DESCRIPTOR_FILE: /tmp/crm-proto-descriptors.binpb
-        shell: bash
-        run: |
-          set -euo pipefail
-          pnpm web:check
-          git diff --exit-code -- pnpm-lock.yaml
-          cargo clippy --jobs 2 --locked --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml --target wasm32-unknown-unknown --features native -- -D clippy::all -D unfulfilled_lint_expectations
+          # Use the same upstream async wasm-bindgen codegen mode as worker-build 0.9.0.
+          WASM_BINDGEN_USE_JS_SYS=1 cargo clippy --jobs 3 --locked --workspace --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml --target wasm32-unknown-unknown --features native -- -D clippy::all -D unfulfilled_lint_expectations
       # Installer binaries are cached separately from Cargo compilation outputs.
       - name: Cache pinned native Rust tool CLIs
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -188,12 +253,17 @@ jobs:
       - name: Build the test Worker, run Rust owner tests and prepare Chromium
         env:
           CARGO_PROFILE_TEST_DEBUG: line-tables-only
+          RUST_LOG: worker_build::build=info
         working-directory: apps/cloudflare-crm
         shell: bash
         run: |
-          (cd rust-party && worker-build --dev --locked --features native-ci) &
+          # Cargo's own HTML report; no second compilation or custom profiler.
+          mkdir -p "$RUNNER_TEMP/crm-cargo-timings"
+          rm -f rust-party/target/cargo-timings/cargo-timing.html
+          (cd rust-party && worker-build --dev --locked --features native-ci --timings &&
+            cp target/cargo-timings/cargo-timing.html "$RUNNER_TEMP/crm-cargo-timings/native-ci.html") &
           worker_pid=$!
-          (cd "$GITHUB_WORKSPACE" && python apps/cloudflare-crm/scripts/test-rust-owners.py) &
+          (cd "$GITHUB_WORKSPACE" && node apps/cloudflare-crm/scripts/test-rust-owners.mts) &
           owners_pid=$!
           status=0
           bash scripts/prepare-chromium.sh || status=$?
@@ -204,17 +274,32 @@ jobs:
         id: crm_native_workerd
         working-directory: apps/cloudflare-crm
         env:
+          RUST_LOG: worker_build::build=info
           CRM_SOURCE_SHA: ${{ github.sha }}
           CRM_RPC_RUNTIME_PROOF: /tmp/crm-rpc-runtime.json
         shell: bash
         run: |
           # Workerd reads the completed native-ci build. The release has its own output directory.
-          (cd rust-party && worker-build --release --out-dir ../.release/native-build --locked --features native) &
+          # Three Cargo jobs is the measured best on this 4-vCPU runner: four slowed the
+          # release, test build, and concurrent workerd/Chromium compared with three.
+          echo "CRM_RUNNER_LOGICAL_CPUS=$(nproc)"
+          rm -f rust-party/target/cargo-timings/cargo-timing.html
+          (cd rust-party && CARGO_BUILD_JOBS=3 worker-build --release --out-dir ../.release/native-build --locked --features native --timings &&
+            cp target/cargo-timings/cargo-timing.html "$RUNNER_TEMP/crm-cargo-timings/native-release.html") &
           release_pid=$!
           status=0
-          node rust-party/test/native.mjs || status=$?
+          rm -f "$CRM_RPC_RUNTIME_PROOF"
+          node --test rust-party/test/native.mts || status=$?
           wait "$release_pid" || status=$?
           exit "$status"
+      - name: Preserve Cargo build timing reports
+        if: ${{ always() && steps.crm_native_workerd.outcome != 'skipped' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: crm-cargo-timings-${{ github.sha }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/crm-cargo-timings/*.html
+          if-no-files-found: warn
+          retention-days: 7
       - name: Verify compiled router, executed policy and RPC calls against Buf
         run: |
           set -euo pipefail
@@ -229,7 +314,7 @@ jobs:
             /tmp/crm-module-coverage.json
           if-no-files-found: error
           retention-days: 7
-      - name: Preserve native Rust browser proof and screenshot
+      - name: Preserve native browser acceptance or safe failure evidence
         # No misleading second FAIL when an earlier gate skipped workerd/browser.
         # A successful workerd test without mandatory evidence still fails the
         # explicit "Require actual browser acceptance" step below.
@@ -237,7 +322,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: crm-native-party-proof-${{ github.sha }}-attempt-${{ github.run_attempt }}
-          path: apps/cloudflare-crm/e2e-evidence-native/
+          path: ${{ steps.crm_native_workerd.outcome == 'success' && 'apps/cloudflare-crm/e2e-evidence-native/' || 'apps/cloudflare-crm/e2e-evidence-native/failure.json' }}
           if-no-files-found: warn
           retention-days: 7
       - name: Select the production build for Wrangler verification
@@ -245,6 +330,16 @@ jobs:
         run: |
           mv build "$RUNNER_TEMP/crm-tested-native-ci"
           mv ../.release/native-build build
+      # Prove the production binary can run with the external JWKS provider
+      # intercepted only by Wrangler's Node test harness. Keep all current
+      # native-ci business/compiled-policy proofs until parity is established.
+      - name: Prove signed Access on the existing production WASM artifact
+        working-directory: apps/cloudflare-crm
+        env:
+          CRM_SOURCE_SHA: ${{ github.sha }}
+          CRM_PRODUCTION_ACCESS_PROOF: /tmp/crm-production-access.json
+          CRM_RPC_RUNTIME_PROOF: /tmp/crm-rpc-runtime.json
+        run: node rust-party/test/production-access.mts
       - name: Enforce committed native Worker dependency lock
         run: git diff --exit-code -- apps/cloudflare-crm/rust-party/Cargo.lock
       - name: Dry-run exact native entrypoint upload with original CRM Wrangler configuration
@@ -279,7 +374,7 @@ jobs:
             assert.equal(evidence.source_sha, process.env.GITHUB_SHA);
             assert.deepEqual(evidence.features, ["native-ci"]);
           '
-      - name: Seal exactly tested development bundle
+      - name: Seal runtime-tested source and verified production bundle
         id: seal
         shell: bash
         env:
@@ -314,7 +409,14 @@ jobs:
             const wasmGraph=(features,edges)=>run("cargo",["tree","--locked","--manifest-path",
               "rust-party/Cargo.toml","--target","wasm32-unknown-unknown","--features",features,
               "--edges",edges,"--charset","ascii"]);
+            const productionAccess=JSON.parse(readFileSync("/tmp/crm-production-access.json","utf8"));
+            if(productionAccess.result!=="PASS"||productionAccess.compiled_router_policy_parity!==true||
+              productionAccess.source_sha!==process.env.CRM_BUILD_SHA||
+              productionAccess.artifact.wasm!==hash("rust-party/build/index_bg.wasm")||
+              productionAccess.artifact.entry!==hash("rust-party/build/index.js"))
+              throw Error("production Access proof must match the sealed artifact");
             writeFileSync(".release/provenance.json",JSON.stringify({
+              production_access_probe:productionAccess,
               tested_sha:process.env.CRM_BUILD_SHA,
               tree:run("git",["rev-parse","HEAD^{tree}"]),
               production_features:["native"],runtime_test_features:["native-ci"],
@@ -337,6 +439,12 @@ jobs:
               },
               independent_byte_reproducibility:"NOT_TESTED"
             },null,2)+"\n");
+          '
+          # Log existing measured provenance for direct CI comparisons; no extra build.
+          node --input-type=module -e '
+            import {readFileSync} from "node:fs";
+            const {foundation_baseline:b}=JSON.parse(readFileSync(".release/provenance.json","utf8"));
+            console.log(JSON.stringify({event:"crm.release-size",bytes:b.bytes,gzip9_bytes:b.gzip9_bytes}));
           '
           # Seal the same production directory that passed the Wrangler dry-run.
           find dist rust-party/build -type f -print0 | LC_ALL=C sort -z |
@@ -380,6 +488,14 @@ jobs:
         run: |
           npm install --global pnpm@12.21.0
           pnpm install --frozen-lockfile
+      # Generated Protobuf-ES files are ignored build outputs, not checkout files.
+      # Recreate them from this exact source and frozen Buf toolchain for the
+      # published smoke; the build job's generated workspace is not shared.
+      - name: Generate Buf descriptors required by the published smoke
+        run: |
+          pnpm web:generate
+          test -s packages/client/gen/crm/parties/v3/party_pb.js
+          test -s packages/client/gen/crm/accounts/v2/account_pb.js
       # The deploy smoke also uses chromium.launch({headless:true}).
       - name: Install headless Chromium for browser smoke
         working-directory: apps/cloudflare-crm
@@ -408,7 +524,7 @@ jobs:
           CRM_E2E_A_CLIENT_SECRET: ${{ secrets.CRM_E2E_A_CLIENT_SECRET }}
           CLOUDFLARE_ACCOUNT_ID: 5bd5e1e1e813f061afc259e91334262d
           CRM_D1_DATABASE_ID: 35fc7ee9-9710-485f-8fb3-f5a398b229b4
-        run: node apps/cloudflare-crm/scripts/deploy.mjs
+        run: node apps/cloudflare-crm/scripts/deploy.mts
       - name: Isolate protected Access A/B tests in fresh tenants of the same D1
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -418,7 +534,7 @@ jobs:
           CRM_E2E_B_CLIENT_SECRET: ${{ secrets.CRM_E2E_B_CLIENT_SECRET }}
           CLOUDFLARE_ACCOUNT_ID: 5bd5e1e1e813f061afc259e91334262d
           CRM_D1_DATABASE_ID: 35fc7ee9-9710-485f-8fb3-f5a398b229b4
-        run: node apps/cloudflare-crm/scripts/deploy.mjs prepare-e2e
+        run: node apps/cloudflare-crm/scripts/deploy.mts prepare-e2e
       # Small production smoke; independent Gate B follows dev merge outside CI.
       - name: Published Chromium smoke of real Access, typed RPC, D1 and roles
         env:
@@ -429,7 +545,7 @@ jobs:
           CRM_E2E_A_CLIENT_SECRET: ${{ secrets.CRM_E2E_A_CLIENT_SECRET }}
           CRM_E2E_B_CLIENT_ID: ${{ secrets.CRM_E2E_B_CLIENT_ID }}
           CRM_E2E_B_CLIENT_SECRET: ${{ secrets.CRM_E2E_B_CLIENT_SECRET }}
-        run: node apps/cloudflare-crm/e2e/live.mjs
+        run: node apps/cloudflare-crm/e2e/live.mts
       - name: Verify browser D1 audit and exact Cloudflare request traces
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -437,7 +553,7 @@ jobs:
           CRM_E2E_A_CLIENT_SECRET: ${{ secrets.CRM_E2E_A_CLIENT_SECRET }}
           CLOUDFLARE_ACCOUNT_ID: 5bd5e1e1e813f061afc259e91334262d
           CRM_D1_DATABASE_ID: 35fc7ee9-9710-485f-8fb3-f5a398b229b4
-        run: node apps/cloudflare-crm/scripts/deploy.mjs verify-data
+        run: node apps/cloudflare-crm/scripts/deploy.mts verify-data
       - name: Stop public entry if release acceptance failed
         if: ${{ failure() || cancelled() }}
         env:
@@ -446,17 +562,14 @@ jobs:
           CRM_E2E_A_CLIENT_SECRET: ${{ secrets.CRM_E2E_A_CLIENT_SECRET }}
           CLOUDFLARE_ACCOUNT_ID: 5bd5e1e1e813f061afc259e91334262d
           CRM_D1_DATABASE_ID: 35fc7ee9-9710-485f-8fb3-f5a398b229b4
-        run: node apps/cloudflare-crm/scripts/deploy.mjs fail-closed
-      - name: Save release evidence and browser failure screenshots
+        run: node apps/cloudflare-crm/scripts/deploy.mts fail-closed
+      - name: Save release evidence
         if: ${{ always() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: crm-dev-release-${{ github.sha }}-attempt-${{ github.run_attempt }}
           path: |
             apps/cloudflare-crm/.release/*.json
-            apps/cloudflare-crm/e2e-failure.png
-            apps/cloudflare-crm/e2e-mobile.png
-            apps/cloudflare-crm/e2e-evidence/*.png
             apps/cloudflare-crm/e2e-evidence/*.json
             apps/cloudflare-crm/.release/native-proof/
           if-no-files-found: warn
