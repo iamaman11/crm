@@ -164,6 +164,26 @@ class RepositoryNavigationTests(unittest.TestCase):
         self.assertEqual(report["changed_paths"], packet["allowed_paths"])
         self.assertEqual(report["blockers"], [])
 
+    def test_packet_check_empty_push_before_uses_dev_base_for_manual_dispatch(self) -> None:
+        packet = load_packet(ROOT)
+        affected = {
+            "head_sha": "b" * 40,
+            "changed_paths": [packet["allowed_paths"][0]],
+            "affected_packages": [],
+            "selected_workflows": [],
+        }
+        with (
+            patch(
+                "scripts.repository_navigation._git",
+                return_value="c75acd9fd36cd87f48fe727171be949e1295c998",
+            ),
+            patch("scripts.repository_navigation.build_report", return_value=affected) as build_report,
+        ):
+            report = packet_check(ROOT, "origin/dev", before="")
+        self.assertTrue(report["ok"])
+        build_report.assert_called_once_with(ROOT, "origin/dev")
+        self.assertEqual(report["base_sha"], "c75acd9fd36cd87f48fe727171be949e1295c998")
+
     def test_declared_baseline_enforces_scope_and_unknown_base(self) -> None:
         affected = {"head_sha": "b" * 40,
                     "changed_paths": ["repository-packet.json", "scripts/repository_navigation.py"],

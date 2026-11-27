@@ -8,6 +8,12 @@ on:
     paths-ignore:
       - '*.md'
       - '**/*.md'
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Exact 40-character HEAD SHA of the selected integration branch.
+        required: true
+        type: string
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
@@ -25,6 +31,27 @@ jobs:
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0 # JSON packet policy checks Git paths; no Markdown inputs
+      - name: Validate exact manual integration candidate
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          EXPECTED_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          SELECTED_REF: ${{ github.ref }}
+          SELECTED_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$SELECTED_REF" in
+            refs/heads/integration/parallel/*) ;;
+            *) echo "Manual preflight requires integration/parallel/* branch" >&2; exit 1 ;;
+          esac
+          [[ "$EXPECTED_CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "candidate_sha must be a full 40-character commit SHA" >&2
+            exit 1
+          }
+          [[ "$EXPECTED_CANDIDATE_SHA" == "$SELECTED_SHA" ]] || {
+            echo "Selected branch HEAD differs from candidate_sha" >&2
+            exit 1
+          }
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '26.13.1'

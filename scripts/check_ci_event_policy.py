@@ -67,6 +67,7 @@ def check_workflow(path: Path) -> WorkflowPolicyResult:
     event_start, event_end = events
     has_push = _contains_event(lines, event_start, event_end, "push")
     has_pull_request = _contains_event(lines, event_start, event_end, "pull_request")
+    has_workflow_dispatch = _contains_event(lines, event_start, event_end, "workflow_dispatch")
     crm_dev_workflow = (
         path.name == "cloudflare-crm-spike.yml"
         and path.parent.name == "workflows"
@@ -77,6 +78,27 @@ def check_workflow(path: Path) -> WorkflowPolicyResult:
             errors.append("CRM must run on push to dev")
         if has_pull_request:
             errors.append("CRM uses one dev pipeline, not duplicate pull_request builds")
+        if not has_workflow_dispatch:
+            errors.append("CRM must support workflow_dispatch for candidate preflight")
+        else:
+            dispatch_section = _event_section(lines, event_start, event_end, "workflow_dispatch")
+            dispatch_text = "\n".join(dispatch_section)
+            if not all(token in dispatch_text for token in (
+                "    inputs:", "      candidate_sha:", "        required: true", "        type: string",
+            )):
+                errors.append("CRM workflow_dispatch must require candidate_sha as a string")
+        deploy_marker = "  deploy-crm-dev:"
+        if deploy_marker not in lines:
+            errors.append("CRM must retain the guarded deploy-crm-dev job")
+        else:
+            deploy_start = lines.index(deploy_marker)
+            deploy_end = next((index for index in range(deploy_start + 1, len(lines))
+                               if lines[index].startswith("  ")
+                               and not lines[index].startswith("    ")
+                               and lines[index].rstrip().endswith(":")), len(lines))
+            deploy_section = "\n".join(lines[deploy_start:deploy_end])
+            if "    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'" not in deploy_section:
+                errors.append("CRM deploy job must run only on push to dev")
     if has_pull_request:
         pr_section = _event_section(lines, event_start, event_end, "pull_request")
         expected_pr = "dev" if crm_dev_workflow else "main"

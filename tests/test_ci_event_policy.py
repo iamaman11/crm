@@ -75,11 +75,20 @@ on:
     paths-ignore:
       - '*.md'
       - '**/*.md'
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Exact candidate SHA
+        required: true
+        type: string
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 jobs:
   gate:
+    runs-on: ubuntu-latest
+  deploy-crm-dev:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
     runs-on: ubuntu-latest
 """,
             encoding="utf-8",
@@ -146,6 +155,9 @@ jobs:
                               "python scripts/generate_repository_navigation.py --check\n          python scripts/crm-module-coverage.py"),
              "CRM CI must not validate Markdown documentation"),
             (original.replace("concurrency:\n", "  pull_request:\n    branches:\n      - dev\nconcurrency:\n", 1), "CRM uses one dev pipeline, not duplicate pull_request builds"),
+            (original.replace("  workflow_dispatch:\n", "  # workflow_dispatch removed\n", 1), "CRM must support workflow_dispatch for candidate preflight"),
+            (original.replace("        required: true\n        type: string", "        required: false\n        type: string", 1), "CRM workflow_dispatch must require candidate_sha as a string"),
+            (original.replace("if: github.event_name == 'push' && github.ref == 'refs/heads/dev'", "if: always()", 1), "CRM deploy job must run only on push to dev"),
             (original.replace("      - dev\n", "      - dev\n      - experimental\n", 1), "push must be restricted to branch dev"),
         )
         for contents, expected_error in cases:
