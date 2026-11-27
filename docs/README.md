@@ -8,6 +8,7 @@
 |---|---|
 | Полный продукт, требования и порядок S0–S4 | [**Issue #484 — основной продуктовый план**](https://github.com/iamaman11/crm/issues/484) |
 | Конкретный текущий срез, A/B/C/D, Gate A и Gate B | [**Issue #487 — единственный исполнительный курсор**](https://github.com/iamaman11/crm/issues/487) (преемник по #484) |
+| Допуск, изоляция и интеграция параллельных batch | [#489](https://github.com/iamaman11/crm/issues/489) — подготовка и Definition of Ready, не второй продуктовый backlog |
 | Строгая техническая архитектура | [`apps/cloudflare-crm/ARCHITECTURE.md`](../apps/cloudflare-crm/ARCHITECTURE.md) |
 | Правила разработки и проверки | [`apps/cloudflare-crm/AGENTS.md`](../apps/cloudflare-crm/AGENTS.md), [корневой `AGENTS.md`](../AGENTS.md) |
 | Типизированная схема бизнеса | `proto/crm/**` + Buf, generated Connect Rust/TS, зарегистрированный Rust Router, одна fail-closed policy, исходный Rust owner и одна Cloudflare D1 |
