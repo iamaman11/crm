@@ -343,11 +343,11 @@ function run(mode,variant="valid"){
    {kind:"query-string",request_id:requestId,value:"crm-s3-query-1234567890123"}
  ];
  save(join(app,"e2e-evidence/published-smoke.json"),{
-   result:"PASS",source_sha:sha,
+   result:"PASS",source_sha:sha,version_affinity_key:"crm-release-123-1",
    features:variant==="wrong-features"?["native-ci"]:["native","published-smoke"],
    tenant:"fixture-a",started_at:2,
    steps:variant==="missing-step"?["signed-access"]:[
-     "signed-access","party-create","party-reload","account-create",
+     "version-affinity","signed-access","party-create","party-reload","account-create",
      "viewer-denial","tenant-isolation","anonymous-denial"],
    requests:smokeRequests,writes:smokeWrites,
    synthetic_private_probes:variant==="missing-private-probes"?[]:privacy

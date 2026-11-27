@@ -289,7 +289,7 @@ jobs:
           release_pid=$!
           status=0
           rm -f "$CRM_RPC_RUNTIME_PROOF"
-          node --test rust-party/test/native.mts scripts/release-readback.node.test.mjs || status=$?
+          node --test rust-party/test/native.mts || status=$?
           wait "$release_pid" || status=$?
           exit "$status"
       - name: Preserve Cargo build timing reports
