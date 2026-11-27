@@ -5,15 +5,10 @@ on:
   push:
     branches:
       - dev
+      - 'integration/parallel/**'
     paths-ignore:
       - '*.md'
       - '**/*.md'
-  workflow_dispatch:
-    inputs:
-      candidate_sha:
-        description: Exact 40-character HEAD SHA of the selected integration branch.
-        required: true
-        type: string
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
@@ -22,6 +17,7 @@ permissions:
   actions: read
 jobs:
   cloudflare-crm-spike:
+    if: github.event.deleted == false
     runs-on: ubuntu-26.04
     timeout-minutes: 30
     outputs:
@@ -31,27 +27,6 @@ jobs:
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0 # JSON packet policy checks Git paths; no Markdown inputs
-      - name: Validate exact manual integration candidate
-        if: ${{ github.event_name == 'workflow_dispatch' }}
-        env:
-          EXPECTED_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
-          SELECTED_REF: ${{ github.ref }}
-          SELECTED_SHA: ${{ github.sha }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          case "$SELECTED_REF" in
-            refs/heads/integration/parallel/*) ;;
-            *) echo "Manual preflight requires integration/parallel/* branch" >&2; exit 1 ;;
-          esac
-          [[ "$EXPECTED_CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]] || {
-            echo "candidate_sha must be a full 40-character commit SHA" >&2
-            exit 1
-          }
-          [[ "$EXPECTED_CANDIDATE_SHA" == "$SELECTED_SHA" ]] || {
-            echo "Selected branch HEAD differs from candidate_sha" >&2
-            exit 1
-          }
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '26.13.1'
@@ -60,7 +35,7 @@ jobs:
           python-version: '3.15.2'
           cache: pip
           cache-dependency-path: requirements-dev.txt
-      # Code changes execute this pipeline once on dev; PRs are optional discussion.
+      # Coordinator pushes one combined candidate to integration/parallel/**; only dev publishes.
       # Pure source checks must fail before npm, Cargo builds or Chromium.
       - name: Fast repository CI topology, architecture, and source syntax
         shell: bash
@@ -90,7 +65,13 @@ jobs:
           TIMEFORMAT='crm.governance unit-tests elapsed_seconds=%3R'
           time python -m unittest tests.test_affected_scope tests.test_crm_module_coverage tests.test_module_manifest_validation
           TIMEFORMAT='crm.governance packet-check elapsed_seconds=%3R'
-          time python scripts/repo.py packet-check --base origin/dev --before "$PUSH_BEFORE"
+          if [[ "$GITHUB_REF" == refs/heads/integration/parallel/* ]]; then
+            # Compare the complete candidate, not merely the last integration push.
+            git merge-base --is-ancestor origin/dev HEAD
+            time python scripts/repo.py packet-check --base origin/dev
+          else
+            time python scripts/repo.py packet-check --base origin/dev --before "$PUSH_BEFORE"
+          fi
           TIMEFORMAT='crm.governance module-coverage elapsed_seconds=%3R'
           time python scripts/crm-module-coverage.py --output /tmp/crm-module-coverage.json
           echo "CRM_MODULE_COVERAGE_REPORT=/tmp/crm-module-coverage.json" >> "$GITHUB_ENV"
