@@ -61,13 +61,14 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
   const [owner,setOwner]=useState(initialOwner);
   const owners=useQuery(useCallback(allOwners,[]));
   const ownerChoices=owners.data?.choices??[];
-  useEffect(()=>{if(!initialViewId){setOwner(initialOwner);setStageCursors(EMPTY_STAGE_CURSORS);setAllDealsCursor("");}},[initialOwner,initialViewId]);
+  useEffect(()=>{if(!focusedDealId&&!initialViewId){setOwner(initialOwner);setStageCursors(EMPTY_STAGE_CURSORS);setAllDealsCursor("");}},[focusedDealId,initialOwner,initialViewId]);
   // Deal lookup is independent of saved views, Kanban metrics and stage totals.
   const [dealSearch,setDealSearch]=useState(initialSearch);
   // Hash navigation/Back may change search without leaving SalesScreen.
   // Preserve the selected Kanban, its filters, metrics and mutation state.
-  useEffect(()=>setDealSearch(initialSearch),[initialSearch]);
+  useEffect(()=>{if(!focusedDealId)setDealSearch(initialSearch);},[focusedDealId,initialSearch]);
   const [accountId,setAccountId]=useState(initialAccountId);
+  useEffect(()=>{if(!focusedDealId)setAccountId(initialAccountId);},[focusedDealId,initialAccountId]);
   const [pipelineId,setPipelineId]=useState(initialPipelineId);
   const [analysisStart,setAnalysisStart]=useState("");
   const [analysisEnd,setAnalysisEnd]=useState("");
@@ -163,7 +164,7 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
   // The URL is the sole route snapshot. The original owner controls which
   // tenant-scoped views are available; reapply only a returned active view.
   useEffect(()=>{
-    if(!savedViewsQuery.data)return;
+    if(focusedDealId||!savedViewsQuery.data)return;
     const view=savedViewsQuery.data.find(entry=>entry.viewId===initialViewId);
     if(!view){setSelectedViewId("");setViewName("");return;}
     setSelectedViewId(view.viewId);setViewName(view.name);
@@ -171,7 +172,7 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
     setStatus(view.status===undefined?"":String(view.status));
     setAccountId(view.accountId??"");setOwner(ownerValue(view.ownerFilter));
     setStageCursors(EMPTY_STAGE_CURSORS);setAllDealsCursor("");
-  },[initialViewId,savedViewsQuery.data]);
+  },[focusedDealId,initialViewId,savedViewsQuery.data]);
   const selectedView=savedViews.find(view=>view.viewId===selectedViewId);
   const viewStatus=()=>status?enumValue(status,
     [DealStatus.OPEN,DealStatus.WON,DealStatus.LOST],"Статус сделки"):undefined;
@@ -241,12 +242,12 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
   const pipelinesQuery=useQuery(useCallback(allPipelines,[]));
   const pipelines=pipelinesQuery.data?.pipelines??[];
   useEffect(()=>{
-    if(initialViewId||!pipelinesQuery.data)return;
+    if(focusedDealId||initialViewId||!pipelinesQuery.data)return;
     // ListPipelines is tenant-scoped; a fabricated URL is not an authority.
     const id=initialPipelineId;
     setPipelineId(id&&pipelinesQuery.data.pipelines.some(p=>p.pipelineId===id)?id:"");
     setStageCursors(EMPTY_STAGE_CURSORS);
-  },[initialPipelineId,initialViewId,pipelinesQuery.data]);
+  },[focusedDealId,initialPipelineId,initialViewId,pipelinesQuery.data]);
   const missingPipeline=!!initialPipelineId&&!initialViewId&&!!pipelinesQuery.data&&
     !pipelines.some(p=>p.pipelineId===initialPipelineId);
   const activePipeline=pipelines.find(p=>p.pipelineId===pipelineId);

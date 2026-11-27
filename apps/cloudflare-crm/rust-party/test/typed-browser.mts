@@ -1648,11 +1648,20 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      exact:true})).toHaveCount(0);
    assert.equal(await page.getByRole("region",{name:"Аналитика воронки"}).innerText(),
      metricsBeforeSearch,"search must not mutate the selected Kanban metrics");
-   await searchResults.getByRole("link",{name:"Полная страница",exact:true}).click();
-   await page.getByRole("heading",{name:"Карточка сделки",exact:true}).waitFor();
-   await page.getByRole("heading",{name:"Browser Deal "+runId,exact:true}).waitFor();
-   await page.goBack();
-   await page.getByRole("heading",{name:"Сделки",exact:true}).waitFor();
+   page.on("request",trackOwnerCatalog);
+   try {
+      await searchResults.getByRole("link",{name:"Полная страница",exact:true}).click();
+      await page.getByRole("heading",{name:"Карточка сделки",exact:true}).waitFor();
+      await page.getByRole("heading",{name:"Browser Deal "+runId,exact:true}).waitFor();
+      assert.deepEqual(ownerCatalogRequests,[],
+        "Opening the full Deal route must retain the mounted Sales owner catalog");
+      await page.goBack();
+      await page.getByRole("heading",{name:"Сделки",exact:true}).waitFor();
+      assert.deepEqual(ownerCatalogRequests,[],
+        "Returning from the full Deal route must not reload the Sales owner catalog");
+   }finally{
+      page.off("request",trackOwnerCatalog);
+   }
    await expect(page.getByLabel("Найти сделку",{exact:true})).toHaveValue("Browser Deal "+runId);
    await searchResults.getByRole("heading",{name:"Browser Deal "+runId,exact:true}).waitFor();
    await reloadDocument();
@@ -1664,7 +1673,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await searchResults.getByText("Сделки по запросу не найдены.",{exact:true}).waitFor();
    await page.getByRole("button",{name:"Сбросить поиск сделок",exact:true}).click();
    await expect(searchResults).toHaveCount(0);
-   checkpoint("M2 Deal search across pipelines, typed name filter, result→full page→Back, no-results and reset");
+   checkpoint("M2 Deal search across pipelines, full page→Back without owner catalog refetch, no-results and reset");
 
    // L-08: original typed Party/Account/Deal tenant reads, not a search index.
    const unifiedAuditBefore=record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n;

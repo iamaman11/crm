@@ -41,7 +41,7 @@ function App() {
     route.kind==="accounts"?<AccountScreen registerBlocker={registerNavigationBlocker} filters={{search:route.search,status:route.status,cursor:route.cursor}}/>:
     route.kind==="account"?<AccountPage registerBlocker={registerNavigationBlocker} accountId={route.accountId}/>:
     route.kind==="account-create"?<AccountCreatePage key={route.partyId} registerBlocker={registerNavigationBlocker} partyId={route.partyId}/>:
-    route.kind==="deal"?<SalesScreen key={route.dealId} focusedDealId={route.dealId}/>:
+    route.kind==="deal"?<SalesScreen focusedDealId={route.dealId}/>:
     route.kind==="search"?<SearchScreen query={route.query}/>:
     route.kind==="not-found"?<><PageHeader title="Страница не найдена"/><a href="#accounts">К списку клиентов</a></>:
     route.screen==="parties"?<PartyScreen key={route.partyId} initialPartyId={route.partyId}/>:
@@ -56,7 +56,7 @@ function App() {
       initialOverdue={route.overdue??false}
       initialAssigneeEmail={route.assigneeEmail??""} initialMine={route.mine??false} initialTeamId={route.teamId??""}/>:
     route.screen==="team"?<MemberScreen key={route.reportId??""} reportId={route.reportId??""} scorecard={route.scorecard}/>:
-    route.screen==="sales"?<SalesScreen key={route.accountId}
+    route.screen==="sales"?<SalesScreen
       initialAccountId={route.accountId} initialSearch={route.search??""}
       initialViewId={route.viewId??""} initialPipelineId={route.pipelineId??""} initialOwner={route.owner??""}/>:
     route.screen==="consents"?<ConsentScreen/>:
