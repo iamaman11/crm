@@ -78,15 +78,8 @@ def check_workflow(path: Path) -> WorkflowPolicyResult:
             errors.append("CRM must run on push to dev")
         if has_pull_request:
             errors.append("CRM uses one dev pipeline, not duplicate pull_request builds")
-        if not has_workflow_dispatch:
-            errors.append("CRM must support workflow_dispatch for candidate preflight")
-        else:
-            dispatch_section = _event_section(lines, event_start, event_end, "workflow_dispatch")
-            dispatch_text = "\n".join(dispatch_section)
-            if not all(token in dispatch_text for token in (
-                "    inputs:", "      candidate_sha:", "        required: true", "        type: string",
-            )):
-                errors.append("CRM workflow_dispatch must require candidate_sha as a string")
+        if has_workflow_dispatch:
+            errors.append("CRM candidate preflight uses integration push, not workflow_dispatch")
         deploy_marker = "  deploy-crm-dev:"
         if deploy_marker not in lines:
             errors.append("CRM must retain the guarded deploy-crm-dev job")
@@ -121,7 +114,7 @@ def check_workflow(path: Path) -> WorkflowPolicyResult:
     push_section = _event_section(lines, event_start, event_end, "push")
     # A single, explicit exception for the one CRM development release job.
     # All unrelated workflows retain their main-only policy.
-    expected = "dev" if crm_dev_workflow else "main"
+    expected = ["- dev", "- 'integration/parallel/**'"] if crm_dev_workflow else ["- main"]
     branch_lines = []
     if "    branches:" in push_section:
         for line in push_section[push_section.index("    branches:") + 1:]:
@@ -129,8 +122,9 @@ def check_workflow(path: Path) -> WorkflowPolicyResult:
                 branch_lines.append(line.strip())
             elif line.strip():
                 break
-    if branch_lines != [f"- {expected}"] or "    branches-ignore:" in push_section:
-        errors.append(f"push must be restricted to branch {expected}")
+    if branch_lines != expected or "    branches-ignore:" in push_section:
+        errors.append("CRM push must be restricted to dev and integration/parallel/**"
+                      if crm_dev_workflow else "push must be restricted to branch main")
 
     # Fail closed on any CI workflow that treats .md documentation as a
     # source of truth. GitHub Issues own the prose; only typed code and

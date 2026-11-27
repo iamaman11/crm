@@ -164,7 +164,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         self.assertEqual(report["changed_paths"], packet["allowed_paths"])
         self.assertEqual(report["blockers"], [])
 
-    def test_packet_check_empty_push_before_uses_dev_base_for_manual_dispatch(self) -> None:
+    def test_packet_check_empty_push_before_uses_dev_base_for_integration(self) -> None:
         packet = load_packet(ROOT)
         affected = {
             "head_sha": "b" * 40,
