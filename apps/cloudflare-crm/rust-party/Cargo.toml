@@ -13,10 +13,11 @@ crate-type = ["cdylib"]
 [package.metadata.wasm-pack.profile.release]
 wasm-opt = ["-O1"]
 
-# The signed workerd suite tests behavior from the debug build without DWARF.
-# Limit the override to the Worker so cached third-party artifacts stay reusable.
+# Lightly optimize the test Worker only; measure compile plus workerd wall time.
+# Keep dependencies and the production release profile unchanged.
 [profile.dev.package.crm-native-party-worker]
 debug = false
+opt-level = 1
 
 [profile.dev.package.crm-connect-contracts]
 debug = false
