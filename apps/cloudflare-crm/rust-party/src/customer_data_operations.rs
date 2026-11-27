@@ -228,7 +228,7 @@ fn parse_import(
         .map_err(|_| "IMPORT_JOB_ID_INVALID")?;
     let mut seen = BTreeSet::new();
     let mut commands = Vec::new();
-        let mut row_issues = Vec::new();
+    let mut row_issues = Vec::new();
     for source in parsed.rows() {
         let start_issues = row_issues.len();
         let get = |column: &str| source.columns.get(column).map(String::as_str).unwrap_or("");
