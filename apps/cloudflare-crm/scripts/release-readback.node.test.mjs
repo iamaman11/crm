@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {verifyAnonymousDenial,verifyTracePrivacySettings,classifySignedSessionReadback,
-  isRetryableReadbackTransportError,waitForExactSourceSha,waitForNativeTelemetry} from "./release-readback.mts";
+  isRetryableReadbackTransportError,waitForExactSourceSha,waitForNativeTelemetry,
+  releaseVersionAffinityKey} from "./release-readback.mts";
 
 const endpoint="https://example.test/api/version";
 
@@ -26,6 +27,14 @@ const versionRun=(sequence,overrides={})=>{
   return {result,calls,events,delays};
 };
 
+test("release version affinity key is unique to one GitHub run attempt",()=>{
+  assert.equal(releaseVersionAffinityKey("46020391985","1"),"crm-release-46020391985-1");
+  assert.notEqual(releaseVersionAffinityKey("46020391985","1"),
+    releaseVersionAffinityKey("46020391985","2"));
+  assert.throws(()=>releaseVersionAffinityKey("run","1"),/CRM_RELEASE_VERSION_AFFINITY_KEY_INVALID/);
+  assert.throws(()=>releaseVersionAffinityKey("46020391985","0"),/CRM_RELEASE_VERSION_AFFINITY_KEY_INVALID/);
+});
+
 test("exact source readback retries a reset and requires three consecutive signed GETs",async()=>{
   const x=versionRun([reset(),expectedSha,expectedSha,expectedSha]);
   await x.result;
@@ -39,6 +48,16 @@ test("exact source readback retries a reset and requires three consecutive signe
     assert.ok(call.options.signal instanceof AbortSignal);
   }
   assert.deepEqual(x.events.map(e=>e.result),["RETRY","PASS"]);
+});
+test("exact source readback preserves the release version-affinity key on every retry",async()=>{
+  const key=releaseVersionAffinityKey("46020391985","1");
+  const x=versionRun([expectedSha,expectedSha,expectedSha],{
+    headers:{"Cloudflare-Workers-Version-Key":key}
+  });
+  await x.result;
+  assert.equal(x.calls.length,3);
+  for(const call of x.calls)
+    assert.equal(call.options.headers["Cloudflare-Workers-Version-Key"],key);
 });
 test("exact source readback resets its stability count after stale and edge responses",async()=>{
   const x=versionRun([

@@ -3,10 +3,11 @@ import assert from "node:assert/strict";
 import {readFileSync,mkdirSync} from "node:fs";
 import {publishedSmoke} from "./published-smoke.mts";
 import {record, records, string} from "../scripts/json-boundary.mts";
-import {waitForExactSourceSha} from "../scripts/release-readback.mts";
+import {waitForExactSourceSha,releaseVersionAffinityKey} from "../scripts/release-readback.mts";
 import {reportBrowserFailure,withBrowserCleanup} from "../rust-party/test/browser-boundaries.mts";
 const required=(name: string)=>{const value=process.env[name];if(!value)throw Error("Missing "+name);return value;};
 const sha=required("GITHUB_SHA");
+const versionKey=releaseVersionAffinityKey(required("GITHUB_RUN_ID"),required("GITHUB_RUN_ATTEMPT"));
 assert.match(sha,/^[a-f0-9]{40}$/);
 assert.equal(process.env.GITHUB_REF,"refs/heads/dev");
 assert.equal(process.env.GITHUB_EVENT_NAME,"push");
@@ -47,10 +48,11 @@ let smokePassed=false;
 try{
  await withBrowserCleanup(async()=>{
  await waitForExactSourceSha(base+"/api/version?browser-preflight="+Date.now(),sha,{
-   headers:{...access("A"),"cache-control":"no-cache",connection:"close"}
+   headers:{...access("A"),"Cloudflare-Workers-Version-Key":versionKey,
+     "cache-control":"no-cache",connection:"close"}
  });
  smokeStarted=true;
- await publishedSmoke({base,sourceSha:sha,adminHeaders:access("A"),
+ await publishedSmoke({base,sourceSha:sha,versionKey,adminHeaders:access("A"),
    tenantBHeaders:access("B"),tenantA:tenantA,adminIdentity:principal,directory,
    sql:async (statement,params=[])=>records((await query(statement,params)).results),
    beforeViewer:async()=>{

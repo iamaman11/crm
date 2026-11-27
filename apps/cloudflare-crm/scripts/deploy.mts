@@ -12,10 +12,12 @@ import {
   verifyTracePrivacySettings,
   waitForNativeTelemetry,
   classifySignedSessionReadback,
-  parseRetryAfterMs
+  parseRetryAfterMs,
+  releaseVersionAffinityKey
 } from "./release-readback.mts";
 const required=(name: string)=>{const value=process.env[name];if(!value)throw Error("Missing "+name);return value;};
 const sha=required("GITHUB_SHA");
+const versionKey=releaseVersionAffinityKey(required("GITHUB_RUN_ID"),required("GITHUB_RUN_ATTEMPT"));
 if(!/^[0-9a-f]{40}$/.test(sha)||process.env.GITHUB_REF!=="refs/heads/dev"||process.env.GITHUB_EVENT_NAME!=="push")throw Error("Untrusted deployment");
 const account="5bd5e1e1e813f061afc259e91334262d", database="35fc7ee9-9710-485f-8fb3-f5a398b229b4";
 if(required("CLOUDFLARE_ACCOUNT_ID")!==account||required("CRM_D1_DATABASE_ID")!==database)throw Error("Wrong Cloudflare CRM target");
@@ -171,7 +173,8 @@ async function publicSha(){
   // One isolated request per attempt. Read the active public Worker, not just
   // Cloudflare's deployment metadata; preserve safe edge diagnostics on mismatch.
   const requestUrl=url+"/api/version?readback="+Date.now()+"-"+Math.random().toString(36).slice(2);
-  const r=await fetch(requestUrl,{headers:{...auth(),"cache-control":"no-cache"},
+  const r=await fetch(requestUrl,{headers:{...auth(),"cache-control":"no-cache",
+    "Cloudflare-Workers-Version-Key":versionKey},
     redirect:"manual",cache:"no-store"});
   const edge={http_status:r.status,ray:r.headers.get("cf-ray"),
     cache_status:r.headers.get("cf-cache-status"),
@@ -480,6 +483,7 @@ async function verifyData(){
   const evidence=jsonRecord(loadJson("apps/cloudflare-crm/e2e-evidence/published-smoke.json"));
   assert.equal(evidence.result,"PASS");
   assert.equal(evidence.source_sha,sha);
+  assert.equal(evidence.version_affinity_key,versionKey);
   assert.deepEqual(evidence.features,["native","published-smoke"]);
   const startedAt=number(evidence.started_at);
   assert.ok(startedAt>=number(deployed.started_at));
@@ -490,7 +494,7 @@ async function verifyData(){
   assert.equal(tenant,setup.tenant_a);
   assert.ok(actor,"Release must identify the enrolled Cloudflare Access actor");
   assert.deepEqual(steps,[
-    "signed-access","party-create","party-reload","account-create",
+    "version-affinity","signed-access","party-create","party-reload","account-create",
     "viewer-denial","tenant-isolation","anonymous-denial"
   ],"Published Chromium must execute all mandatory release smoke properties");
   const requests=new Map<string,{request_id: string; path: string; status: number; error_code: string | null}>();

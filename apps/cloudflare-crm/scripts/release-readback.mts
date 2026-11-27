@@ -16,6 +16,12 @@ type SourceOptions = ReadbackOptions & {
   deadlineMs?: number;
 };
 
+export function releaseVersionAffinityKey(runId: string, attempt: string) {
+  if (!/^\\d+$/.test(runId) || !/^[1-9]\\d*$/.test(attempt))
+    throw Error("CRM_RELEASE_VERSION_AFFINITY_KEY_INVALID");
+  return "crm-release-" + runId + "-" + attempt;
+}
+
 // A read-only anonymous GET can be replayed after transport or edge propagation failure.
 // Never replay a write, accept a network error as denial, or accept an
 // unauthorized success. Each attempt has its own bounded connection.
