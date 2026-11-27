@@ -175,7 +175,22 @@ try{
   await sendFixtureRpc(dispatch,sales.createDeal,null,create,401);
   await sendFixtureRpc(dispatch,sales.createDeal,token(viewer),create,403);
   assert.deepEqual(await snapshot(),beforeCreate);
-  const created=await fixtureRpc(dispatch,sales.createDeal,token(admin),create);
+  // A stale release must reject the signed generated RPC before its owner
+  // runs. Prove the unchanged aggregate, receipts, events and audit on D1.
+  const otherSha=sha==="0".repeat(40)?"1".repeat(40):"0".repeat(40);
+  for(const expected of [otherSha,"invalid-sha"]){
+    const rejected=await sendFixtureRpc(dispatch,sales.createDeal,token(admin),create,400,
+      {"x-crm-expected-source-sha":expected});
+    const body=record(await rejected.json());
+    assert.equal(body.code,"failed_precondition");
+    assert.equal(body.message,"CRM_SOURCE_VERSION_MISMATCH");
+    const detail=decodeFixtureDetail(DomainErrorDetailSchema,records(body.details));
+    assert.equal(detail.commitOutcome,MutationCommitOutcome.REJECTED);
+    assert.equal(detail.requestId,rejected.headers.get("x-request-id"));
+    assert.deepEqual(await snapshot(),beforeCreate,"release mismatch must not write D1");
+  }
+  const created=await fixtureRpc(dispatch,sales.createDeal,token(admin),create,
+    {"x-crm-expected-source-sha":sha});
   const createdRequestId=created.headers.get("x-request-id");
   committed(created,1n);
   const get={dealId,receiptIdempotencyKey:create.precondition.idempotencyKey};
@@ -239,7 +254,7 @@ try{
   assert.deepEqual(names,["activity_tasks.create","sales_activities_link.applied","sales_deals.advance"]);
   console.log(JSON.stringify({event:"crm.production-rpc-d1-artifact",result:"PASS",
     source_sha:sha,generated_binary:true,role_denial:true,real_receipt_read_failure:true,
-    replay:true,cas:true,atomic_link:true,request_correlation:true}));
+    replay:true,cas:true,atomic_link:true,request_correlation:true,source_precondition:true}));
   assert.deepEqual(artifact(),before,"production bundle changed during test");
   const evidence={event:"crm.production-access-artifact",result:"PASS",source_sha:sha,
     production_features:["native"],artifact:before,jwks_requests:jwksRequests,
@@ -248,7 +263,7 @@ try{
     signed_admin_viewer:true,invalid_signature_denied:true,wrong_claims_denied:true,
     unknown_service_denied:true,provider_failure_denied:true,ci_endpoint_absent:true,
     unchanged_d1:true,compiled_router_policy_parity:true,production_rpc_d1:{generated_binary:true,role_denial:true,
-      receipt_read_failure:true,replay:true,cas:true,atomic_link:true},
+      receipt_read_failure:true,replay:true,cas:true,atomic_link:true,source_precondition:true},
     scope:"production Access and selected RPC/D1 parity; full native-ci suite still mandatory"};
   writeFileSync(string(process.env.CRM_PRODUCTION_ACCESS_PROOF),JSON.stringify(evidence)+"\n");
   console.log(JSON.stringify(evidence));

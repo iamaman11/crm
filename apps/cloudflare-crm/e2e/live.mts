@@ -14,8 +14,15 @@ const account="5bd5e1e1e813f061afc259e91334262d",database="35fc7ee9-9710-485f-8f
 assert.equal(required("CLOUDFLARE_ACCOUNT_ID"),account);
 assert.equal(required("CRM_D1_DATABASE_ID"),database);
 const token=required("CLOUDFLARE_API_TOKEN"),base="https://crm-dev.crm-5bd5e1e1.workers.dev";
+const deployed=record(JSON.parse(readFileSync("apps/cloudflare-crm/.release/deployed.json","utf8")));
+assert.equal(deployed.git_sha,sha);
+assert.equal(deployed.d1_database,database);
+const workerVersion=string(deployed.worker_version);
+assert.match(workerVersion,/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/);
 const access=(name: "A" | "B")=>({"CF-Access-Client-Id":required("CRM_E2E_"+name+"_CLIENT_ID"),
- "CF-Access-Client-Secret":required("CRM_E2E_"+name+"_CLIENT_SECRET")});
+ "CF-Access-Client-Secret":required("CRM_E2E_"+name+"_CLIENT_SECRET"),
+ "Cloudflare-Workers-Version-Overrides":'crm-dev="'+workerVersion+'"',
+ "x-crm-expected-source-sha":sha});
 const setup=record(JSON.parse(readFileSync("apps/cloudflare-crm/.release/e2e-tenants.json","utf8")));
 const tenantA=string(setup.tenant_a);
 assert.equal(setup.source_sha,sha);assert.equal(setup.database,database);

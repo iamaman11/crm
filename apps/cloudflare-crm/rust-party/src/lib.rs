@@ -1205,6 +1205,7 @@ async fn dispatch(
     request_id: &str,
     actor: &access::Actor,
     technical: Option<TechnicalRoute>,
+    source_sha: Option<&str>,
 ) -> Result<Response> {
     let path = req.path();
     let method = req.method();
@@ -1223,6 +1224,21 @@ async fn dispatch(
         {
             return rpc_error(rule.wire_error(
                 connectrpc::ConnectError::permission_denied("FORBIDDEN"),
+                request_id,
+                true,
+            ));
+        }
+        // A caller may require an exact release without changing the domain
+        // contract. A provider version override is not fail-closed on its own.
+        // Reject before invoking any owner or writing D1; preserve typed
+        // Connect errors and the existing rejected mutation outcome.
+        if let Some(expected) = req.headers().get("x-crm-expected-source-sha")?
+            && (expected.len() != 40
+                || !expected.bytes().all(|byte| byte.is_ascii_hexdigit())
+                || source_sha != Some(expected.as_str()))
+        {
+            return rpc_error(rule.wire_error(
+                connectrpc::ConnectError::failed_precondition("CRM_SOURCE_VERSION_MISMATCH"),
                 request_id,
                 true,
             ));
@@ -1310,7 +1326,16 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
                 )
             }
             Ok(Some(actor)) => (
-                dispatch(req, env, &actor.tenant, &request_id, &actor, technical).await,
+                dispatch(
+                    req,
+                    env,
+                    &actor.tenant,
+                    &request_id,
+                    &actor,
+                    technical,
+                    source_sha.as_deref(),
+                )
+                .await,
                 diagnostics::Phase::DomainD1,
             ),
             Ok(None) if path.starts_with("/crm.") => (
