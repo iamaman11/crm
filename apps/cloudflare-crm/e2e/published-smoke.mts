@@ -114,7 +114,7 @@ export async function publishedSmoke({base,sourceSha,versionKey,tenantA,adminIde
     // rollout an edge still on the predecessor returns its old SHA here and
     // aborts before writes; once its deployment config advances, affinity keeps
     // the remaining browser requests on the new version. CI serializes deploys.
-    phase="version-affinity";
+    phase="signed-readback";
     const preflight=await page.goto(base+"/api/version?browser-preflight="+Date.now());
     assert.ok(preflight,"Browser exact-version preflight must return an HTTP response");
     assert.equal(preflight.status(),200,"Browser exact-version preflight must be signed");
