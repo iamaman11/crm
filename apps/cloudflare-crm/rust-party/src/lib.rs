@@ -22,6 +22,7 @@ mod accounts;
 mod activity_automation;
 #[cfg(feature = "native")]
 mod activity_interactions;
+mod activity_scheduled;
 #[cfg(feature = "native")]
 mod activity_tasks;
 #[cfg(feature = "native")]
@@ -1437,26 +1438,6 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
 // Do not read cross-tenant business events without an authorized tenant/claim.
 // This metadata-only compatibility probe cannot create tasks or impersonate Access.
 #[event(scheduled)]
-pub async fn scheduled(_event: ScheduledEvent, env: Env, _ctx: ScheduleContext) {
-    #[derive(Deserialize)]
-    struct Schema {
-        present: i64,
-    }
-    let result = async {
-        let db = env.d1("DB")?;
-        let schema = db
-            .prepare(concat!(
-                "SELECT COUNT(*) AS present FROM sqlite_master ",
-                "WHERE type='table' AND name='crm_activity_automation_source_events'"
-            ))
-            .first::<Schema>(None)
-            .await?;
-        Ok::<_, worker::Error>(schema.is_some_and(|row| row.present == 1))
-    }
-    .await;
-    match result {
-        Ok(true) => console_log!("CRM_AUTOMATION_SCHEDULED_DISPATCH_DISABLED"),
-        Ok(false) => console_error!("CRM_AUTOMATION_SCHEMA_MISSING"),
-        Err(error) => console_error!("CRM_AUTOMATION_SOURCE_READ_FAILED: {error}"),
-    }
+pub async fn scheduled(event: ScheduledEvent, env: Env, ctx: ScheduleContext) {
+    activity_scheduled::scheduled(event, env, ctx).await;
 }
