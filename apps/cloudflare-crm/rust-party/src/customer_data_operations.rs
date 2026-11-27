@@ -742,6 +742,11 @@ pub(super) async fn import_receipt(
     parties::import_operation(db, tenant, key).await
 }
 
+pub(super) struct ImportApplied {
+    pub(super) saved: parties::ImportSaved,
+    pub(super) hash: String,
+}
+
 pub(super) async fn apply_import(
     bytes: &[u8],
     source_id: Option<&str>,
