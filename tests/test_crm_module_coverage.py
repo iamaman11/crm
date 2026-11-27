@@ -71,18 +71,19 @@ lifecycle:
             module = next(m for m in expanded["modules"]
                           if m["module_id"] == "crm.ci-expansion-probe")
             self.assertFalse(module["linked"], "new module cannot self-activate")
-            self.assertEqual(module["active_rpc_paths"], [])
+            self.assertEqual(module["rpc_bindings"], [])
         finally:
             shutil.rmtree(directory, ignore_errors=True)
 
     def test_static_inventory_never_claims_runtime_activation(self) -> None:
         report = coverage.build_report()
-        self.assertEqual(report["runtime_evidence"], "NOT_EXECUTED")
-        self.assertEqual(report["active_rpc_paths"], [])
-        self.assertEqual(report["rpc_policy"], {})
+        self.assertEqual(report["schema_version"], 2)
+        runtime_fields = {"runtime_evidence", "runtime", "active_rpc_paths", "rpc_policy"}
+        self.assertTrue(runtime_fields.isdisjoint(report))
         party = next(row for row in report["modules"] if row["module_id"] == "crm.parties")
         self.assertTrue(party["linked"])
-        self.assertIn("/crm.parties.v3.PartyService/GetParty", party["declared_rpc_paths"])
+        paths = {binding["path"] for binding in party["rpc_bindings"]}
+        self.assertIn("/crm.parties.v3.PartyService/GetParty", paths)
 
     def test_active_rpc_without_manifest_binding_is_not_accepted(self) -> None:
         self.assertEqual(

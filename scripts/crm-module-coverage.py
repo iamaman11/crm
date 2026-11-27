@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Derive CRM module/API coverage from canonical manifests and actual Worker links.
-
-No checked-in coverage matrix and no fixed count of modules. This is a build
-report, NOT another registry or a mechanism that publishes discovered modules.
-"""
+"""Report declared CRM modules, Worker dependencies and RPC bindings for this checkout."""
 from __future__ import annotations
 
 import argparse
@@ -99,7 +95,6 @@ def build_report(root: Path = ROOT) -> dict:
             declared = deps[link_name]
             if declared.get("package", link_name) != crate_name:
                 raise ValueError(f"linked Rust crate package mismatch: {module_id}")
-        declared_rpc = []
         binding_specs = []
         for capability in manifest["provides"]["capabilities"]:
             binding = capability.get("binding", {})
@@ -109,7 +104,6 @@ def build_report(root: Path = ROOT) -> dict:
             if route in providers:
                 raise ValueError(f"duplicate RPC owner {route}: {providers[route]} and {module_id}")
             providers[route] = module_id
-            declared_rpc.append(route)
             binding_specs.append({
                 "path": route,
                 "capability_id": capability["id"], "capability_version": capability["version"],
@@ -120,30 +114,20 @@ def build_report(root: Path = ROOT) -> dict:
             "crate_path": crate.relative_to(ROOT).as_posix(),
             "crate_name": crate_name,
             "kind": "composition" if entry.startswith("crates/") else "domain",
-            # A source module implemented by the Worker entrypoint itself
-            # is linked by definition; other owners must be path dependencies.
-            # The compiled router/owner proof still checks *executed* methods.
+            # This is a declaration. Cargo resolves links and workerd proves execution.
             "linked": link_name is not None or crate == WORKER,
-            "declared_rpc_paths": sorted(declared_rpc),
             "rpc_bindings": sorted(binding_specs, key=lambda item: item["path"]),
-            "active_rpc_paths": [],
         })
 
     head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "source": "modules/*/module.yaml + Worker Cargo.toml",
-        "runtime_evidence": "NOT_EXECUTED",
-        "runtime": None,
-        "rpc_policy": {},
         "source_sha": head,
         "modules": sorted(modules, key=lambda x: x["module_id"]),
-        "active_rpc_paths": [],
-        "unclaimed_active_rpc_paths": [],
         "counts": {
             "discovered_modules": len(modules),
             "linked_modules": sum(m["linked"] for m in modules),
-            "active_rpc_methods": 0,
             "declared_rpc_bindings": len(providers),
         },
     }
@@ -158,7 +142,7 @@ def main() -> int:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         print(json.dumps({"result": "PASS", "report": str(args.output),
-                          "counts": report["counts"], "unclaimed": report["unclaimed_active_rpc_paths"]}))
+                          "counts": report["counts"]}))
         return 0
     except (ValueError, KeyError, OSError, subprocess.CalledProcessError) as exc:
         print(f"CRM_MODULE_COVERAGE_FAIL: {exc}", file=sys.stderr)

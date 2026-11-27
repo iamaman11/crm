@@ -14,70 +14,69 @@ const path="/crm.parties.v3.PartyService/GetParty";
 function fixture(){
  const report=structuredClone(actual);
  const bindings=validateBindings(report,available);
- report.runtime_evidence="EXECUTED";
- report.active_rpc_paths=targetMethods(available);
- report.runtime={source_sha:report.source_sha,result:"PASS",features:["native-ci"],
-  committed_rpc_calls:report.active_rpc_paths.filter(p=>available.get(p).idempotency===MethodOptions_IdempotencyLevel.IDEMPOTENT),
-  unauthenticated_denials:[...report.active_rpc_paths],
-  viewer_denials:report.active_rpc_paths.filter(p=>available.get(p).idempotency===MethodOptions_IdempotencyLevel.IDEMPOTENT),
-  successful_rpc_calls:[...report.active_rpc_paths],rpc:{compiled_policy_check:true,
-   method_owners:Object.fromEntries(report.active_rpc_paths.map(p=>[p,bindings.get(p).module_id])),
-   registered_methods:[...report.active_rpc_paths],
-   policies:report.active_rpc_paths.map(p=>[p,{permission:available.get(p).idempotency===MethodOptions_IdempotencyLevel.IDEMPOTENT?"Write":"Read"}])}};
- return report;
+ const methods=targetMethods(available);
+ const writes=methods.filter(p=>available.get(p).idempotency===MethodOptions_IdempotencyLevel.IDEMPOTENT);
+ const evidence={source_sha:report.source_sha,result:"PASS",features:["native-ci"],
+  committed_rpc_calls:[...writes],unauthenticated_denials:[...methods],viewer_denials:[...writes],
+  successful_rpc_calls:[...methods],rpc:{compiled_policy_check:true,
+   method_owners:Object.fromEntries(methods.map(p=>[p,bindings.get(p).module_id])),
+   registered_methods:[...methods],
+   policies:methods.map(p=>[p,{permission:writes.includes(p)?"Write":"Read"}])}};
+ return {report,evidence};
 }
+const verify=({report,evidence},methods=available)=>
+ validateRuntime(report.source_sha,methods,validateBindings(report,methods),evidence);
 function reject(name,mutate,pattern){
  test(name,()=>{
-  const report=fixture();mutate(report);
-  assert.throws(()=>validateRuntime(report,available,validateBindings(report,available)),pattern);
+  const input=fixture();mutate(input);
+  assert.throws(()=>verify(input),pattern);
  });
 }
 test("synthetic evidence fixture exercises the validator, not the Worker",()=>{
- const report=fixture();
- assert.deepEqual(validateRuntime(report,available,validateBindings(report,available)).registered,targetMethods(available));
+ assert.deepEqual(verify(fixture()).registered,targetMethods(available));
 });
 test("SelfWrite requires idempotent Protobuf and authenticated coverage without broad viewer role denial",()=>{
- const report=fixture();
+ const input=fixture();
  const method="/crm.consents.v2.ConsentAuthorizationService/GrantVerifiedEmailConsent";
- const policy=report.runtime.rpc.policies.find(([path])=>path===method);
+ const policy=input.evidence.rpc.policies.find(([path])=>path===method);
  assert.ok(policy);
  policy[1].permission="SelfWrite";
- report.runtime.viewer_denials=report.runtime.viewer_denials.filter(path=>path!==method);
- assert.doesNotThrow(()=>validateRuntime(report,available,validateBindings(report,available)));
+ input.evidence.viewer_denials=input.evidence.viewer_denials.filter(path=>path!==method);
+ assert.doesNotThrow(()=>verify(input));
 });
-reject("missing executed evidence fails",r=>{r.runtime=null;},/executed workerd evidence required/);
-reject("stale evidence fails",r=>{r.runtime.source_sha="0".repeat(40);},/stale runtime evidence/);
-reject("missing policy fails",r=>{r.runtime.rpc.policies=[];},/permission denial coverage|missing or invalid compiled policy/);
+reject("missing executed evidence fails",r=>{r.evidence=null;},/executed workerd evidence required/);
+reject("stale evidence fails",r=>{r.evidence.source_sha="0".repeat(40);},/stale runtime evidence/);
+reject("missing policy fails",r=>{r.evidence.rpc.policies=[];},/permission denial coverage|missing or invalid compiled policy/);
 reject("unregistered policy fails",r=>{
- r.runtime.rpc.policies.push(["/crm.missing.v1.Service/Method",{permission:"Read"}]);
+ r.evidence.rpc.policies.push(["/crm.missing.v1.Service/Method",{permission:"Read"}]);
 },/policy without registered RPC/);
-reject("a successful response alone cannot prove a write",r=>{r.runtime.committed_rpc_calls.pop();},/typed write receipt coverage/);
-reject("missing successful call fails",r=>{r.runtime.successful_rpc_calls=[];},/missing successful executed call/);
+reject("a successful response alone cannot prove a write",r=>{r.evidence.committed_rpc_calls.pop();},/typed write receipt coverage/);
+reject("missing successful call fails",r=>{r.evidence.successful_rpc_calls=[];},/missing successful executed call/);
 reject("manual request type cannot override Buf",r=>{
- r.modules.find(m=>m.module_id==="crm.parties").rpc_bindings.find(b=>b.path===path).request="wrong";
+ r.report.modules.find(m=>m.module_id==="crm.parties").rpc_bindings.find(b=>b.path===path).request="wrong";
 },/input\/output types must come from Buf descriptors/);
 reject("missing exact owner binding fails",r=>{
- const m=r.modules.find(m=>m.module_id==="crm.parties");
+ const m=r.report.modules.find(m=>m.module_id==="crm.parties");
  m.rpc_bindings=m.rpc_bindings.filter(b=>b.path!==path);
 },/absent from canonical module.yaml binding/);
 reject("swapping Party and Account bindings between linked modules fails",r=>{
- const party=r.modules.find(m=>m.module_id==="crm.parties").rpc_bindings.find(b=>b.path===path);
- const account=r.modules.find(m=>m.module_id==="crm.customer-accounts").rpc_bindings.find(b=>b.path.endsWith("/GetAccount")&&b.path.includes(".v2."));
+ const party=r.report.modules.find(m=>m.module_id==="crm.parties").rpc_bindings.find(b=>b.path===path);
+ const account=r.report.modules.find(m=>m.module_id==="crm.customer-accounts").rpc_bindings.find(b=>b.path.endsWith("/GetAccount")&&b.path.includes(".v2."));
  [party.path,account.path]=[account.path,party.path];
 },/registered by crm\..+, declared by crm\./);
 reject("unlinked owner fails",r=>{
- r.modules.find(m=>m.module_id==="crm.parties").linked=false;
+ r.report.modules.find(m=>m.module_id==="crm.parties").linked=false;
 },/owner is not linked/);
-reject("duplicate registration fails",r=>{r.runtime.rpc.registered_methods.push(path);},/duplicate registered/);
+reject("duplicate registration fails",r=>{r.evidence.rpc.registered_methods.push(path);},/duplicate registered/);
 reject("missing method fails even if policy and calls omit it",r=>{
- r.runtime.rpc.registered_methods=r.runtime.rpc.registered_methods.filter(p=>p!==path);
- r.runtime.rpc.policies=r.runtime.rpc.policies.filter(([p])=>p!==path);
- r.runtime.successful_rpc_calls=r.runtime.successful_rpc_calls.filter(p=>p!==path);
+ r.evidence.rpc.registered_methods=r.evidence.rpc.registered_methods.filter(p=>p!==path);
+ r.evidence.rpc.policies=r.evidence.rpc.policies.filter(([p])=>p!==path);
+ r.evidence.successful_rpc_calls=r.evidence.successful_rpc_calls.filter(p=>p!==path);
 },/authentication denial coverage|full contract differs/);
 
-reject("read method cannot acquire a mutation policy",r=>{r.runtime.rpc.policies.find(([p])=>p===path)[1].permission="Write";},/permission denial coverage|policy effect differs from Protobuf/);
-reject("missing unauthenticated scenario fails",r=>{r.runtime.unauthenticated_denials.pop();},/authentication denial coverage/);
-reject("missing denied mutation scenario fails",r=>{r.runtime.viewer_denials.pop();},/permission denial coverage/);
+reject("read method cannot acquire a mutation policy",r=>{r.evidence.rpc.policies.find(([p])=>p===path)[1].permission="Write";},/permission denial coverage|policy effect differs from Protobuf/);
+reject("missing unauthenticated scenario fails",r=>{r.evidence.unauthenticated_denials.pop();},/authentication denial coverage/);
+reject("missing denied mutation scenario fails",r=>{r.evidence.viewer_denials.pop();},/permission denial coverage/);
 test("future v4 and v10 RPCs must enter the required scope without a registry edit",()=>{
  for(const version of [4,10]){
   const extended=new Map(available);
@@ -85,9 +84,9 @@ test("future v4 and v10 RPCs must enter the required scope without a registry ed
   extended.set(future,{...available.get(path),file:"crm/parties/v"+version+"/party.proto",
     package:"crm.parties.v"+version});
   assert.ok(targetMethods(extended).includes(future));
-  const report=fixture();
-  assert.throws(()=>validateBindings(report,extended),/active RPC absent from canonical module.yaml binding/);
-  report.modules.find(module=>module.module_id==="crm.parties").rpc_bindings.push({path:future});
-  assert.throws(()=>validateRuntime(report,extended,validateBindings(report,extended)),/full contract differs/);
+  const input=fixture();
+  assert.throws(()=>validateBindings(input.report,extended),/active RPC absent from canonical module.yaml binding/);
+  input.report.modules.find(module=>module.module_id==="crm.parties").rpc_bindings.push({path:future});
+  assert.throws(()=>verify(input,extended),/full contract differs/);
  }
 });

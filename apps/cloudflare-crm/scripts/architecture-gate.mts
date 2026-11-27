@@ -4,7 +4,7 @@ import {existsSync,readFileSync,readdirSync} from "node:fs";
 import {execFileSync} from "node:child_process";
 import {dirname,resolve} from "node:path";
 import {fileURLToPath} from "node:url";
-import {record, records, string, strings} from "./json-boundary.mts";
+import {record, records, string} from "./json-boundary.mts";
 const repo=resolve(dirname(fileURLToPath(import.meta.url)),"../../..");
 const read=(path: string)=>readFileSync(resolve(repo,path),"utf8");
 function readJson(path: string): unknown {
@@ -18,24 +18,17 @@ check(policy.schema_version===1,"unknown policy schema");
 check(policy.browser_wire_format==="Connect binary Protobuf","binary Connect wire choice changed");
 function validateModuleReport(value: unknown){
   const report=record(value);
-  check(report.schema_version===1,"generated module report schema must be 1");
+  check(report.schema_version===2,"generated module report schema must be 2");
   const sourceSha=string(report.source_sha);
   check(/^[a-f0-9]{40}$/.test(sourceSha),
     "module report must identify one immutable source SHA");
   check(Array.isArray(report.modules)&&report.modules.length>0,
     "canonical module manifests not discovered");
-  check(Array.isArray(report.active_rpc_paths),
-    "generated active RPC inventory missing");
-  check(Array.isArray(report.unclaimed_active_rpc_paths),
-    "generated unmatched active RPC inventory missing");
   const modules=records(report.modules);
-  const activePaths=strings(report.active_rpc_paths);
-  const unclaimedPaths=strings(report.unclaimed_active_rpc_paths);
   const names=modules.map(m=>string(m.module_id));
   check(new Set(names).size===names.length,"duplicate canonical module id");
   const paths=modules.map(m=>string(m.manifest));
   check(new Set(paths).size===paths.length,"duplicate canonical module manifest");
-  const rpcOwner=new Map<string,string>();
   for(const m of modules){
     const id=string(m.module_id),manifest=string(m.manifest);
     check(/^crm\.[a-z0-9.-]+$/.test(id),
@@ -44,27 +37,9 @@ function validateModuleReport(value: unknown){
       "module must originate in modules/*/module.yaml: "+id);
     check(m.kind==="domain"||m.kind==="composition","invalid module kind "+id);
     check(typeof m.linked==="boolean","missing Worker activation status "+m.module_id);
-    check(Array.isArray(m.declared_rpc_paths)&&Array.isArray(m.active_rpc_paths),
-      "module RPCs must be compiler-derived "+m.module_id);
-    const declared=strings(m.declared_rpc_paths);
-    for(const rpc of declared){
-      check(!rpcOwner.has(rpc),"duplicate declared RPC owner "+rpc);
-      rpcOwner.set(rpc,id);
-    }
-    for(const rpc of strings(m.active_rpc_paths)){
-      check(declared.includes(rpc),
-        "active RPC lacks canonical manifest binding "+rpc);
-    }
+    check(Array.isArray(m.rpc_bindings),"missing declared RPC bindings "+id);
   }
-  check(new Set(activePaths).size===activePaths.length,
-    "duplicate active RPC path in compiled report");
-  const missing=activePaths.filter(rpc=>!rpcOwner.has(rpc)).sort();
-  check(JSON.stringify(missing)===JSON.stringify(unclaimedPaths.sort()),
-    "generated report omitted unresolved active RPCs");
-  if(report.runtime_evidence==="EXECUTED"){
-    check(missing.length===0,"active RPC lacks canonical module.yaml binding: "+missing.join(","));
-  }
-  return {sourceSha,runtimeEvidence:string(report.runtime_evidence)};
+  return sourceSha;
 }
 
 // Active CRM integration fixtures use the shared D1 binding, never raw files.
@@ -115,7 +90,7 @@ validateWorkerConfig(production,local);
 const reportPath=process.env.CRM_MODULE_COVERAGE_REPORT;
 check(!!reportPath,"canonical manifest/Cargo report required");
 const report: unknown=JSON.parse(readFileSync(reportPath,"utf8"));
-const {sourceSha,runtimeEvidence}=validateModuleReport(report);
+const sourceSha=validateModuleReport(report);
 check(sourceSha===execFileSync("git",["rev-parse","HEAD"],{cwd:repo,encoding:"utf8"}).trim(),
  "stale module inventory");
 // Fail fast on compiler policy drift before npm/Cargo or Cloudflare work.
@@ -151,6 +126,6 @@ const dependencies=record(record(readJson("apps/cloudflare-crm/package.json")).d
 check(typeof dependencies["@ultimate-crm/client"]==="string"&&typeof dependencies["@ultimate-crm/ui"]==="string",
  "existing typed client and UI packages required");
 console.log(JSON.stringify({event:"crm.architecture-gate",result:"PASS",
- scope:"configuration and manifest/Cargo inventory",runtime_evidence:runtimeEvidence,
+ scope:"configuration and manifest/Cargo inventory",runtime_evidence:"NOT_EXECUTED",
  policy_schema:policy.schema_version}));
 export {validateModuleReport};
