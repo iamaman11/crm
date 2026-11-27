@@ -148,9 +148,9 @@ impl csv_wire::PartyCsvService for PartyCsvV2Service {
             &db,
             &self.actor.tenant,
         )
-            .await
-            .map_err(|error| crate::diagnostics::read_error(&self.request_id, &error))?
-            .map_err(|failure| failure.connect("PreviewPartyImport", &self.request_id))?;
+        .await
+        .map_err(|error| crate::diagnostics::read_error(&self.request_id, &error))?
+        .map_err(|failure| failure.connect("PreviewPartyImport", &self.request_id))?;
         RpcResponse::ok(csv_wire::PreviewPartyImportResponse {
             count: preview.count as u32,
             csv_sha256_hex: preview.hash,

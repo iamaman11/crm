@@ -170,8 +170,7 @@ fn parse_import(
 ) -> std::result::Result<ImportPlan, &'static str> {
     let source_id = selected_source_id
         .map(|value| {
-            SourceSystemId::try_new(value.to_owned())
-                .map(|typed| typed.as_str().to_owned())
+            SourceSystemId::try_new(value.to_owned()).map(|typed| typed.as_str().to_owned())
         })
         .transpose()
         .map_err(|_| "IMPORT_SOURCE_ID_INVALID")?;
@@ -216,7 +215,11 @@ fn parse_import(
     let identity = if let Some(source_id) = source_id.as_deref() {
         party_export_hash_parts(
             b"crm.cloudflare.csv-import-source-job/v1",
-            &[tenant.as_bytes(), source_id.as_bytes(), mapping_version.as_bytes()],
+            &[
+                tenant.as_bytes(),
+                source_id.as_bytes(),
+                mapping_version.as_bytes(),
+            ],
         )
     } else {
         party_export_hash_parts(
@@ -622,11 +625,8 @@ pub(super) async fn register_import_source(
         b"crm.cloudflare.csv-import-source/v1",
         &[actor.tenant.as_bytes(), normalized_name.as_bytes()],
     );
-    let source_id = SourceSystemId::try_new(format!(
-        "csv-source-{}",
-        party_export_hex(&identity)
-    ))
-    .map_err(|error| worker::Error::RustError(error.code))?;
+    let source_id = SourceSystemId::try_new(format!("csv-source-{}", party_export_hex(&identity)))
+        .map_err(|error| worker::Error::RustError(error.code))?;
     parties::register_import_source(
         db,
         actor,
@@ -815,23 +815,21 @@ pub(super) async fn apply_import(
                 connectrpc::ErrorCode::Aborted,
             )));
         }
-        return Ok(
-            parties::import_source_batch(
-                db,
-                actor,
-                source_id,
-                source.rows,
-                key,
-                &plan.hash,
-                &source.fingerprint,
-                trace,
-            )
-            .await?
-            .map(|saved| ImportApplied {
-                saved,
-                hash: plan.hash,
-            }),
-        );
+        return Ok(parties::import_source_batch(
+            db,
+            actor,
+            source_id,
+            source.rows,
+            key,
+            &plan.hash,
+            &source.fingerprint,
+            trace,
+        )
+        .await?
+        .map(|saved| ImportApplied {
+            saved,
+            hash: plan.hash,
+        }));
     }
     if !expected_preview_fingerprint.is_empty() {
         return Ok(Err(parties::MutationFailure::domain(

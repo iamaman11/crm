@@ -150,7 +150,9 @@ pub(super) async fn register_import_source(
     .await?
     .ok_or_else(|| worker::Error::RustError("CSV source registration readback failed".into()))?;
     if inserted.normalized_name != normalized_name {
-        return Err(worker::Error::RustError("CSV source identity collision".into()));
+        return Err(worker::Error::RustError(
+            "CSV source identity collision".into(),
+        ));
     }
     Ok(ImportSource {
         id: inserted.id,
@@ -164,7 +166,9 @@ pub(super) async fn import_source_exists(
     source_id: &str,
 ) -> Result<bool> {
     #[derive(Deserialize)]
-    struct Exists { present: i64 }
+    struct Exists {
+        present: i64,
+    }
     Ok(bind(
         db,
         "SELECT 1 AS present FROM crm_party_import_sources WHERE tenant=? AND id=?",
@@ -371,7 +375,6 @@ pub(super) async fn import_batch(
         original_request_id: trace.to_owned(),
     }))
 }
-
 
 pub(super) async fn import_source_batch(
     db: &D1Database,
