@@ -1,55 +1,13 @@
-## Summary
+## Изменение
 
-## Requirement IDs and dependencies
+- Issue и область изменений
+- Rust-владелец и затронутый контракт, если применимо
 
-## Architecture result
-- Authoritative owner/domain:
-- Exact production path:
-- Module contribution coordinates:
-- Remaining scope not claimed:
+## Проверки
 
-## Workspace/package governance
-- Workspace members added: none / list exact paths
-- Workspace dependencies added or changed: none / list exact requirements and features
-- Lockfile effect: none / explain exact diff
-- Architecture governance registry entries: none / list IDs or paths
+- Проверенный SHA, команды и результаты
+- Ссылка на Gate A итогового SHA в `dev` и Gate B для изменений пользовательского поведения, когда они выполнены
 
-New crate justification, required for every added workspace member:
-- protected boundary:
-- isolated dependencies:
-- expected consumers:
-- why an internal Rust module is insufficient:
-- lifecycle or extraction seam:
-- expected build/test fan-out:
-- removal or consolidation condition:
-- tracking issue:
-
-## Architecture conformance
-- [ ] Domain/application code depends inward only; no business module gained DB, broker, arbitrary HTTP, secret-store, object-storage or LLM-provider clients.
-- [ ] No business module imports another module's internals or storage.
-- [ ] Mutations, queries and workers enter production through explicit module-owned contributions.
-- [ ] Generic router/worker algorithms contain no new business capability, query, module-ID or concrete-adapter switch.
-- [ ] Tenant route/worker activation uses durable `crm.module_installations` state with no bootstrap bypass.
-- [ ] Cross-owner semantic reads occur before final authorization; authoritative executors perform no unrelated awaited validation before side effects.
-- [ ] Every governed coordinate has exactly one production route or one exact reasoned classification; no owner-wide/pattern allowlist was added.
-- [ ] Capability, query, permission, idempotency, event, audit and typed error contracts are preserved.
-- [ ] Protobuf and published module changes pass compatibility/immutability checks.
-- [ ] Migration, disable, uninstall, rollback and recovery implications are documented and tested.
-
-## Acceptance evidence
-- [ ] Focused domain/unit tests
-- [ ] Architecture conformance preflight: `python scripts/repo.py conformance`
-- [ ] Workspace governance: `python scripts/analyze_workspace_governance.py --base-ref origin/main --check`
-- [ ] Rust formatting, Clippy and workspace tests
-- [ ] Contract and Governance CI when applicable
-- [ ] Database and real-process/runtime CI when applicable
-- [ ] Product-plane typecheck/lint/unit/E2E when applicable
-- [ ] Security, tenant-isolation, authorization and cross-tenant negative evidence
-- [ ] Performance/operational evidence when relevant
-- [ ] Documentation, roadmap, module catalog, issue and PR state synchronized
-
-## Exact-head verification
-- Candidate SHA:
-- Applicable workflows:
-- [ ] All applicable workflows passed on this unchanged SHA.
-- [ ] No unresolved blocking review thread or known gate defect remains.
+Правила работы и архитектура описаны в каноническом `dev`.
+[AGENTS.md](https://github.com/iamaman11/crm/blob/dev/AGENTS.md) ·
+[ARCHITECTURE.md](https://github.com/iamaman11/crm/blob/dev/apps/cloudflare-crm/ARCHITECTURE.md)
