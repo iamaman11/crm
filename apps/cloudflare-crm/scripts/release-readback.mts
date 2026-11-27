@@ -17,7 +17,7 @@ type SourceOptions = ReadbackOptions & {
 };
 
 export function releaseVersionAffinityKey(runId: string, attempt: string) {
-  if (!/^\\d+$/.test(runId) || !/^[1-9]\\d*$/.test(attempt))
+  if (!/^[0-9]+$/.test(runId) || !/^[1-9][0-9]*$/.test(attempt))
     throw Error("CRM_RELEASE_VERSION_AFFINITY_KEY_INVALID");
   return "crm-release-" + runId + "-" + attempt;
 }
