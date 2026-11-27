@@ -150,6 +150,8 @@ async fn native_doctor(env: Env, actor: &access::Actor, request_id: &str) -> Res
         "crm_privacy_case_records",
         "crm_privacy_case_receipts",
         "crm_party_import_receipts",
+        "crm_party_import_sources",
+        "crm_party_source_identities",
         "crm_enrichment_profiles",
         "crm_enrichment_mappings",
         "crm_enrichment_receipts",
@@ -536,6 +538,18 @@ const RPC_POLICIES: &[(&str, RpcPolicy)] = &[
         "/crm.customer_data_operations.v2.PartyCsvService/PreviewPartyExport",
         RpcPolicy {
             permission: RpcPermission::AdminRead,
+        },
+    ),
+    (
+        "/crm.customer_data_operations.v2.PartyCsvService/ListPartyImportSources",
+        RpcPolicy {
+            permission: RpcPermission::AdminRead,
+        },
+    ),
+    (
+        "/crm.customer_data_operations.v2.PartyCsvService/RegisterPartyImportSource",
+        RpcPolicy {
+            permission: RpcPermission::Write,
         },
     ),
     (

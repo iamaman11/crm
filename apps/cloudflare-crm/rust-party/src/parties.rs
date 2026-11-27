@@ -15,6 +15,34 @@ use worker::{D1Database, Result};
 struct Stored {
     state: String,
 }
+#[derive(Deserialize)]
+struct StoredVersioned {
+    state: String,
+    version: i64,
+}
+#[derive(Deserialize)]
+pub(super) struct ImportSource {
+    pub(super) id: String,
+    pub(super) display_name: String,
+}
+#[derive(Deserialize)]
+struct ImportSourceRecord {
+    id: String,
+    display_name: String,
+    normalized_name: String,
+}
+#[derive(Deserialize)]
+struct SourceIdentityRecord {
+    party_id: String,
+}
+pub(super) struct SourceImportRow {
+    pub(super) party_id: String,
+    pub(super) kind: PartyKind,
+    pub(super) display_name: String,
+    pub(super) row_key: String,
+    pub(super) external_id_sha256: String,
+    pub(super) expected_version: Option<i64>,
+}
 use super::d1_write::Receipt;
 #[derive(Serialize, Deserialize)]
 struct PartyRow {
@@ -39,6 +67,132 @@ pub(super) async fn stored(db: &D1Database, tenant: &str, id: &str) -> Result<Op
         decode_party_state(r.state.as_bytes()).map_err(|e| worker::Error::RustError(e.code))
     })
     .transpose()
+}
+
+pub(super) async fn stored_versioned(
+    db: &D1Database,
+    tenant: &str,
+    id: &str,
+) -> Result<Option<(Party, i64)>> {
+    let row = bind(
+        db,
+        "SELECT state,version FROM crm_party_records WHERE tenant = ? AND id = ?",
+        &[JsValue::from_str(tenant), JsValue::from_str(id)],
+    )?
+    .first::<StoredVersioned>(None)
+    .await?;
+    row.map(|row| {
+        decode_party_state(row.state.as_bytes())
+            .map(|party| (party, row.version))
+            .map_err(|error| worker::Error::RustError(error.code))
+    })
+    .transpose()
+}
+
+pub(super) async fn list_import_sources(
+    db: &D1Database,
+    tenant: &str,
+) -> Result<Vec<ImportSource>> {
+    bind(
+        db,
+        "SELECT id,display_name FROM crm_party_import_sources WHERE tenant=? ORDER BY normalized_name,id",
+        &[JsValue::from_str(tenant)],
+    )?
+    .all()
+    .await?
+    .results::<ImportSource>()
+}
+
+pub(super) async fn register_import_source(
+    db: &D1Database,
+    actor: &access::Actor,
+    source_id: &str,
+    display_name: &str,
+    normalized_name: &str,
+    trace: &str,
+) -> Result<ImportSource> {
+    if let Some(existing) = bind(
+        db,
+        "SELECT id,display_name,normalized_name FROM crm_party_import_sources WHERE tenant=? AND normalized_name=?",
+        &[JsValue::from_str(&actor.tenant), JsValue::from_str(normalized_name)],
+    )?
+    .first::<ImportSourceRecord>(None)
+    .await?
+    {
+        if existing.id != source_id || existing.normalized_name != normalized_name {
+            return Err(worker::Error::RustError("CSV source identity mismatch".into()));
+        }
+        return Ok(ImportSource {
+            id: existing.id,
+            display_name: existing.display_name,
+        });
+    }
+    bind(
+        db,
+        "INSERT OR IGNORE INTO crm_party_import_sources(tenant,id,display_name,normalized_name,created_by,request_id) VALUES(?,?,?,?,?,?)",
+        &[
+            JsValue::from_str(&actor.tenant),
+            JsValue::from_str(source_id),
+            JsValue::from_str(display_name),
+            JsValue::from_str(normalized_name),
+            JsValue::from_str(&actor.identity),
+            JsValue::from_str(trace),
+        ],
+    )?
+    .run()
+    .await?;
+    let inserted = bind(
+        db,
+        "SELECT id,display_name,normalized_name FROM crm_party_import_sources WHERE tenant=? AND id=?",
+        &[JsValue::from_str(&actor.tenant), JsValue::from_str(source_id)],
+    )?
+    .first::<ImportSourceRecord>(None)
+    .await?
+    .ok_or_else(|| worker::Error::RustError("CSV source registration readback failed".into()))?;
+    if inserted.normalized_name != normalized_name {
+        return Err(worker::Error::RustError("CSV source identity collision".into()));
+    }
+    Ok(ImportSource {
+        id: inserted.id,
+        display_name: inserted.display_name,
+    })
+}
+
+pub(super) async fn import_source_exists(
+    db: &D1Database,
+    tenant: &str,
+    source_id: &str,
+) -> Result<bool> {
+    #[derive(Deserialize)]
+    struct Exists { present: i64 }
+    Ok(bind(
+        db,
+        "SELECT 1 AS present FROM crm_party_import_sources WHERE tenant=? AND id=?",
+        &[JsValue::from_str(tenant), JsValue::from_str(source_id)],
+    )?
+    .first::<Exists>(None)
+    .await?
+    .is_some())
+}
+
+pub(super) async fn source_identity(
+    db: &D1Database,
+    tenant: &str,
+    source_id: &str,
+    external_id_sha256: &str,
+) -> Result<Option<String>> {
+    bind(
+        db,
+        "SELECT party_id FROM crm_party_source_identities WHERE tenant=? AND source_id=? AND external_id_sha256=?",
+        &[
+            JsValue::from_str(tenant),
+            JsValue::from_str(source_id),
+            JsValue::from_str(external_id_sha256),
+        ],
+    )?
+    .first::<SourceIdentityRecord>(None)
+    .await
+    .map(|record| record.map(|record| record.party_id))
 }
 /// Only this Party adapter persists Party creation, including CSV import.
 /// D1 batch is atomic: all Party states, receipts and audits or none.
@@ -72,6 +226,8 @@ pub(super) struct ImportReceipt {
     pub(super) source_sha256: String,
     pub(super) row_count: usize,
     pub(super) request_id: String,
+    pub(super) source_id: Option<String>,
+    pub(super) preview_fingerprint: Option<String>,
 }
 pub(super) async fn import_operation(
     db: &D1Database,
@@ -80,7 +236,7 @@ pub(super) async fn import_operation(
 ) -> Result<Option<ImportReceipt>> {
     bind(
         db,
-        "SELECT source_sha256,row_count,request_id FROM crm_party_import_receipts WHERE tenant=? AND key=?",
+        "SELECT source_sha256,row_count,request_id,source_id,preview_fingerprint FROM crm_party_import_receipts WHERE tenant=? AND key=?",
         &[JsValue::from_str(tenant), JsValue::from_str(key)],
     )?
     .first::<ImportReceipt>(None)
@@ -102,7 +258,11 @@ pub(super) async fn import_batch(
         )));
     }
     let replay = |old: ImportReceipt| {
-        if old.source_sha256 != source_hash || old.row_count != rows.len() {
+        if old.source_sha256 != source_hash
+            || old.row_count != rows.len()
+            || old.source_id.is_some()
+            || old.preview_fingerprint.is_some()
+        {
             return Ok(Err(MutationFailure::domain(
                 "IDEMPOTENCY_CONFLICT",
                 ErrorCode::Aborted,
@@ -208,6 +368,201 @@ pub(super) async fn import_batch(
         created: rows.len() - receipts,
         replayed: receipts,
         operation_replayed: receipts > 0,
+        original_request_id: trace.to_owned(),
+    }))
+}
+
+
+pub(super) async fn import_source_batch(
+    db: &D1Database,
+    actor: &access::Actor,
+    source_id: &str,
+    rows: Vec<SourceImportRow>,
+    operation_key: &str,
+    source_hash: &str,
+    preview_fingerprint: &str,
+    trace: &str,
+) -> Result<std::result::Result<ImportSaved, MutationFailure>> {
+    let tenant = &actor.tenant;
+    if !(8..=120).contains(&operation_key.len()) || rows.is_empty() {
+        return Ok(Err(MutationFailure::domain(
+            "IMPORT_PRECONDITION_INVALID",
+            ErrorCode::InvalidArgument,
+        )));
+    }
+    let replay = |old: ImportReceipt| {
+        if old.source_sha256 != source_hash
+            || old.row_count != rows.len()
+            || old.source_id.as_deref() != Some(source_id)
+            || old.preview_fingerprint.as_deref() != Some(preview_fingerprint)
+        {
+            return Ok(Err(MutationFailure::domain(
+                "IDEMPOTENCY_CONFLICT",
+                ErrorCode::Aborted,
+            )));
+        }
+        Ok(Ok(ImportSaved {
+            created: 0,
+            replayed: old.row_count,
+            operation_replayed: true,
+            original_request_id: old.request_id,
+        }))
+    };
+    if let Some(old) = import_operation(db, tenant, operation_key).await? {
+        return replay(old);
+    }
+    if !import_source_exists(db, tenant, source_id).await? {
+        return Ok(Err(MutationFailure::domain(
+            "IMPORT_SOURCE_NOT_FOUND",
+            ErrorCode::NotFound,
+        )));
+    }
+
+    let mut statements = Vec::with_capacity(rows.len() * 2 + 1);
+    let mut party_ids = BTreeSet::new();
+    let mut external_ids = BTreeSet::new();
+    let mut created = 0;
+    let mut replayed = 0;
+    for row in &rows {
+        if !party_ids.insert(row.party_id.clone())
+            || !external_ids.insert(row.external_id_sha256.clone())
+        {
+            return Ok(Err(MutationFailure::domain(
+                "IMPORT_DUPLICATE_OR_EMPTY_SOURCE_ID",
+                ErrorCode::InvalidArgument,
+            )));
+        }
+        let mapped = source_identity(db, tenant, source_id, &row.external_id_sha256).await?;
+        if let Some(mapped_party_id) = mapped {
+            let Some(expected_version) = row.expected_version else {
+                return Ok(Err(MutationFailure::domain(
+                    "IMPORT_PREVIEW_STALE",
+                    ErrorCode::Aborted,
+                )));
+            };
+            if mapped_party_id != row.party_id {
+                return Ok(Err(MutationFailure::domain(
+                    "IMPORT_PREVIEW_STALE",
+                    ErrorCode::Aborted,
+                )));
+            }
+            let Some((party, current_version)) =
+                stored_versioned(db, tenant, &row.party_id).await?
+            else {
+                return Ok(Err(MutationFailure::domain(
+                    "IMPORT_SOURCE_IDENTITY_TARGET_MISSING",
+                    ErrorCode::Aborted,
+                )));
+            };
+            if current_version != expected_version
+                || party.kind() != row.kind
+                || party.display_name() != row.display_name
+            {
+                return Ok(Err(MutationFailure::domain(
+                    "IMPORT_PREVIEW_STALE",
+                    ErrorCode::Aborted,
+                )));
+            }
+            // The migration trigger turns this no-op CAS into a transactional
+            // version guard. A Party update after preview aborts the whole batch.
+            statements.push(bind(
+                db,
+                "UPDATE crm_party_source_identities SET party_version=? WHERE tenant=? AND source_id=? AND external_id_sha256=? AND party_id=?",
+                &[
+                    JsValue::from_f64(expected_version as f64),
+                    JsValue::from_str(tenant),
+                    JsValue::from_str(source_id),
+                    JsValue::from_str(&row.external_id_sha256),
+                    JsValue::from_str(&row.party_id),
+                ],
+            )?);
+            replayed += 1;
+        } else {
+            if row.expected_version.is_some()
+                || stored_versioned(db, tenant, &row.party_id).await?.is_some()
+            {
+                return Ok(Err(MutationFailure::domain(
+                    "IMPORT_PREVIEW_STALE",
+                    ErrorCode::Aborted,
+                )));
+            }
+            let hash = digest("create", &row.party_id, &row.display_name, 0);
+            let party = Party::create(CreateParty {
+                party_id: PartyId::try_new(row.party_id.clone())
+                    .map_err(|error| worker::Error::RustError(error.code))?,
+                kind: row.kind,
+                display_name: row.display_name.clone(),
+                occurred_at_unix_nanos: now_nanos(),
+            })
+            .map_err(|error| worker::Error::RustError(error.code))?;
+            let state = String::from_utf8(
+                encode_party_state(&party).map_err(|error| worker::Error::RustError(error.code))?,
+            )
+            .map_err(|error| worker::Error::RustError(error.to_string()))?;
+            statements.push(bind(
+                db,
+                "INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id,actor,search_name) VALUES(?,?,?,?,?,?,?,?,?)",
+                &[
+                    JsValue::from_str(tenant),
+                    JsValue::from_str(&row.party_id),
+                    JsValue::from_str(&state),
+                    JsValue::from_f64(1.0),
+                    JsValue::from_str(&row.row_key),
+                    JsValue::from_str(&hash),
+                    JsValue::from_str(trace),
+                    JsValue::from_str(&actor.identity),
+                    JsValue::from_str(&crm_core_contracts::nfc_text_key(party.display_name())),
+                ],
+            )?);
+            statements.push(bind(
+                db,
+                "INSERT INTO crm_party_source_identities(tenant,source_id,external_id_sha256,party_id,party_version,request_id,actor) VALUES(?,?,?,?,?,?,?)",
+                &[
+                    JsValue::from_str(tenant),
+                    JsValue::from_str(source_id),
+                    JsValue::from_str(&row.external_id_sha256),
+                    JsValue::from_str(&row.party_id),
+                    JsValue::from_f64(1.0),
+                    JsValue::from_str(trace),
+                    JsValue::from_str(&actor.identity),
+                ],
+            )?);
+            created += 1;
+        }
+    }
+    statements.push(bind(
+        db,
+        "INSERT INTO crm_party_import_receipts(tenant,key,source_sha256,row_count,request_id,source_id,preview_fingerprint) VALUES(?,?,?,?,?,?,?)",
+        &[
+            JsValue::from_str(tenant),
+            JsValue::from_str(operation_key),
+            JsValue::from_str(source_hash),
+            JsValue::from_f64(rows.len() as f64),
+            JsValue::from_str(trace),
+            JsValue::from_str(source_id),
+            JsValue::from_str(preview_fingerprint),
+        ],
+    )?);
+    let statement_count = statements.len();
+    let acknowledged = db.batch(statements).await.is_ok_and(|results| {
+        results.len() == statement_count && results.iter().all(|result| result.success())
+    });
+    if !acknowledged {
+        let old = match super::d1_write::require_receipt(
+            import_operation(db, tenant, operation_key),
+            "IMPORT_WRITE_UNCONFIRMED",
+        )
+        .await
+        {
+            Ok(old) => old,
+            Err(failure) => return Ok(Err(failure)),
+        };
+        return replay(old);
+    }
+    Ok(Ok(ImportSaved {
+        created,
+        replayed,
+        operation_replayed: replayed > 0,
         original_request_id: trace.to_owned(),
     }))
 }

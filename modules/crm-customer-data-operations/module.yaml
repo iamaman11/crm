@@ -1,6 +1,6 @@
 schema_version: crm.module/v1
 module_id: crm.customer-data-operations
-version: 0.4.0
+version: 0.5.0
 display_name: CRM Customer Data Operations
 description: Governed customer import and export jobs, immutable source/specification evidence, resumable execution, derived artifacts and reconciliation without owning customer-master records.
 owner:
@@ -121,6 +121,16 @@ provides:
       binding:
         kind: protobuf_rpc
         rpc: crm.customer_data_operations.v2.PartyCsvService.PreviewPartyExport
+    - id: customer_data.csv.import.source.list
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_data_operations.v2.PartyCsvService.ListPartyImportSources
+    - id: customer_data.csv.import.source.register
+      version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_data_operations.v2.PartyCsvService.RegisterPartyImportSource
     - id: customer_data.csv.import.preview
       version: 2.0.0
       binding:
