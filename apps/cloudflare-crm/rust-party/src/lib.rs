@@ -151,6 +151,7 @@ async fn native_doctor(env: Env, actor: &access::Actor, request_id: &str) -> Res
         "crm_privacy_case_receipts",
         "crm_party_import_receipts",
         "crm_party_import_sources",
+        "crm_party_import_source_receipts",
         "crm_party_source_identities",
         "crm_enrichment_profiles",
         "crm_enrichment_mappings",

@@ -35,6 +35,11 @@ struct ImportSourceRecord {
 struct SourceIdentityRecord {
     party_id: String,
 }
+#[derive(Deserialize)]
+struct ImportSourceReceiptRecord {
+    source_id: String,
+    request_id: String,
+}
 pub(super) struct SourceImportRow {
     pub(super) party_id: String,
     pub(super) kind: PartyKind,
@@ -103,61 +108,193 @@ pub(super) async fn list_import_sources(
     .results::<ImportSource>()
 }
 
+async fn import_source_receipt(
+    db: &D1Database,
+    tenant: &str,
+    key: &str,
+) -> Result<Option<ImportSourceReceiptRecord>> {
+    bind(
+        db,
+        "SELECT source_id,request_id FROM crm_party_import_source_receipts WHERE tenant=? AND key=?",
+        &[JsValue::from_str(tenant), JsValue::from_str(key)],
+    )?
+    .first::<ImportSourceReceiptRecord>(None)
+    .await
+}
+
+async fn import_source_by_id(
+    db: &D1Database,
+    tenant: &str,
+    source_id: &str,
+) -> Result<Option<ImportSource>> {
+    bind(
+        db,
+        "SELECT id,display_name FROM crm_party_import_sources WHERE tenant=? AND id=?",
+        &[JsValue::from_str(tenant), JsValue::from_str(source_id)],
+    )?
+    .first::<ImportSource>(None)
+    .await
+}
+
 pub(super) async fn register_import_source(
     db: &D1Database,
     actor: &access::Actor,
     source_id: &str,
     display_name: &str,
     normalized_name: &str,
+    operation_key: &str,
     trace: &str,
-) -> Result<ImportSource> {
+) -> Result<std::result::Result<(ImportSource, ImportSaved), MutationFailure>> {
+    let tenant = &actor.tenant;
+    if !(8..=120).contains(&operation_key.len()) {
+        return Ok(Err(MutationFailure::domain(
+            "IMPORT_PRECONDITION_INVALID",
+            ErrorCode::InvalidArgument,
+        )));
+    }
+
+    if let Some(old) = import_source_receipt(db, tenant, operation_key).await? {
+        if old.source_id != source_id {
+            return Ok(Err(MutationFailure::domain(
+                "IDEMPOTENCY_CONFLICT",
+                ErrorCode::Aborted,
+            )));
+        }
+        let source = import_source_by_id(db, tenant, source_id)
+            .await?
+            .ok_or_else(|| worker::Error::RustError("CSV source receipt target missing".into()))?;
+        return Ok(Ok((
+            source,
+            ImportSaved {
+                created: 0,
+                replayed: 1,
+                operation_replayed: true,
+                original_request_id: old.request_id,
+            },
+        )));
+    }
+
     if let Some(existing) = bind(
         db,
         "SELECT id,display_name,normalized_name FROM crm_party_import_sources WHERE tenant=? AND normalized_name=?",
-        &[JsValue::from_str(&actor.tenant), JsValue::from_str(normalized_name)],
+        &[JsValue::from_str(tenant), JsValue::from_str(normalized_name)],
     )?
     .first::<ImportSourceRecord>(None)
     .await?
     {
         if existing.id != source_id || existing.normalized_name != normalized_name {
-            return Err(worker::Error::RustError("CSV source identity mismatch".into()));
+            return Ok(Err(MutationFailure::domain(
+                "IMPORT_SOURCE_IDENTITY_MISMATCH",
+                ErrorCode::Aborted,
+            )));
         }
-        return Ok(ImportSource {
-            id: existing.id,
-            display_name: existing.display_name,
-        });
     }
-    bind(
+    if let Some(existing) = bind(
         db,
-        "INSERT OR IGNORE INTO crm_party_import_sources(tenant,id,display_name,normalized_name,created_by,request_id) VALUES(?,?,?,?,?,?)",
-        &[
-            JsValue::from_str(&actor.tenant),
-            JsValue::from_str(source_id),
-            JsValue::from_str(display_name),
-            JsValue::from_str(normalized_name),
-            JsValue::from_str(&actor.identity),
-            JsValue::from_str(trace),
-        ],
+        "SELECT id,display_name,normalized_name FROM crm_party_import_sources WHERE tenant=? AND id=?",
+        &[JsValue::from_str(tenant), JsValue::from_str(source_id)],
     )?
-    .run()
-    .await?;
+    .first::<ImportSourceRecord>(None)
+    .await?
+    {
+        if existing.normalized_name != normalized_name {
+            return Ok(Err(MutationFailure::domain(
+                "IMPORT_SOURCE_IDENTITY_MISMATCH",
+                ErrorCode::Aborted,
+            )));
+        }
+    }
+
+    let statements = vec![
+        bind(
+            db,
+            "INSERT OR IGNORE INTO crm_party_import_sources(tenant,id,display_name,normalized_name,created_by,request_id) VALUES(?,?,?,?,?,?)",
+            &[
+                JsValue::from_str(tenant),
+                JsValue::from_str(source_id),
+                JsValue::from_str(display_name),
+                JsValue::from_str(normalized_name),
+                JsValue::from_str(&actor.identity),
+                JsValue::from_str(trace),
+            ],
+        )?,
+        bind(
+            db,
+            "INSERT INTO crm_party_import_source_receipts(tenant,key,source_id,request_id) VALUES(?,?,?,?)",
+            &[
+                JsValue::from_str(tenant),
+                JsValue::from_str(operation_key),
+                JsValue::from_str(source_id),
+                JsValue::from_str(trace),
+            ],
+        )?,
+    ];
+    let statement_count = statements.len();
+    let acknowledged = db.batch(statements).await.is_ok_and(|results| {
+        results.len() == statement_count && results.iter().all(|result| result.success())
+    });
+    if !acknowledged {
+        if let Some(old) = import_source_receipt(db, tenant, operation_key).await? {
+            if old.source_id != source_id {
+                return Ok(Err(MutationFailure::domain(
+                    "IDEMPOTENCY_CONFLICT",
+                    ErrorCode::Aborted,
+                )));
+            }
+            let source = import_source_by_id(db, tenant, source_id)
+                .await?
+                .ok_or_else(|| worker::Error::RustError("CSV source receipt target missing".into()))?;
+            return Ok(Ok((
+                source,
+                ImportSaved {
+                    created: 0,
+                    replayed: 1,
+                    operation_replayed: true,
+                    original_request_id: old.request_id,
+                },
+            )));
+        }
+        return Ok(Err(MutationFailure::domain(
+            "IMPORT_SOURCE_REGISTER_UNCONFIRMED",
+            ErrorCode::Unavailable,
+        )));
+    }
+
     let inserted = bind(
         db,
         "SELECT id,display_name,normalized_name FROM crm_party_import_sources WHERE tenant=? AND id=?",
-        &[JsValue::from_str(&actor.tenant), JsValue::from_str(source_id)],
+        &[JsValue::from_str(tenant), JsValue::from_str(source_id)],
     )?
     .first::<ImportSourceRecord>(None)
     .await?
     .ok_or_else(|| worker::Error::RustError("CSV source registration readback failed".into()))?;
     if inserted.normalized_name != normalized_name {
-        return Err(worker::Error::RustError(
-            "CSV source identity collision".into(),
-        ));
+        return Ok(Err(MutationFailure::domain(
+            "IMPORT_SOURCE_IDENTITY_MISMATCH",
+            ErrorCode::Aborted,
+        )));
     }
-    Ok(ImportSource {
-        id: inserted.id,
-        display_name: inserted.display_name,
-    })
+    let receipt = import_source_receipt(db, tenant, operation_key)
+        .await?
+        .ok_or_else(|| worker::Error::RustError("CSV source receipt readback failed".into()))?;
+    if receipt.source_id != source_id {
+        return Ok(Err(MutationFailure::domain(
+            "IDEMPOTENCY_CONFLICT",
+            ErrorCode::Aborted,
+        )));
+    }
+    Ok(Ok((
+        ImportSource {
+            id: inserted.id,
+            display_name: inserted.display_name,
+        },
+        ImportSaved {
+            created: 0,
+            replayed: 0,
+            operation_replayed: false,
+            original_request_id: receipt.request_id,
+        },
+    )))
 }
 
 pub(super) async fn import_source_exists(

@@ -394,6 +394,30 @@ export async function verifyPartyCsv({dispatch,rpcFetch,sql,partySnapshot,admin,
    csv:sourceCsv1,sourceId
  })).body.code,"not_found");
 
+ // Source registration and its idempotency receipt are one atomic D1 batch.
+ const atomicSourceKey="csv-source-register-atomic";
+ const sourceRegistrationAuditBefore=await count("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' AND action='customer_data.csv_import_source.register'");
+ const atomicSourceInput={
+   displayName:"Atomic Receipt Source",
+   precondition:{idempotencyKey:atomicSourceKey}
+ };
+ await sql("CREATE TRIGGER fixture_fail_source_registration_receipt BEFORE INSERT ON crm_party_import_source_receipts "+
+   "WHEN NEW.key='"+atomicSourceKey+"' BEGIN SELECT RAISE(ABORT,'fixture source receipt failure'); END;");
+ try {
+   await assertUnconfirmed(await sendFixtureRpc(
+     dispatch,methods.registerPartyImportSource,admin,atomicSourceInput,503
+   ),"IMPORT_SOURCE_REGISTER_UNCONFIRMED");
+ } finally { await sql("DROP TRIGGER fixture_fail_source_registration_receipt"); }
+ assert.equal(await count("SELECT COUNT(*) AS n FROM crm_party_import_sources WHERE tenant='tenant-a' AND normalized_name='atomic receipt source'"),0);
+ assert.equal(await count("SELECT COUNT(*) AS n FROM crm_party_import_source_receipts WHERE tenant='tenant-a' AND key='"+atomicSourceKey+"'"),0);
+ assert.equal(await count("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' AND action='customer_data.csv_import_source.register'"),sourceRegistrationAuditBefore);
+ const atomicSourceRetry=await fixtureRpc(dispatch,methods.registerPartyImportSource,admin,atomicSourceInput);
+ assert.equal(atomicSourceRetry.status,200,formatRpcFailure(atomicSourceRetry));
+ assert.equal(atomicSourceRetry.body.receipt?.replayed,false);
+ const atomicSourceReplay=await fixtureRpc(dispatch,methods.registerPartyImportSource,admin,atomicSourceInput);
+ assert.equal(atomicSourceReplay.body.source?.sourceId,atomicSourceRetry.body.source?.sourceId);
+ assert.equal(atomicSourceReplay.body.receipt?.replayed,true);
+
  // A preview is invalidated when another import binds its previously-new external ID.
  const staleBytes=new TextEncoder().encode(
    "party_id,kind,display_name,resource_version\r\nsource-ext-1,person,Source Person,2\r\nstale-ext,person,Stale Preview Person,1\r\n");

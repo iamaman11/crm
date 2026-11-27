@@ -98,11 +98,15 @@ export function DataScreen() {
         {sources.map(source=><option key={source.sourceId} value={source.sourceId}>{source.displayName}</option>)}
       </SelectField>
       <TextField label="Название нового источника" value={sourceName}
-        disabled={sourceBusy||mutation.busy||mutation.pending} onChange={e=>setSourceName(e.target.value)}/>
+        disabled={sourceBusy||mutation.busy||mutation.pending}
+        onChange={e=>{setSourceName(e.target.value);mutation.changed();}}/>
       <p><Button disabled={!sourceName.trim()||sourceBusy||mutation.busy||mutation.pending} onClick={async()=>{
         setSourceBusy(true);setSourceError("");
         try {
-          const registered=await api.csv.registerPartyImportSource({displayName:sourceName});
+          const registered=await api.csv.registerPartyImportSource({
+            displayName:sourceName,precondition:{idempotencyKey:mutation.key}
+          });
+          mutation.changed();
           const refreshed=await api.csv.listPartyImportSources({});
           setSources(refreshed.sources);
           if(registered.source?.sourceId)setSourceId(registered.source.sourceId);

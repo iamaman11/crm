@@ -14,6 +14,18 @@ CREATE TABLE crm_party_import_sources (
  UNIQUE(tenant,normalized_name)
 );
 
+CREATE TABLE crm_party_import_source_receipts (
+ tenant TEXT NOT NULL,
+ key TEXT NOT NULL CHECK(length(key) BETWEEN 8 AND 120),
+ source_id TEXT NOT NULL,
+ request_id TEXT NOT NULL CHECK(length(request_id) > 0),
+ PRIMARY KEY(tenant,key),
+ FOREIGN KEY(tenant,source_id) REFERENCES crm_party_import_sources(tenant,id)
+);
+
+CREATE INDEX crm_party_import_source_receipt_source
+ ON crm_party_import_source_receipts(tenant,source_id);
+
 CREATE TABLE crm_party_source_identities (
  tenant TEXT NOT NULL,
  source_id TEXT NOT NULL,

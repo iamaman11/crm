@@ -49,10 +49,12 @@ impl csv_wire::PartyCsvService for PartyCsvV2Service {
         req: ServiceRequest<'_, csv_wire::RegisterPartyImportSourceRequest>,
     ) -> ServiceResult<csv_wire::RegisterPartyImportSourceResponse> {
         let input = req.to_owned_message();
-        let source = owner::register_import_source(
+        let (key, _) = wire_precondition(input.precondition.as_option(), true)?;
+        let (source, saved) = owner::register_import_source(
             &self.d1()?,
             &self.actor,
             &input.display_name,
+            &key,
             &self.request_id,
         )
         .await
@@ -62,6 +64,14 @@ impl csv_wire::PartyCsvService for PartyCsvV2Service {
             source: Some(csv_wire::PartyImportSource {
                 source_id: source.id,
                 display_name: source.display_name,
+                ..Default::default()
+            })
+            .into(),
+            receipt: Some(core_v2::MutationReceipt {
+                request_id: self.request_id.clone(),
+                resource_version: 1,
+                replayed: saved.operation_replayed,
+                original_request_id: Some(saved.original_request_id),
                 ..Default::default()
             })
             .into(),

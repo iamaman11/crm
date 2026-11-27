@@ -34,10 +34,12 @@ message ListPartyImportSourcesResponse {
 
 message RegisterPartyImportSourceRequest {
   string display_name = 1;
+  crm.core.v2.MutationPrecondition precondition = 2;
 }
 
 message RegisterPartyImportSourceResponse {
   PartyImportSource source = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
 }
 
 message PreviewPartyImportRequest {
