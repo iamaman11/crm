@@ -3,6 +3,7 @@
 //! One signed Access tenant, one original Party D1 owner; NO shadow export
 //! business rules, persisted export job, file store or background service.
 use super::{access, bind, parties};
+pub(super) use super::parties::SourceImportProof as ImportProof;
 use crm_customer_data_operations::{
     CreateImportRow, ExternalPartyIdentifierDigest, ImportJobId, ImportParserProfile, ImportRow,
     PartyImportKind, PartyImportMapping, PreparedPartyRow, RowDiagnostic, SourceSystemId,
@@ -750,8 +751,7 @@ pub(super) struct ImportApplied {
 pub(super) async fn apply_import(
     bytes: &[u8],
     source_id: Option<&str>,
-    expected: &str,
-    expected_preview_fingerprint: &str,
+    proof: ImportProof<'_>,
     key: &str,
     db: &D1Database,
     actor: &access::Actor,
@@ -766,7 +766,7 @@ pub(super) async fn apply_import(
             )));
         }
     };
-    if expected != plan.hash {
+    if proof.source_hash != plan.hash {
         return Ok(Err(parties::MutationFailure::domain(
             "IMPORT_SOURCE_CHANGED",
             connectrpc::ErrorCode::Aborted,
@@ -779,7 +779,7 @@ pub(super) async fn apply_import(
         )));
     }
     if let Some(source_id) = plan.source_id.as_deref() {
-        if expected_preview_fingerprint.is_empty() {
+        if proof.preview_fingerprint.is_empty() {
             return Ok(Err(parties::MutationFailure::domain(
                 "IMPORT_PREVIEW_FINGERPRINT_REQUIRED",
                 connectrpc::ErrorCode::InvalidArgument,
@@ -791,7 +791,7 @@ pub(super) async fn apply_import(
             if old.source_sha256 != plan.hash
                 || old.row_count != plan.count
                 || old.source_id.as_deref() != Some(source_id)
-                || old.preview_fingerprint.as_deref() != Some(expected_preview_fingerprint)
+                || old.preview_fingerprint.as_deref() != Some(proof.preview_fingerprint)
             {
                 return Ok(Err(parties::MutationFailure::domain(
                     "IDEMPOTENCY_CONFLICT",
@@ -818,7 +818,7 @@ pub(super) async fn apply_import(
                 connectrpc::ErrorCode::Aborted,
             )));
         }
-        if source.fingerprint != expected_preview_fingerprint {
+        if source.fingerprint != proof.preview_fingerprint {
             return Ok(Err(parties::MutationFailure::domain(
                 "IMPORT_PREVIEW_STALE",
                 connectrpc::ErrorCode::Aborted,
@@ -830,8 +830,10 @@ pub(super) async fn apply_import(
             source_id,
             source.rows,
             key,
-            &plan.hash,
-            &source.fingerprint,
+            ImportProof {
+                source_hash: &plan.hash,
+                preview_fingerprint: &source.fingerprint,
+            },
             trace,
         )
         .await?
@@ -840,7 +842,7 @@ pub(super) async fn apply_import(
             hash: plan.hash,
         }));
     }
-    if !expected_preview_fingerprint.is_empty() {
+    if !proof.preview_fingerprint.is_empty() {
         return Ok(Err(parties::MutationFailure::domain(
             "IMPORT_SOURCE_SELECTION_INVALID",
             connectrpc::ErrorCode::InvalidArgument,

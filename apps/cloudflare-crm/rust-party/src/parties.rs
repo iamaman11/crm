@@ -48,6 +48,12 @@ pub(super) struct SourceImportRow {
     pub(super) external_id_sha256: String,
     pub(super) expected_version: Option<i64>,
 }
+
+#[derive(Clone, Copy)]
+pub(super) struct SourceImportProof<'a> {
+    pub(super) source_hash: &'a str,
+    pub(super) preview_fingerprint: &'a str,
+}
 use super::d1_write::Receipt;
 #[derive(Serialize, Deserialize)]
 struct PartyRow {
@@ -181,13 +187,12 @@ pub(super) async fn register_import_source(
     )?
     .first::<ImportSourceRecord>(None)
     .await?
+        && (existing.id != source_id || existing.normalized_name != normalized_name)
     {
-        if existing.id != source_id || existing.normalized_name != normalized_name {
-            return Ok(Err(MutationFailure::domain(
-                "IMPORT_SOURCE_IDENTITY_MISMATCH",
-                ErrorCode::Aborted,
-            )));
-        }
+        return Ok(Err(MutationFailure::domain(
+            "IMPORT_SOURCE_IDENTITY_MISMATCH",
+            ErrorCode::Aborted,
+        )));
     }
     if let Some(existing) = bind(
         db,
@@ -196,13 +201,12 @@ pub(super) async fn register_import_source(
     )?
     .first::<ImportSourceRecord>(None)
     .await?
+        && existing.normalized_name != normalized_name
     {
-        if existing.normalized_name != normalized_name {
-            return Ok(Err(MutationFailure::domain(
-                "IMPORT_SOURCE_IDENTITY_MISMATCH",
-                ErrorCode::Aborted,
-            )));
-        }
+        return Ok(Err(MutationFailure::domain(
+            "IMPORT_SOURCE_IDENTITY_MISMATCH",
+            ErrorCode::Aborted,
+        )));
     }
 
     let statements = vec![
@@ -521,8 +525,7 @@ pub(super) async fn import_source_batch(
     source_id: &str,
     rows: Vec<SourceImportRow>,
     operation_key: &str,
-    source_hash: &str,
-    preview_fingerprint: &str,
+    proof: SourceImportProof<'_>,
     trace: &str,
 ) -> Result<std::result::Result<ImportSaved, MutationFailure>> {
     let tenant = &actor.tenant;
@@ -533,10 +536,10 @@ pub(super) async fn import_source_batch(
         )));
     }
     let replay = |old: ImportReceipt| {
-        if old.source_sha256 != source_hash
+        if old.source_sha256 != proof.source_hash
             || old.row_count != rows.len()
             || old.source_id.as_deref() != Some(source_id)
-            || old.preview_fingerprint.as_deref() != Some(preview_fingerprint)
+            || old.preview_fingerprint.as_deref() != Some(proof.preview_fingerprint)
         {
             return Ok(Err(MutationFailure::domain(
                 "IDEMPOTENCY_CONFLICT",
@@ -678,11 +681,11 @@ pub(super) async fn import_source_batch(
         &[
             JsValue::from_str(tenant),
             JsValue::from_str(operation_key),
-            JsValue::from_str(source_hash),
+            JsValue::from_str(proof.source_hash),
             JsValue::from_f64(rows.len() as f64),
             JsValue::from_str(trace),
             JsValue::from_str(source_id),
-            JsValue::from_str(preview_fingerprint),
+            JsValue::from_str(proof.preview_fingerprint),
         ],
     )?);
     let statement_count = statements.len();

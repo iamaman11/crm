@@ -193,8 +193,10 @@ impl csv_wire::PartyCsvService for PartyCsvV2Service {
         let applied = owner::apply_import(
             &input.csv,
             input.source_id.as_deref(),
-            &input.expected_sha256_hex,
-            &input.expected_preview_fingerprint,
+            owner::ImportProof {
+                source_hash: &input.expected_sha256_hex,
+                preview_fingerprint: &input.expected_preview_fingerprint,
+            },
             &key,
             &self.d1()?,
             &self.actor,
