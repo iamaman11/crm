@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { acquire, connect, history, limits, type Browser, type BrowserContext, type Page } from "@cloudflare/playwright";
-import { DEFAULT_BROWSER_URL, browserUrl, siteAccessTargets, siteAccessForRequest, siteAccessCredentialsReady, siteRequestDispositionForTargets, isPermittedBrowserRequest, redact, safePagePath } from "./security";
+import { DEFAULT_BROWSER_URL, browserUrl, siteAccessTargets, siteAccessForRequest, siteAccessCredentialsReady, siteRequestDispositionForTargets, isTrustedSiteNavigationRequest, isPermittedBrowserRequest, redact, safePagePath } from "./security";
 import { chooseDevice, deviceOptions, type BrowserDevice } from "./browser-device";
 import { WEB_VITALS_INIT, readVitals, type WebVitals } from "./browser-performance";
 import { AXE_SOURCE } from "./axe-source.generated";
@@ -121,7 +121,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
   private nextOperation: Promise<void> = Promise.resolve();
   private pendingOperations = 0;
   private acceptingDialog = false;
-  private ownerDirectedSiteNavigation = false;
+  private ownerDirectedSiteNavigationOrigin: string | null = null;
   // The original Playwright context remains the sole CDP owner while the
   // human controls the page. Completion events are checkpointed to DO SQLite.
   private handoffCdp: Awaited<ReturnType<BrowserContext["newCDPSession"]>> | null = null;
@@ -188,7 +188,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
     }
     const target = siteAccessForRequest(destination, access);
     return navigatePage(
-      page, destination, enabled => { this.ownerDirectedSiteNavigation = enabled; },
+      page, destination, origin => { this.ownerDirectedSiteNavigationOrigin = origin; },
       operationTimeout(25_000, runDeadline),
       target?.serviceCredentials ? target.origin : null,
     );
@@ -308,8 +308,10 @@ export class CrmBrowserSession extends DurableObject<Env> {
         try {
           const frame = request.frame();
           initiator = frame.url();
-          trustedMainNavigation = this.ownerDirectedSiteNavigation &&
-            request.isNavigationRequest() && frame === this.page?.mainFrame();
+          trustedMainNavigation = isTrustedSiteNavigationRequest(
+            request.url(), this.ownerDirectedSiteNavigationOrigin,
+            request.isNavigationRequest(), frame === this.page?.mainFrame(),
+          );
         } catch { /* Service-worker requests have no frame; never authorize. */ }
         const disposition = siteRequestDispositionForTargets(
           request.url(), initiator, trustedMainNavigation, siteAccess,
@@ -656,7 +658,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
       this.page = null;
       this.tabIds.clear();
       this.acceptingDialog = false;
-      this.ownerDirectedSiteNavigation = false;
+      this.ownerDirectedSiteNavigationOrigin = null;
       this.requestLog = [];
       this.consoleLog = [];
       this.transfers.clear();

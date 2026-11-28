@@ -5,7 +5,7 @@ const CRM_ORIGIN = "https://crm-dev.crm-5bd5e1e1.workers.dev"; // Test fixture.
 
 test("controller navigation to CRM uses the real Page, then immediately releases CRM trust", async () => {
   let actualUrl = "https://example.org/previous";
-  const trust: boolean[] = [];
+  const trust: (string | null)[] = [];
   let gotoCalls = 0;
   const page: NavigablePage = {
     url: () => actualUrl,
@@ -14,15 +14,15 @@ test("controller navigation to CRM uses the real Page, then immediately releases
       gotoCalls++;
       assert.equal(destination, CRM_ORIGIN + "/clients");
       assert.deepEqual(options, { waitUntil: "domcontentloaded", timeout: 25_000 });
-      assert.deepEqual(trust, [true], "CRM trust exists only during the requested navigation");
+      assert.deepEqual(trust, [CRM_ORIGIN], "only the requested exact CRM origin is trusted during navigation");
       actualUrl = destination;
       return { status: () => 200 };
     },
   };
-  const result = await navigatePage(page, CRM_ORIGIN + "/clients", enabled => trust.push(enabled), undefined, CRM_ORIGIN);
+  const result = await navigatePage(page, CRM_ORIGIN + "/clients", origin => trust.push(origin), undefined, CRM_ORIGIN);
   assert.equal(gotoCalls, 1);
   assert.deepEqual(result, { http_status: 200, path: CRM_ORIGIN + "/clients", title: "Clients" });
-  assert.deepEqual(trust, [true, false]);
+  assert.deepEqual(trust, [CRM_ORIGIN, null]);
 });
 
 test("universal public-site navigation never elevates a foreign origin", async () => {
@@ -33,7 +33,7 @@ test("universal public-site navigation never elevates a foreign origin", async (
     url: () => actualUrl,
     title: async () => "IANA-managed Reserved Domains",
     goto: async (url) => {
-      assert.deepEqual(trust, [false]);
+      assert.deepEqual(trust, [null]);
       actualUrl = url;
       return { status: () => 200 };
     },
@@ -44,7 +44,7 @@ test("universal public-site navigation never elevates a foreign origin", async (
     path: "https://www.iana.org/domains/reserved",
     title: "IANA-managed Reserved Domains",
   });
-  assert.deepEqual(trust, [false, false]);
+  assert.deepEqual(trust, [null, null]);
 });
 
 test("navigation failure and redirect never leave persistent CRM trust", async () => {
@@ -58,7 +58,7 @@ test("navigation failure and redirect never leave persistent CRM trust", async (
     navigatePage(blocked, CRM_ORIGIN + "/clients", enabled => trust.push(enabled), undefined, CRM_ORIGIN),
     /navigation failed/,
   );
-  assert.deepEqual(trust, [true, false]);
+  assert.deepEqual(trust, [CRM_ORIGIN, null]);
 
   let actualUrl = CRM_ORIGIN + "/";
   const redirected: NavigablePage = {
@@ -69,10 +69,10 @@ test("navigation failure and redirect never leave persistent CRM trust", async (
       return { status: () => 302 };
     },
   };
-  const redirectTrust: boolean[] = [];
+  const redirectTrust: (string | null)[] = [];
   const result = await navigatePage(
-    redirected, CRM_ORIGIN + "/auth", enabled => redirectTrust.push(enabled), undefined, CRM_ORIGIN,
+    redirected, CRM_ORIGIN + "/auth", origin => redirectTrust.push(origin), undefined, CRM_ORIGIN,
   );
-  assert.deepEqual(redirectTrust, [true, false]);
+  assert.deepEqual(redirectTrust, [CRM_ORIGIN, null]);
   assert.equal(result.path, "https://login.example.org/signin");
 });

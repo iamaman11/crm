@@ -78,16 +78,25 @@ export function siteAccessTargets(entries: readonly SiteAccessInput[]): SiteAcce
   const targets: SiteAccessTarget[] = [];
   const origins = new Set<string>();
   for (const entry of entries) {
-    const config = siteAccessConfiguration(entry.origin, entry.clientId, entry.clientSecret);
+    const requiredCredentials = entry.requiredCredentials === true;
+    const partialRequiredPair = requiredCredentials &&
+      Boolean(entry.clientId) !== Boolean(entry.clientSecret);
+    // A partially provisioned preview pair disables only that preview target.
+    // The existing crm-dev pair retains its stricter global partial-pair error.
+    const config = siteAccessConfiguration(
+      entry.origin,
+      partialRequiredPair ? undefined : entry.clientId,
+      partialRequiredPair ? undefined : entry.clientSecret,
+    );
     if (!config.origin) continue;
     if (origins.has(config.origin)) throw new Error("BROWSER_SITE_ACCESS_ORIGIN_DUPLICATE");
     origins.add(config.origin);
     targets.push({
       origin: config.origin,
-      clientId: entry.clientId ?? null,
-      clientSecret: entry.clientSecret ?? null,
+      clientId: partialRequiredPair ? null : entry.clientId ?? null,
+      clientSecret: partialRequiredPair ? null : entry.clientSecret ?? null,
       serviceCredentials: config.serviceCredentials,
-      requiredCredentials: entry.requiredCredentials === true,
+      requiredCredentials,
     });
   }
   return targets;
@@ -97,6 +106,14 @@ export function siteAccessForRequest(
   input: string, targets: readonly SiteAccessTarget[],
 ): SiteAccessTarget | null {
   return targets.find(target => isConfiguredSiteRequest(input, target.origin)) ?? null;
+}
+
+export function isTrustedSiteNavigationRequest(
+  destination: string, ownerDirectedOrigin: string | null,
+  isNavigationRequest: boolean, isMainFrame: boolean,
+): boolean {
+  return Boolean(ownerDirectedOrigin && isNavigationRequest && isMainFrame &&
+    isConfiguredSiteRequest(destination, ownerDirectedOrigin));
 }
 
 export function siteAccessCredentialsReady(

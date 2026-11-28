@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { browserUrl, siteCredentialsAllowed, siteRequestDisposition, siteAccessConfiguration, siteAccessTargets, siteAccessForRequest, siteAccessCredentialsReady, siteRequestDispositionForTargets, isConfiguredSiteRequest, isPermittedBrowserRequest, isAuthorizedMcpOwner, safePagePath, redact, verifiedMcpOwnerEmail } from "../src/security.ts";
+import { browserUrl, siteCredentialsAllowed, siteRequestDisposition, siteAccessConfiguration, siteAccessTargets, siteAccessForRequest, siteAccessCredentialsReady, siteRequestDispositionForTargets, isTrustedSiteNavigationRequest, isConfiguredSiteRequest, isPermittedBrowserRequest, isAuthorizedMcpOwner, safePagePath, redact, verifiedMcpOwnerEmail } from "../src/security.ts";
 const CRM_ORIGIN = "https://crm-dev.crm-5bd5e1e1.workers.dev"; // Test-only configured site.
 
 test("site identity is configured per exact origin; ordinary browser navigation is universal", () => {
@@ -165,6 +165,10 @@ test("separate preview Access credentials are selected only for their exact orig
   assert.equal(siteAccessForRequest(previewTwo + "/api/session", targets)?.clientId, "preview-two-id");
   assert.equal(siteAccessForRequest(CRM_ORIGIN + "/api/session", targets)?.clientId, "crm-id");
   assert.equal(siteAccessForRequest(previewOne + ".evil.example/api/session", targets), null);
+  assert.equal(isTrustedSiteNavigationRequest(previewOne + "/clients", previewOne, true, true), true);
+  assert.equal(isTrustedSiteNavigationRequest(previewTwo + "/clients", previewOne, true, true), false,
+    "a redirect from preview one cannot inherit its explicit-navigation trust for preview two");
+  assert.equal(isTrustedSiteNavigationRequest(previewOne + "/clients", previewOne, true, false), false);
   assert.equal(siteAccessCredentialsReady(previewOne + "/api/session", targets), true);
   assert.equal(siteRequestDispositionForTargets(previewOne + "/api/session", "about:blank", true, targets), "site");
   assert.equal(siteRequestDispositionForTargets(previewTwo + "/api/session", previewOne + "/", false, targets), "block",
@@ -175,6 +179,12 @@ test("separate preview Access credentials are selected only for their exact orig
   const missingPreviewCredentials = siteAccessTargets([
     {origin: previewOne, requiredCredentials: true},
   ]);
+  const partialPreviewCredentials = siteAccessTargets([
+    {origin: previewOne, clientId: "only-id", requiredCredentials: true},
+  ]);
+  assert.equal(siteAccessCredentialsReady(previewOne + "/api/session", partialPreviewCredentials), false,
+    "a partial preview pair disables that preview without breaking unrelated sites");
+  assert.equal(siteRequestDispositionForTargets("https://example.org/", previewOne + "/", false, partialPreviewCredentials), "public");
   assert.equal(siteAccessCredentialsReady(previewOne + "/api/session", missingPreviewCredentials), false);
   assert.equal(siteRequestDispositionForTargets(previewOne + "/api/session", "about:blank", true, missingPreviewCredentials), "block");
   assert.equal(siteRequestDispositionForTargets("https://example.org/", previewOne + "/", false, missingPreviewCredentials), "public");
