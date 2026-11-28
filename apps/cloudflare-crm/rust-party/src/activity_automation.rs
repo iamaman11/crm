@@ -27,10 +27,8 @@ pub(super) struct RuleRow {
     pub task_subject: String,
     pub assignee_email: String,
     pub due_after_seconds: i64,
-    #[serde(default)]
-    pub published_at_unix_nanos: i64,
-    #[serde(default)]
-    pub published_after_deal_event_rowid: i64,
+    // Nanosecond timestamps and event cursors stay in SQL: D1 exposes
+    // INTEGER values through JavaScript Number, which cannot preserve i64 ns.
 }
 #[derive(Clone, Serialize)]
 pub(super) struct RuleInput {
@@ -248,7 +246,7 @@ pub(super) async fn get(
         db,
         concat!(
             "SELECT id AS rule_id,version,trigger_kind AS trigger,enabled,task_subject,",
-            "assignee_email,due_after_seconds,published_at_unix_nanos,published_after_deal_event_rowid FROM crm_activity_automation_rules",
+            "assignee_email,due_after_seconds FROM crm_activity_automation_rules",
             " WHERE tenant=? AND id=?"
         ),
         &[JsValue::from_str(tenant), JsValue::from_str(id)],
@@ -382,7 +380,7 @@ pub(super) async fn list_rules(
         db,
         concat!(
             "SELECT id AS rule_id,version,trigger_kind AS trigger,enabled,task_subject,",
-            "assignee_email,due_after_seconds,published_at_unix_nanos,published_after_deal_event_rowid FROM crm_activity_automation_rules",
+            "assignee_email,due_after_seconds FROM crm_activity_automation_rules",
             " WHERE tenant=? AND id>? ORDER BY id LIMIT ?"
         ),
         &[
