@@ -142,6 +142,8 @@ message GetAutomationRunRequest {
   optional string receipt_idempotency_key = 3;
   AutomationTrigger source_type = 4;
   string source_id = 5;
+  // Zero preserves the legacy "latest run for this source" read behavior.
+  int64 expected_rule_version = 6;
 }
 message GetAutomationRunResponse {
   AutomationRun run = 1;

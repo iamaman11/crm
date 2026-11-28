@@ -327,6 +327,15 @@ BEFORE UPDATE OF status ON crm_activity_automation_runs
 WHEN OLD.cancel_request_id IS NOT NULL AND NEW.status<>'pending'
 BEGIN SELECT RAISE(ABORT,'AUTOMATION_RUN_CANCELLED'); END;
 
+CREATE TRIGGER crm_activity_automation_run_source_stale_audit
+AFTER UPDATE OF source_stale ON crm_activity_automation_runs
+WHEN OLD.source_stale=0 AND NEW.source_stale=1
+BEGIN
+ INSERT INTO crm_audit(id,tenant_id,action,subject_id,created_at,request_id,actor)
+ VALUES(lower(hex(randomblob(16))),NEW.tenant,'activities.automation.run.source_stale',
+  NEW.task_id,datetime('now'),NEW.original_request_id,NEW.requested_by);
+END;
+
 CREATE TRIGGER crm_activity_automation_run_intent_immutable
 BEFORE UPDATE ON crm_activity_automation_runs
 WHEN NEW.seq IS NOT OLD.seq OR NEW.tenant IS NOT OLD.tenant

@@ -214,6 +214,7 @@ impl auto_wire::AutomationService for AutomationV2Service {
             &input.rule_id,
             &source_type,
             &source_id,
+            input.expected_rule_version,
         )
         .await?
         .ok_or_else(|| ConnectError::not_found("ACTIVITIES_AUTOMATION_RUN_NOT_FOUND"))?;

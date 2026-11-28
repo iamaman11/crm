@@ -1215,21 +1215,19 @@ pub(super) async fn cancel(
     request_id: &str,
 ) -> Result<RunSaved, ConnectError> {
     let tenant = &principal.tenant;
-    let row = get_run(db, tenant, rule, source_type, source_id)
+    let row = get_run(db, tenant, rule, source_type, source_id, expected_version)
         .await?
         .ok_or_else(|| ConnectError::not_found("ACTIVITIES_AUTOMATION_RUN_NOT_FOUND"))?;
+    // Preserve the historical Interaction idempotency digest exactly;
+    // new autonomous source kinds bind both their type and source id.
+    let identity = if source_type == "interaction_created" {
+        json!(["cancel_automation_run", rule, source_id, expected_version])
+    } else {
+        json!(["cancel_automation_run", rule, source_type, source_id, expected_version])
+    };
     let digest = format!(
         "{:x}",
-        Sha256::digest(
-            serde_json::to_vec(&json!([
-                "cancel_automation_run",
-                rule,
-                source_type,
-                source_id,
-                expected_version
-            ]))
-            .map_err(|_| storage())?
-        )
+        Sha256::digest(serde_json::to_vec(&identity).map_err(|_| storage())?)
     );
     let replayed = verify_run_request(db, tenant, key, rule, &row.source_event_id, &digest).await?;
     if replayed && row.cancel_key.as_deref() == Some(key) {
@@ -1301,6 +1299,7 @@ pub(super) async fn get_run(
     rule: &str,
     source_type: &str,
     source_id: &str,
+    expected_version: i64,
 ) -> Result<Option<RunRow>, ConnectError> {
     rule_id(rule)?;
     if !matches!(source_type, "interaction_created" | "deal_created" | "task_overdue") {
@@ -1310,9 +1309,10 @@ pub(super) async fn get_run(
         .map_err(|_| invalid("ACTIVITIES_AUTOMATION_SOURCE_ID_INVALID"))?;
     let Some(event) = bind(
         db,
-        "SELECT source_event_id AS event_id FROM crm_activity_automation_runs WHERE tenant=? AND rule_id=? AND source_type=? AND source_id=?",
+        "SELECT source_event_id AS event_id FROM crm_activity_automation_runs WHERE tenant=? AND rule_id=? AND source_type=? AND source_id=? AND (?=0 OR rule_version=?) ORDER BY rule_version DESC LIMIT 1",
         &[JsValue::from_str(tenant), JsValue::from_str(rule),
-          JsValue::from_str(source_type), JsValue::from_str(source_id)],
+          JsValue::from_str(source_type), JsValue::from_str(source_id),
+          JsValue::from_f64(expected_version as f64),JsValue::from_f64(expected_version as f64)],
     )
     .map_err(|_| storage())?
     .first::<SourceRow>(None)
