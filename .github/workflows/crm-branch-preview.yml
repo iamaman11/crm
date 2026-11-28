@@ -1,41 +1,56 @@
 name: CRM Branch Preview
 
-# Trusted control plane: runs from default-branch workflow source after a
-# successful feature Gate A. It never executes branch-controlled scripts.
+# Coordinator-only control plane. A human dispatches one exact successful
+# Writer Gate A run from main; this workflow never executes branch scripts.
 on:
-  workflow_run:
-    workflows: ["Cloudflare CRM Spike CI"]
-    types: [completed]
-    branches:
-      - 'feat/parallel/**'
+  workflow_dispatch:
+    inputs:
+      source_branch:
+        description: Exact allowlisted Writer branch
+        required: true
+        type: choice
+        options:
+          - feat/parallel/source-identity
+          - feat/parallel/codex-automation-dispatch-20261128
+      source_run_id:
+        description: Successful Cloudflare CRM Spike CI run ID
+        required: true
+        type: string
+      source_run_attempt:
+        description: Successful Gate A attempt number
+        required: true
+        type: string
+      source_sha:
+        description: Exact 40-character SHA tested by Gate A
+        required: true
+        type: string
 
 permissions:
   actions: read
   contents: read
 
 jobs:
-  preview:
-    # Disabled fail-closed: the compiled Worker currently pins the production Access audience.
-    # Re-enable only after a distinct preview Access audience can be validated by the exact artifact.
-    if: false
+  preflight:
+    if: ${{ github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-26.04
-    environment: crm-dev
-    timeout-minutes: 45
+    timeout-minutes: 15
     outputs:
-      worker_name: ${{ steps.preview.outputs.worker_name }}
-      database_name: ${{ steps.preview.outputs.database_name }}
-      database_id: ${{ steps.preview.outputs.database_id }}
-      preview_host: ${{ steps.preview.outputs.preview_host }}
-      source_sha: ${{ steps.preview.outputs.source_sha }}
+      source_sha: ${{ steps.gate.outputs.source_sha }}
+      source_branch: ${{ steps.gate.outputs.source_branch }}
+      source_run_id: ${{ steps.gate.outputs.source_run_id }}
+      source_run_attempt: ${{ steps.gate.outputs.source_run_attempt }}
+      artifact_name: ${{ steps.gate.outputs.artifact_name }}
+      preview_slot: ${{ steps.gate.outputs.preview_slot }}
+      worker_name: ${{ steps.gate.outputs.worker_name }}
+      preview_host: ${{ steps.gate.outputs.preview_host }}
+      expected_migration: ${{ steps.gate.outputs.expected_migration }}
+      cron_schedule: ${{ steps.gate.outputs.cron_schedule }}
     env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: 5bd5e1e1e813f061afc259e91334262d
       GH_TOKEN: ${{ github.token }}
-      SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
-      SOURCE_BRANCH: ${{ github.event.workflow_run.head_branch }}
-      SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
-      SOURCE_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
-      SOURCE_WORKFLOW_ID: ${{ github.event.workflow_run.workflow_id }}
+      SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+      SOURCE_RUN_ATTEMPT: ${{ inputs.source_run_attempt }}
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      SOURCE_BRANCH: ${{ inputs.source_branch }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -44,30 +59,189 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '26.13.1'
-      - name: Install pinned workspace tools
+      - name: Validate exact successful Writer Gate A run and sealed artifact
+        id: gate
+        shell: bash
         run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import {writeFileSync} from "node:fs";
+          const repo = process.env.GITHUB_REPOSITORY;
+          const runId = process.env.SOURCE_RUN_ID;
+          const attempt = process.env.SOURCE_RUN_ATTEMPT;
+          const sha = process.env.SOURCE_SHA;
+          const branch = process.env.SOURCE_BRANCH;
+          assert.equal(repo, "iamaman11/crm");
+          assert.match(runId, /^[0-9]+$/);
+          assert.match(attempt, /^[1-9][0-9]*$/);
+          assert.match(sha, /^[0-9a-f]{40}$/);
+          const targets = {
+            "feat/parallel/source-identity": {
+              slot: "1",
+              worker: "crm-writer-preview-1",
+              host: "crm-writer-preview-1.crm-5bd5e1e1.workers.dev",
+              migration: "0043_party_import_source_identity.sql",
+              cron: "",
+            },
+            "feat/parallel/codex-automation-dispatch-20261128": {
+              slot: "2",
+              worker: "crm-writer-preview-2",
+              host: "crm-writer-preview-2.crm-5bd5e1e1.workers.dev",
+              migration: "0044_activity_automation_dispatch.sql",
+              cron: "*/5 * * * *",
+            },
+          };
+          const target = targets[branch];
+          assert.ok(target, "source branch is not an explicitly approved preview writer");
+          const headers = {
+            authorization: "Bearer " + process.env.GH_TOKEN,
+            accept: "application/vnd.github+json",
+            "x-github-api-version": "2022-11-28",
+          };
+          const runResponse = await fetch(
+            "https://api.github.com/repos/" + repo + "/actions/runs/" + runId,
+            {headers},
+          );
+          const run = await runResponse.json();
+          assert.ok(runResponse.ok, "GitHub could not read the selected Gate A run");
+          assert.equal(run.id, Number(runId));
+          assert.equal(run.workflow_id, 410642125);
+          assert.equal(run.path, ".github/workflows/cloudflare-crm-spike.yml");
+          assert.equal(run.event, "push");
+          assert.equal(run.status, "completed");
+          assert.equal(run.conclusion, "success");
+          assert.equal(run.run_attempt, Number(attempt));
+          assert.equal(run.head_sha, sha);
+          assert.equal(run.head_branch, branch);
+          assert.equal(run.repository?.full_name, repo);
+          assert.equal(run.head_repository?.full_name, repo,
+            "fork-originated runs are never eligible for preview credentials");
+          const artifactName = "crm-native-bundle-" + sha + "-attempt-" + attempt;
+          const artifactResponse = await fetch(
+            "https://api.github.com/repos/" + repo + "/actions/runs/" + runId + "/artifacts?per_page=100",
+            {headers},
+          );
+          const artifacts = await artifactResponse.json();
+          assert.ok(artifactResponse.ok, "GitHub could not read Gate A artifacts");
+          const artifact = (artifacts.artifacts ?? []).find(item => item.name === artifactName);
+          assert.ok(artifact, "the exact sealed Gate A artifact is absent");
+          assert.equal(artifact.expired, false, "the exact sealed Gate A artifact has expired");
+          assert.ok(artifact.size_in_bytes > 0, "the exact sealed Gate A artifact is empty");
+          const output = [
+            ["source_sha", sha],
+            ["source_branch", branch],
+            ["source_run_id", runId],
+            ["source_run_attempt", attempt],
+            ["artifact_name", artifactName],
+            ["preview_slot", target.slot],
+            ["worker_name", target.worker],
+            ["preview_host", target.host],
+            ["expected_migration", target.migration],
+            ["cron_schedule", target.cron],
+          ].map(([key, value]) => key + "=" + value).join("\n") + "\n";
+          writeFileSync(process.env.GITHUB_OUTPUT, output, {flag:"a"});
+          console.log("Validated exact successful Gate A run " + runId + " attempt " + attempt + " at " + sha + "; preview slot " + target.slot + ".");
+          NODE
+
+  preview:
+    needs: preflight
+    if: ${{ github.ref == 'refs/heads/main' && needs.preflight.result == 'success' }}
+    runs-on: ubuntu-26.04
+    environment: crm-preview
+    concurrency:
+      group: crm-branch-preview-slot-${{ needs.preflight.outputs.preview_slot }}
+      cancel-in-progress: false
+    timeout-minutes: 45
+    outputs:
+      worker_name: ${{ needs.preflight.outputs.worker_name }}
+      database_name: ${{ steps.d1.outputs.database_name }}
+      database_id: ${{ steps.d1.outputs.database_id }}
+      preview_host: ${{ steps.access.outputs.preview_host }}
+      source_sha: ${{ needs.preflight.outputs.source_sha }}
+      access_app_id: ${{ steps.access.outputs.access_app_id }}
+      access_audience: ${{ steps.access.outputs.access_audience }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_SHA: ${{ needs.preflight.outputs.source_sha }}
+      SOURCE_BRANCH: ${{ needs.preflight.outputs.source_branch }}
+      SOURCE_RUN_ID: ${{ needs.preflight.outputs.source_run_id }}
+      SOURCE_RUN_ATTEMPT: ${{ needs.preflight.outputs.source_run_attempt }}
+      ARTIFACT_NAME: ${{ needs.preflight.outputs.artifact_name }}
+      PREVIEW_SLOT: ${{ needs.preflight.outputs.preview_slot }}
+      PREVIEW_WORKER_NAME: ${{ needs.preflight.outputs.worker_name }}
+      EXPECTED_PREVIEW_HOST: ${{ needs.preflight.outputs.preview_host }}
+      EXPECTED_MIGRATION: ${{ needs.preflight.outputs.expected_migration }}
+      PREVIEW_CRON_SCHEDULE: ${{ needs.preflight.outputs.cron_schedule }}
+    steps:
+      - name: Keep preview fail-closed until the owner enables it
+        id: gate
+        env:
+          CRM_BRANCH_PREVIEW_ENABLED: ${{ vars.CRM_BRANCH_PREVIEW_ENABLED }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$CRM_BRANCH_PREVIEW_ENABLED" != "true" ]]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Preview remains disabled: CRM_BRANCH_PREVIEW_ENABLED is not true." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+          echo "The owner-enabled preview flag is true; continuing with the exact preflighted Gate A artifact."
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        if: ${{ steps.gate.outputs.enabled == 'true' }}
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: ${{ steps.gate.outputs.enabled == 'true' }}
+        with:
+          node-version: '26.13.1'
+
+      - name: Install pinned workspace tools
+        if: ${{ steps.gate.outputs.enabled == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
           npm install --global pnpm@12.21.0
           pnpm --version | grep -Fx '12.21.0'
           pnpm install --frozen-lockfile
-      - name: Validate trusted Gate A run identity
+
+      - name: Require only the exact preview-scoped credentials
+        if: ${{ steps.gate.outputs.enabled == 'true' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CRM_PREVIEW_CLOUDFLARE_API_TOKEN }}
+          PREVIEW_1_ACCESS_APP_ID: ${{ vars.CRM_PREVIEW_1_ACCESS_APP_ID }}
+          PREVIEW_2_ACCESS_APP_ID: ${{ vars.CRM_PREVIEW_2_ACCESS_APP_ID }}
+          PREVIEW_1_A_CLIENT_ID: ${{ secrets.CRM_PREVIEW_1_A_CLIENT_ID }}
+          PREVIEW_1_A_CLIENT_SECRET: ${{ secrets.CRM_PREVIEW_1_A_CLIENT_SECRET }}
+          PREVIEW_2_A_CLIENT_ID: ${{ secrets.CRM_PREVIEW_2_A_CLIENT_ID }}
+          PREVIEW_2_A_CLIENT_SECRET: ${{ secrets.CRM_PREVIEW_2_A_CLIENT_SECRET }}
         shell: bash
         run: |
           set -euo pipefail
-          test "$SOURCE_WORKFLOW_ID" = "410642125"
-          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$SOURCE_BRANCH" == feat/parallel/* ]]
-          [[ "$SOURCE_RUN_ID" =~ ^[0-9]+$ ]]
-          [[ "$SOURCE_RUN_ATTEMPT" =~ ^[0-9]+$ ]]
-          test "$GITHUB_REPOSITORY" = "iamaman11/crm"
-          echo "Validated successful feature Gate A run $SOURCE_RUN_ID attempt $SOURCE_RUN_ATTEMPT at $SOURCE_SHA"
-      - name: Download exact sealed Gate A artifact
+          test -n "$CLOUDFLARE_API_TOKEN"
+          if [[ "$PREVIEW_SLOT" == "1" ]]; then
+            test -n "$PREVIEW_1_ACCESS_APP_ID"
+            test -n "$PREVIEW_1_A_CLIENT_ID"
+            test -n "$PREVIEW_1_A_CLIENT_SECRET"
+          else
+            test -n "$PREVIEW_2_ACCESS_APP_ID"
+            test -n "$PREVIEW_2_A_CLIENT_ID"
+            test -n "$PREVIEW_2_A_CLIENT_SECRET"
+          fi
+          echo "The selected preview has its own Access app and A service credential pair."
+
+      - name: Download the exact sealed Gate A artifact
+        if: ${{ steps.gate.outputs.enabled == 'true' }}
         shell: bash
         run: |
           set -euo pipefail
-          artifact="crm-native-bundle-${SOURCE_SHA}-attempt-${SOURCE_RUN_ATTEMPT}"
           mkdir -p apps/cloudflare-crm/.release/preview
           gh run download "$SOURCE_RUN_ID" --repo "$GITHUB_REPOSITORY" \
-            --name "$artifact" --dir apps/cloudflare-crm/.release/preview
+            --name "$ARTIFACT_NAME" --dir apps/cloudflare-crm/.release/preview
           test "$(cat apps/cloudflare-crm/.release/preview/.release/source-sha.txt)" = "$SOURCE_SHA"
           (cd apps/cloudflare-crm/.release/preview && sha256sum --check --strict .release/compiled-sha256.txt)
           SOURCE_SHA="$SOURCE_SHA" node --input-type=module -e '
@@ -82,71 +256,153 @@ jobs:
           test -s apps/cloudflare-crm/.release/preview/dist/index.html
           test -s apps/cloudflare-crm/.release/preview/rust-party/build/index.js
           test -s apps/cloudflare-crm/.release/preview/rust-party/build/index_bg.wasm
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        if: ${{ steps.gate.outputs.enabled == 'true' }}
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ needs.preflight.outputs.source_sha }}
           path: .preview-source
-          fetch-depth: 1
+          fetch-depth: 0
           persist-credentials: false
-      - name: Validate migration-only source input
+
+      - name: Validate frozen-base migration scope from the exact source SHA
+        if: ${{ steps.gate.outputs.enabled == 'true' }}
         shell: bash
         run: |
           set -euo pipefail
           test "$(git -C .preview-source rev-parse HEAD)" = "$SOURCE_SHA"
-          node --input-type=module -e '
-            import assert from "node:assert/strict";
-            import {readdirSync,lstatSync} from "node:fs";
-            const dir=".preview-source/apps/cloudflare-crm/migrations";
-            const files=readdirSync(dir).filter(x=>x.endsWith(".sql")).sort();
-            assert.equal(files.length,43,"preview requires the complete migration chain 0001..0043");
-            for(let i=0;i<files.length;i++){
-              assert.equal(files[i].slice(0,4),String(i+1).padStart(4,"0"),"migration chain must be contiguous");
-              assert.ok(lstatSync(dir+"/"+files[i]).isFile(),"migration input must be a regular file");
-            }
-          '
-      - name: Create isolated physical D1 and trusted preview config
-        id: preview
+          git -C .preview-source fetch --no-tags origin dev:refs/remotes/origin/dev
+          git -C .preview-source merge-base --is-ancestor refs/remotes/origin/dev "$SOURCE_SHA"
+          BASE_SHA="$(git -C .preview-source merge-base refs/remotes/origin/dev "$SOURCE_SHA")"
+          SOURCE_SHA="$SOURCE_SHA" BASE_SHA="$BASE_SHA" EXPECTED_MIGRATION="$EXPECTED_MIGRATION" node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import {execFileSync} from "node:child_process";
+          import {lstatSync} from "node:fs";
+          const cwd=".preview-source";
+          const base=process.env.BASE_SHA;
+          const sha=process.env.SOURCE_SHA;
+          const expected="apps/cloudflare-crm/migrations/"+process.env.EXPECTED_MIGRATION;
+          const diff=execFileSync("git",[
+            "diff","--name-status","--find-renames",base,sha,"--","apps/cloudflare-crm/migrations"
+          ],{cwd,encoding:"utf8"}).trim().split("\n").filter(Boolean);
+          assert.deepEqual(diff,["A\t"+expected],
+            "preview migration input must be exactly the one approved additive migration; historical files cannot change, disappear, or be renamed");
+          const stat=lstatSync(cwd+"/"+expected);
+          assert.ok(stat.isFile() && !stat.isSymbolicLink(),"approved migration must be a regular file");
+          assert.ok(stat.size>0,"approved migration cannot be empty");
+          console.log("Frozen-base migration scope is exactly one approved additive SQL file.");
+          NODE
+
+      - name: Read and validate the dedicated Access application
+        id: access
+        if: ${{ steps.gate.outputs.enabled == 'true' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CRM_PREVIEW_CLOUDFLARE_API_TOKEN }}
+          PREVIEW_1_ACCESS_APP_ID: ${{ vars.CRM_PREVIEW_1_ACCESS_APP_ID }}
+          PREVIEW_2_ACCESS_APP_ID: ${{ vars.CRM_PREVIEW_2_ACCESS_APP_ID }}
+          EXPECTED_PREVIEW_HOST: ${{ needs.preflight.outputs.preview_host }}
         shell: bash
         run: |
           set -euo pipefail
           node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import {readFileSync,writeFileSync} from "node:fs";
+          const account="5bd5e1e1e813f061afc259e91334262d";
+          const slot=process.env.PREVIEW_SLOT;
+          const appId=slot==="1"?process.env.PREVIEW_1_ACCESS_APP_ID:process.env.PREVIEW_2_ACCESS_APP_ID;
+          assert.ok(appId,"the selected crm-preview Access App ID variable is missing");
+          const response=await fetch(
+            "https://api.cloudflare.com/client/v4/accounts/"+account+"/access/apps/"+appId,
+            {headers:{authorization:"Bearer "+process.env.CLOUDFLARE_API_TOKEN}}
+          );
+          const payload=await response.json();
+          assert.ok(response.ok && payload.success===true,"Cloudflare Access application read failed");
+          const app=payload.result;
+          assert.equal(app.id,appId);
+          assert.equal(app.type,"self_hosted");
+          assert.equal(app.domain,process.env.EXPECTED_PREVIEW_HOST,
+            "the Access app must protect the fixed hostname assigned to this writer");
+          assert.equal(app.session_duration,"1h");
+          assert.match(app.aud??"",/^[0-9a-f]{64}$/);
+          const production=JSON.parse(readFileSync("apps/cloudflare-crm/wrangler.jsonc","utf8"));
+          assert.notEqual(app.aud,production.vars?.CRM_ACCESS_AUDIENCE,
+            "a preview must never reuse the production Access audience");
+          assert.equal(app.policies?.length,1,"preview Access app must have exactly one policy");
+          const policy=app.policies[0];
+          assert.equal(policy.decision,"non_identity");
+          assert.equal(policy.precedence,1);
+          assert.equal(policy.include?.length,2,"the policy must include exactly the two preview Service Tokens");
+          assert.ok(policy.include.every(item =>
+            Object.keys(item).length===1 &&
+            typeof item.service_token?.token_id==="string" &&
+            item.service_token.token_id.length>0
+          ),"the policy may include Service Tokens only, never Bypass/Everyone/identity rules");
+          assert.deepEqual(policy.exclude??[],[]);
+          assert.deepEqual(policy.require??[],[]);
+          writeFileSync(process.env.GITHUB_OUTPUT,
+            "access_app_id="+appId+"\n"+
+            "access_audience="+app.aud+"\n"+
+            "preview_host="+app.domain+"\n",
+            {flag:"a"});
+          writeFileSync(process.env.GITHUB_ENV,
+            "PREVIEW_ACCESS_AUD="+app.aud+"\n"+
+            "PREVIEW_HOST="+app.domain+"\n",
+            {flag:"a"});
+          console.log("Validated isolated non_identity Access app, fixed host, unique audience and two-token allowlist.");
+          NODE
+
+      - name: Create one physical EU D1 for this preview lease
+        id: d1
+        if: ${{ steps.gate.outputs.enabled == 'true' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CRM_PREVIEW_CLOUDFLARE_API_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
           import {writeFileSync} from "node:fs";
-          const account=process.env.CLOUDFLARE_ACCOUNT_ID;
-          const token=process.env.CLOUDFLARE_API_TOKEN;
-          const run=process.env.SOURCE_RUN_ID;
-          const attempt=process.env.SOURCE_RUN_ATTEMPT;
-          const sha=process.env.SOURCE_SHA;
-          const workerName=`crm-preview-${run}-${attempt}`;
-          const databaseName=workerName;
-          const previewHost=`${workerName}.crm-5bd5e1e1.workers.dev`;
-          const response=await fetch(`https://api.cloudflare.com/client/v4/accounts/${account}/d1/database`,{
+          const account="5bd5e1e1e813f061afc259e91334262d";
+          const databaseName=process.env.PREVIEW_WORKER_NAME+"-"+process.env.SOURCE_RUN_ID+"-"+process.env.SOURCE_RUN_ATTEMPT;
+          const response=await fetch("https://api.cloudflare.com/client/v4/accounts/"+account+"/d1/database",{
             method:"POST",
-            headers:{authorization:`Bearer ${token}`,"content-type":"application/json"},
+            headers:{authorization:"Bearer "+process.env.CLOUDFLARE_API_TOKEN,"content-type":"application/json"},
             body:JSON.stringify({name:databaseName,jurisdiction:"eu"})
           });
           const payload=await response.json();
-          if(!response.ok||payload.success!==true||!payload.result?.uuid){
-            throw new Error("Isolated D1 creation failed: HTTP "+response.status+" "+JSON.stringify(payload.errors||[]));
-          }
+          assert.ok(response.ok && payload.success===true && payload.result?.uuid,
+            "isolated EU D1 creation failed");
           const databaseId=payload.result.uuid;
           writeFileSync(process.env.GITHUB_OUTPUT,
-            "worker_name="+workerName+"\n"+
             "database_name="+databaseName+"\n"+
-            "database_id="+databaseId+"\n"+
-            "preview_host="+previewHost+"\n"+
-            "source_sha="+sha+"\n",
+            "database_id="+databaseId+"\n",
             {flag:"a"});
+          console.log("Created isolated physical EU D1 for the selected preview lease.");
+          NODE
+
+      - name: Write trusted preview Wrangler config from fixed controller inputs
+        if: ${{ steps.gate.outputs.enabled == 'true' }}
+        shell: bash
+        env:
+          DATABASE_NAME: ${{ steps.d1.outputs.database_name }}
+          DATABASE_ID: ${{ steps.d1.outputs.database_id }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import {writeFileSync} from "node:fs";
+          const cron=process.env.PREVIEW_CRON_SCHEDULE;
           const config={
-            name:workerName,
+            name:process.env.PREVIEW_WORKER_NAME,
             main:"./.release/preview/rust-party/build/index.js",
-            workers_dev:false,
+            workers_dev:true,
             preview_urls:false,
-            account_id:account,
+            account_id:"5bd5e1e1e813f061afc259e91334262d",
             compatibility_date:"2026-11-07",
             d1_databases:[{
               binding:"DB",
-              database_name:databaseName,
-              database_id:databaseId,
+              database_name:process.env.DATABASE_NAME,
+              database_id:process.env.DATABASE_ID,
               migrations_dir:"../../.preview-source/apps/cloudflare-crm/migrations"
             }],
             assets:{
@@ -162,76 +418,141 @@ jobs:
               logs:{enabled:true,head_sampling_rate:1,invocation_logs:false},
               traces:{enabled:true,head_sampling_rate:1}
             },
-            vars:{GIT_SHA:sha}
+            vars:{
+              GIT_SHA:process.env.SOURCE_SHA,
+              CRM_ACCESS_AUDIENCE:process.env.PREVIEW_ACCESS_AUD
+            }
           };
+          if(cron) config.triggers={crons:[cron]};
+          assert.equal(config.name,process.env.PREVIEW_WORKER_NAME);
+          assert.equal(config.vars.CRM_ACCESS_AUDIENCE?.length,64);
           writeFileSync("apps/cloudflare-crm/preview-wrangler.jsonc",JSON.stringify(config,null,2)+"\n");
           writeFileSync(process.env.RUNNER_TEMP+"/crm-preview-lease.json",JSON.stringify({
-            worker_name:workerName,database_name:databaseName,database_id:databaseId,
-            preview_host:previewHost,source_sha:sha,source_run_id:run,
-            source_run_attempt:Number(attempt),created_at:new Date().toISOString(),
+            worker_name:config.name,
+            database_name:process.env.DATABASE_NAME,
+            database_id:process.env.DATABASE_ID,
+            preview_host:process.env.PREVIEW_HOST,
+            access_app_id:process.env.PREVIEW_ACCESS_APP_ID,
+            access_audience:process.env.PREVIEW_ACCESS_AUD,
+            source_sha:process.env.SOURCE_SHA,
+            source_branch:process.env.SOURCE_BRANCH,
+            source_run_id:process.env.SOURCE_RUN_ID,
+            source_run_attempt:Number(process.env.SOURCE_RUN_ATTEMPT),
+            cron_schedule:cron||null,
+            created_at:new Date().toISOString(),
             expires_after_minutes:30
           },null,2)+"\n");
           NODE
+
       - name: Apply exact source migrations to isolated D1
+        if: ${{ steps.gate.outputs.enabled == 'true' }}
         working-directory: apps/cloudflare-crm
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CRM_PREVIEW_CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: 5bd5e1e1e813f061afc259e91334262d
-        run: pnpm exec wrangler d1 migrations apply "${{ steps.preview.outputs.database_name }}" --remote --config preview-wrangler.jsonc --force
-      - name: Deploy exact sealed Worker and React assets without public route
+        run: pnpm exec wrangler d1 migrations apply "${{ steps.d1.outputs.database_name }}" --remote --config preview-wrangler.jsonc --force
+
+      - name: Deploy exact sealed Worker and React assets behind the pre-provisioned Access app
+        id: deploy
+        if: ${{ steps.gate.outputs.enabled == 'true' }}
         working-directory: apps/cloudflare-crm
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CRM_PREVIEW_CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: 5bd5e1e1e813f061afc259e91334262d
         run: pnpm exec wrangler deploy --config preview-wrangler.jsonc
-      - name: Preserve preview lease evidence
+
+      - name: Verify the selected A Service Token passes Access and reaches this exact Worker
+        if: ${{ steps.gate.outputs.enabled == 'true' }}
+        env:
+          PREVIEW_1_A_CLIENT_ID: ${{ secrets.CRM_PREVIEW_1_A_CLIENT_ID }}
+          PREVIEW_1_A_CLIENT_SECRET: ${{ secrets.CRM_PREVIEW_1_A_CLIENT_SECRET }}
+          PREVIEW_2_A_CLIENT_ID: ${{ secrets.CRM_PREVIEW_2_A_CLIENT_ID }}
+          PREVIEW_2_A_CLIENT_SECRET: ${{ secrets.CRM_PREVIEW_2_A_CLIENT_SECRET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          const slot=process.env.PREVIEW_SLOT;
+          const clientId=slot==="1"?process.env.PREVIEW_1_A_CLIENT_ID:process.env.PREVIEW_2_A_CLIENT_ID;
+          const clientSecret=slot==="1"?process.env.PREVIEW_1_A_CLIENT_SECRET:process.env.PREVIEW_2_A_CLIENT_SECRET;
+          assert.ok(clientId && clientSecret,"selected A Service Token pair is missing");
+          const url="https://"+process.env.PREVIEW_HOST+"/api/version";
+          const anonymous=await fetch(url,{redirect:"manual"});
+          assert.notEqual(anonymous.headers.get("x-crm-source-sha"),process.env.SOURCE_SHA,
+            "an anonymous request must be stopped by Access before reaching the Worker");
+          const authenticated=await fetch(url,{
+            headers:{
+              "CF-Access-Client-Id":clientId,
+              "CF-Access-Client-Secret":clientSecret
+            },
+            redirect:"manual"
+          });
+          assert.equal(authenticated.headers.get("x-crm-source-sha"),process.env.SOURCE_SHA,
+            "the exact preview A token must pass Access and reach the Worker compiled from this SHA");
+          console.log("Access A token reached only the selected preview Worker; anonymous access was stopped before Worker execution.");
+          NODE
+
+      - name: Preserve bounded preview lease evidence
+        if: ${{ steps.gate.outputs.enabled == 'true' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: crm-branch-preview-lease-${{ github.event.workflow_run.id }}-${{ github.event.workflow_run.run_attempt }}
+          name: crm-branch-preview-lease-${{ needs.preflight.outputs.source_run_id }}-${{ needs.preflight.outputs.source_run_attempt }}
           path: ${{ runner.temp }}/crm-preview-lease.json
           if-no-files-found: error
           retention-days: 1
-      - name: Record preview lease in job summary
+
+      - name: Record exact preview lease in job summary
+        if: ${{ steps.gate.outputs.enabled == 'true' }}
         shell: bash
         run: |
           {
             echo "## Isolated CRM branch preview provisioned"
-            echo "- Source SHA: `$SOURCE_SHA`"
-            echo "- Worker: `${{ steps.preview.outputs.worker_name }}`"
-            echo "- Physical D1: `${{ steps.preview.outputs.database_name }}` (`${{ steps.preview.outputs.database_id }}`)"
-            echo "- Host reserved: `${{ steps.preview.outputs.preview_host }}`"
-            echo "- Worker remains private until the trusted coordinator adds the Access destination and enables its workers.dev subdomain."
-            echo "- Lease: 30 minutes; Worker/D1 cleanup runs in this job even after failure/cancellation; temporary Access grant cleanup is handled separately by the trusted Cloudflare controller."
+            echo "- Source branch: $SOURCE_BRANCH"
+            echo "- Source SHA: $SOURCE_SHA"
+            echo "- Gate A run: $SOURCE_RUN_ID attempt $SOURCE_RUN_ATTEMPT"
+            echo "- Worker: $PREVIEW_WORKER_NAME"
+            echo "- Access app: ${{ steps.access.outputs.access_app_id }}"
+            echo "- Access audience: ${{ steps.access.outputs.access_audience }}"
+            echo "- Physical EU D1: ${{ steps.d1.outputs.database_name }} (${{ steps.d1.outputs.database_id }})"
+            echo "- Protected host: ${{ steps.access.outputs.preview_host }}"
+            echo "- Trusted Cron: ${{ needs.preflight.outputs.cron_schedule || 'none' }}"
+            echo "- Lease: 30 minutes. Cleanup deletes only this fixed preview Worker and this physical D1; the pre-provisioned Access app/policy/tokens are not changed."
           } >> "$GITHUB_STEP_SUMMARY"
-      - name: Hold bounded preview lease for independent Browser MCP Gate B
-        if: ${{ steps.preview.outcome == 'success' }}
+
+      - name: Hold bounded lease for independent Writer Browser MCP Gate B
+        if: ${{ steps.gate.outputs.enabled == 'true' && steps.deploy.outcome == 'success' }}
         run: sleep 1800
-      - name: Remove private Worker and physical D1
-        if: always()
+
+      - name: Remove only the selected preview Worker and physical D1
+        if: ${{ always() && steps.gate.outputs.enabled == 'true' }}
         shell: bash
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: 5bd5e1e1e813f061afc259e91334262d
-          SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
-          SOURCE_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
-          PREVIEW_DATABASE_ID: ${{ steps.preview.outputs.database_id }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CRM_PREVIEW_CLOUDFLARE_API_TOKEN }}
+          PREVIEW_DATABASE_ID: ${{ steps.d1.outputs.database_id }}
         run: |
           node --input-type=module <<'NODE'
-          const account=process.env.CLOUDFLARE_ACCOUNT_ID;
+          const account="5bd5e1e1e813f061afc259e91334262d";
           const token=process.env.CLOUDFLARE_API_TOKEN;
-          const suffix=process.env.SOURCE_RUN_ID+"-"+process.env.SOURCE_RUN_ATTEMPT;
-          const workerName="crm-preview-"+suffix;
+          const workerName=process.env.PREVIEW_WORKER_NAME;
           async function remove(path){
-            const r=await fetch("https://api.cloudflare.com/client/v4/accounts/"+account+path,{
+            const response=await fetch("https://api.cloudflare.com/client/v4/accounts/"+account+path,{
               method:"DELETE",headers:{authorization:"Bearer "+token}
             });
-            if(r.status===404)return false;
-            const p=await r.json();
-            if(!r.ok||p.success!==true)throw new Error("Cloudflare cleanup DELETE "+path+" HTTP "+r.status+": "+JSON.stringify(p.errors||[]));
+            if(response.status===404)return false;
+            const payload=await response.json();
+            if(!response.ok||payload.success!==true){
+              throw new Error("Cloudflare cleanup failed for "+path+" HTTP "+response.status);
+            }
             return true;
           }
           const workerDeleted=await remove("/workers/scripts/"+workerName);
           const databaseId=process.env.PREVIEW_DATABASE_ID;
           const databaseDeleted=databaseId?await remove("/d1/database/"+databaseId):false;
-          console.log(JSON.stringify({event:"crm.branch-preview-cleanup",worker:workerName,worker_deleted:workerDeleted,database_deleted:databaseDeleted,access_cleanup:"handled separately by trusted Cloudflare controller"}));
+          console.log(JSON.stringify({
+            event:"crm.branch-preview-cleanup",
+            worker:workerName,
+            worker_deleted:workerDeleted,
+            database_deleted:databaseDeleted
+          }));
           NODE
