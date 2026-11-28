@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { MCP_HOST, siteAccessConfiguration, siteAccessTargets } from "../src/security.ts";
+import { MCP_HOST } from "../src/endpoint.ts";
+import { siteAccessConfiguration, siteAccessTargets } from "../src/site-access.ts";
 
 type WranglerConfig = {
   name: string;

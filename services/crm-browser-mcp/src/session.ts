@@ -1,104 +1,29 @@
 import { DurableObject } from "cloudflare:workers";
 import { acquire, connect, history, limits, type Browser, type BrowserContext, type Page } from "@cloudflare/playwright";
-import { DEFAULT_BROWSER_URL, browserUrl, siteAccessTargets, siteAccessForRequest, siteAccessCredentialsReady, siteRequestDispositionForTargets, isTrustedSiteNavigationRequest, isPermittedBrowserRequest, redact, safePagePath } from "./security";
+import { DEFAULT_BROWSER_URL, browserUrl, isPermittedBrowserRequest, redact, safePagePath } from "./browser/security";
+import { siteAccessTargets, siteAccessForRequest, siteAccessCredentialsReady, siteRequestDispositionForTargets, isTrustedSiteNavigationRequest } from "./site-access";
+import type { Command, Env, Target } from "./contracts";
 import { chooseDevice, deviceOptions, type BrowserDevice } from "./browser-device";
 import { WEB_VITALS_INIT, readVitals, type WebVitals } from "./browser-performance";
 import { AXE_SOURCE } from "./axe-source.generated";
 import { MAX_VISUAL_PNG_BYTES, comparePngPixels, pngReceipt, visualThreshold } from "./browser-visual";
 import { navigatePage } from "./page-navigation";
-import { boundedWaitTimeout, boundedRunTimeout, compareBrowserAssertion, operationTimeout, safeAssertionValue, validateScenarioSteps, type BrowserAssertionKind, type TextMatch, type WaitState, type ScenarioOperation } from "./browser-checks";
+import { boundedWaitTimeout, boundedRunTimeout, compareBrowserAssertion, operationTimeout, safeAssertionValue, validateScenarioSteps } from "./browser-checks";
 import { validatedUpload, transferDownload, MAX_TRANSFER_BYTES } from "./browser-files";
 import { WorkspaceFileTransfers, MAX_WORKSPACE_FILE_BYTES, MAX_WORKSPACE_CHUNK_BYTES } from "./browser-transfers";
 import { classifyBrowserAcquireFailure, readSafeBrowserHistory, readSafeBrowserLimits, recoverExistingBrowserSession, selectRestoredPublicPage, parsePageTargetInfo, restoreForExplicitOpen, isOriginalPageMissing, type BrowserPageIdentity } from "./browser-recovery";
 import { BROWSER_RUNTIME_EPOCH, requireRuntimeEpoch } from "./runtime-epoch";
-import { executeCdpCommands, validateCdpCommands, type CdpCommand } from "./browser-cdp";
+import { executeCdpCommands, validateCdpCommands } from "./browser-cdp";
 import { recordingTargets, recordingHar } from "./browser-recordings";
 import { completedHandoff, handoffIdentifier, handoffLiveViewUrl, isProviderHandoffActive,
   validateHandoffRequest, type HumanHandoffRecord } from "./browser-handoff";
 
-export interface Env {
-  BROWSER: BrowserRun;
-  SESSIONS: DurableObjectNamespace<CrmBrowserSession>;
-  SITE_ACCESS_ORIGIN?: string; // Optional exact HTTPS origin for automated Cloudflare Access.
-  SITE_ACCESS_CLIENT_ID?: string; // Optional Worker secret, never a browser parameter.
-  SITE_ACCESS_CLIENT_SECRET?: string; // Must be paired with CLIENT_ID.
-  SITE_ACCESS_PREVIEW_1_ORIGIN?: string; // Exact Access origin for isolated Writer #490.
-  SITE_ACCESS_PREVIEW_1_CLIENT_ID?: string; // Separate protected Worker secret.
-  SITE_ACCESS_PREVIEW_1_CLIENT_SECRET?: string; // Separate protected Worker secret.
-  SITE_ACCESS_PREVIEW_2_ORIGIN?: string; // Exact Access origin for isolated Writer #491.
-  SITE_ACCESS_PREVIEW_2_CLIENT_ID?: string; // Separate protected Worker secret.
-  SITE_ACCESS_PREVIEW_2_CLIENT_SECRET?: string; // Separate protected Worker secret.
-  CRM_MCP_ALLOWED_EMAILS: string; // Comma/newline-separated allowlist of human MCP controllers.
-  CRM_MCP_ACCESS_AUD: string;
-  CF_BROWSER_ACCOUNT_ID: string;
-  CF_BROWSER_RECORDING_READ_TOKEN?: string; // Worker secret: Browser Run REST recording read only.
-}
-
 /** The pinned SDK implementation recognizes persistent:true at runtime, while
- * WorkersConnectOptions.d.ts omits it. A structural subtype adds the option
- * without weakening TypeScript, casting to any, or replacing the SDK. */
+ * WorkersConnectOptions.d.ts omits it. Keep the structural subtype local to the
+ * one Durable Object that owns Browser Run connections; do not weaken typing. */
 function persistentConnectOptions(sessionId: string): { sessionId: string; persistent: true } {
   return { sessionId, persistent: true };
 }
-
-export type Target = {
-  kind: "css" | "role" | "text" | "label";
-  value: string;
-  name?: string;
-  frameIndex?: number;
-  frameSelector?: string;
-};
-
-export type Command = {
-  op: ScenarioOperation | "open" | "close" | "status" | "session" | "tabs" | "frames" | "file" | "inspect" | "visual" | "viewport" | "snapshot" | "screenshot" | "console" | "live_view" | "handoff" | "run" | "execute" | "recording" | "runtime";
-  expectedRuntimeEpoch?: string; // Worker-supplied internal compatibility fence.
-  workspaceId?: string; // MCP routing only; stripped before sending to this DO.
-  url?: string;
-  target?: Target;
-  destination?: Target;
-  text?: string;
-  key?: string;
-  checked?: boolean;
-  x?: number;
-  y?: number;
-  value?: string;
-  acceptDialog?: boolean;
-  kind?: BrowserAssertionKind;
-  expected?: string | number | boolean;
-  match?: TextMatch;
-  state?: WaitState;
-  timeoutMs?: number;
-  steps?: Command[];
-  cdpCommands?: CdpCommand[];
-  tabAction?: "list" | "new" | "select" | "close";
-  tabId?: string;
-  frameIndex?: number;
-  frameSelector?: string;
-  followPopup?: boolean;
-  fileAction?: "upload" | "download" | "upload_begin" | "upload_chunk" | "upload_commit" |
-    "download_link" | "download_chunk" | "discard";
-  fileName?: string;
-  mimeType?: string;
-  base64?: string;
-  transferId?: string;
-  expectedSha256?: string;
-  offset?: number;
-  chunkBytes?: number;
-  recordingAction?: "targets" | "har" | "chunk" | "discard";
-  recordingTarget?: string;
-  inspection?:  "network" | "performance" | "accessibility" | "axe" | "pdf";
-  visualAction?: "capture" | "compare" | "discard";
-  visualThreshold?: number;
-  width?: number;
-  height?: number;
-  recording?: boolean;
-  device?: BrowserDevice;
-  handoffAction?: "start" | "status";
-  handoffInstructions?: string;
-  handoffTimeoutMs?: number;
-  screenshotOnFailure?: boolean;
-  screenshotSource?: "current" | "last_failure";
-};
 
 type Result = { ok: true; data: unknown; image?: string } | { ok: false; error: string };
 

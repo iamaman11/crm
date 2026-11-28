@@ -2,12 +2,15 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
 import { z } from "zod";
-import type { Env, Command, Target } from "./session";
-import { DEFAULT_BROWSER_URL, MCP_HOST, verifiedMcpControllerEmail } from "./security";
+import type { Env, Command, Target } from "./contracts";
+import { DEFAULT_BROWSER_URL } from "./browser/security";
+import { verifiedMcpControllerEmail } from "./controller-auth";
+import { MCP_HOST, MCP_PATH } from "./endpoint";
 import { DEVICE_TYPES } from "./browser-device";
 import { SCENARIO_OPERATIONS, isFailedVerdict } from "./browser-checks";
 import { selectWorkspaceId, workspaceObjectName } from "./browser-workspaces";
 import { BROWSER_RUNTIME_EPOCH, isVerifiedRuntimeProbe, cleanupRuntimeEpoch } from "./runtime-epoch";
+
 
 export { CrmBrowserSession } from "./session";
 
@@ -325,7 +328,7 @@ function createServer(env: Env, controllerEmail: string) {
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     if (new URL(request.url).hostname !== MCP_HOST) return new Response("Not found", { status: 404 });
-    if (new URL(request.url).pathname !== "/mcp") return new Response("Not found", { status: 404 });
+    if (new URL(request.url).pathname !== MCP_PATH) return new Response("Not found", { status: 404 });
     // Cloudflare Access must authenticate the *human controller*. Its signed
     // ctx.access is not forwarded from another Worker and cannot be model-supplied.
     const controllerEmail = await verifiedMcpControllerEmail(

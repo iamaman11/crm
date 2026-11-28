@@ -1,4 +1,5 @@
-import { isConfiguredSiteRequest, safePagePath } from "./security.ts";
+import { isConfiguredSiteRequest } from "./site-access.ts";
+import { safePagePath } from "./browser/security.ts";
 
 // A minimal, testable Playwright Page contract. The Durable Object remains
 // the sole owner of the real browser, context, Page and optional site credentials.
