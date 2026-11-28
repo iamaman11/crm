@@ -315,8 +315,7 @@ jobs:
           test -n "$PREVIEW_ACCESS_APP_ID"
           test -n "$PREVIEW_A_CLIENT_ID"
           test -n "$PREVIEW_A_CLIENT_SECRET"
-          printf 'PREVIEW_ACCESS_APP_ID=%s\\nPREVIEW_A_CLIENT_ID=%s\\nPREVIEW_A_CLIENT_SECRET=%s\\n' \\
-            "$PREVIEW_ACCESS_APP_ID" "$PREVIEW_A_CLIENT_ID" "$PREVIEW_A_CLIENT_SECRET" >> "$GITHUB_ENV"
+          printf 'PREVIEW_ACCESS_APP_ID=%s\nPREVIEW_A_CLIENT_ID=%s\nPREVIEW_A_CLIENT_SECRET=%s\n' "$PREVIEW_ACCESS_APP_ID" "$PREVIEW_A_CLIENT_ID" "$PREVIEW_A_CLIENT_SECRET" >> "$GITHUB_ENV"
 
       - name: Select Preview 2 credentials only
         if: ${{ steps.gate.outputs.enabled == 'true' && needs.preflight.outputs.preview_slot == '2' }}
@@ -330,8 +329,7 @@ jobs:
           test -n "$PREVIEW_ACCESS_APP_ID"
           test -n "$PREVIEW_A_CLIENT_ID"
           test -n "$PREVIEW_A_CLIENT_SECRET"
-          printf 'PREVIEW_ACCESS_APP_ID=%s\\nPREVIEW_A_CLIENT_ID=%s\\nPREVIEW_A_CLIENT_SECRET=%s\\n' \\
-            "$PREVIEW_ACCESS_APP_ID" "$PREVIEW_A_CLIENT_ID" "$PREVIEW_A_CLIENT_SECRET" >> "$GITHUB_ENV"
+          printf 'PREVIEW_ACCESS_APP_ID=%s\nPREVIEW_A_CLIENT_ID=%s\nPREVIEW_A_CLIENT_SECRET=%s\n' "$PREVIEW_ACCESS_APP_ID" "$PREVIEW_A_CLIENT_ID" "$PREVIEW_A_CLIENT_SECRET" >> "$GITHUB_ENV"
 
       - name: Require only the selected preview credentials
         if: ${{ steps.gate.outputs.enabled == 'true' }}
