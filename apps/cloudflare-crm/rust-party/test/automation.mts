@@ -467,6 +467,29 @@ export async function verifyAutomation({dispatch,sql,accountId,contactId,dealId,
      "SELECT COUNT(*) n FROM crm_activity_task_receipts WHERE tenant=? AND key=?",
      "tenant-a",overdueTaskId))[0]?.n,1);
 
+   // A new published rule version is a distinct source identity. The same
+   // still-overdue Task may be consumed once by that new version, but repeated
+   // ticks of either version remain idempotent.
+   const revisedRule=await fixtureRpc(dispatch,automation.putAutomationRule,admin,{
+     ruleId:overdueRuleId,trigger:2,enabled:true,
+     taskSubject:"Overdue follow-up revision "+suffix,assigneeEmail:person,
+     dueAfterSeconds:0n,
+     precondition:{expectedVersion:1n,idempotencyKey:"automation-overdue-rule-v2-"+suffix}
+   });
+   assert.equal(revisedRule.status,200,formatRpcFailure(revisedRule));
+   await tick();
+   await tick();
+   const versionedRuns=await sql(
+     "SELECT rule_version,task_id,status FROM crm_activity_automation_runs WHERE tenant=? AND rule_id=? AND source_type='task_overdue' AND source_id=? ORDER BY rule_version",
+     "tenant-a",overdueRuleId,overdueSourceId);
+   assert.equal(versionedRuns.length,2,"each published rule version may consume a Task source once");
+   assert.deepEqual(versionedRuns.map(row=>row.rule_version),[1,2]);
+   assert.equal(versionedRuns[1]?.status,"committed");
+   assert.notEqual(versionedRuns[0]?.task_id,versionedRuns[1]?.task_id);
+   assert.equal((await sql(
+     "SELECT COUNT(*) n FROM crm_activity_task_receipts WHERE tenant=? AND key=?",
+     "tenant-a",String(versionedRuns[1]?.task_id)))[0]?.n,1);
+
    // Lost acknowledgement after the original Task receipt is durable:
    // recovery replays that exact receipt, never creates a second Task.
    const reconcileSourceId="automation-overdue-reconcile-"+suffix;
