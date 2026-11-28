@@ -403,8 +403,15 @@ export async function verifyAutomation({dispatch,sql,accountId,contactId,dealId,
    assert.ok(Number(publishedDealRule.published_after_deal_event_rowid)>=Number(oldDealEvent.event_rowid));
    // Simulate equal millisecond timestamps: the immutable event rowid, not a
    // rounded wall-clock comparison, must keep this older Deal out of the rule.
-   await sql("UPDATE crm_activity_automation_rules SET published_at_unix_nanos=? WHERE tenant=? AND id=?",
-     Number(oldDealEvent.occurred_at_unix_nanos),"tenant-a",dealRuleId);
+   await sql(
+     "UPDATE crm_activity_automation_rules SET version=version+1,published_at_unix_nanos=?,"+
+     "idem_key=?,idem_digest=?,request_id=?,actor=? WHERE tenant=? AND id=? AND version=1",
+     Number(oldDealEvent.occurred_at_unix_nanos),"automation-deal-rule-v2-"+suffix,"f".repeat(64),
+     "automation-deal-rule-v2-request-"+suffix,"native-a@example.test","tenant-a",dealRuleId);
+   const revisedDealRule=(await sql(
+     "SELECT version FROM crm_activity_automation_rules WHERE tenant=? AND id=?",
+     "tenant-a",dealRuleId))[0];
+   assert.equal(revisedDealRule?.version,2);
    const newDealId="automation-deal-source-"+suffix;
    const dealInput={...dealCreationInput(newDealId,accountId,contactId),
      name:"Automation source deal "+suffix,precondition:key("deal-create")};
@@ -418,11 +425,12 @@ export async function verifyAutomation({dispatch,sql,accountId,contactId,dealId,
    await Promise.all([tick(),tick()]);
    await tick();
    const dealRuns=await sql(
-     "SELECT source_event_id,source_version,task_id,status,attempt_count FROM crm_activity_automation_runs WHERE tenant=? AND rule_id=? AND source_type='deal_created' AND source_id=?",
+     "SELECT source_event_id,rule_version,source_version,task_id,status,attempt_count FROM crm_activity_automation_runs WHERE tenant=? AND rule_id=? AND source_type='deal_created' AND source_id=?",
      "tenant-a",dealRuleId,newDealId);
    assert.equal(dealRuns.length,1,"repeated Cron ticks must claim one Deal source");
    const dealRun=dealRuns[0]!;
    assert.equal(dealRun.status,"committed");
+   assert.equal(dealRun.rule_version,2);
    assert.equal(dealRun.source_version,dealEvent.deal_version);
    assert.equal(dealRun.attempt_count,1);
    const dealTaskId=String(dealRun.task_id);
