@@ -1,7 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { browserUrl, siteCredentialsAllowed, siteRequestDisposition, siteAccessConfiguration, siteAccessTargets, siteAccessForRequest, siteAccessCredentialsReady, siteRequestDispositionForTargets, isTrustedSiteNavigationRequest, isConfiguredSiteRequest, isPermittedBrowserRequest, isAuthorizedMcpOwner, safePagePath, redact, verifiedMcpOwnerEmail } from "../src/security.ts";
+import { browserUrl, siteCredentialsAllowed, siteRequestDisposition, siteAccessConfiguration, siteAccessTargets, siteAccessForRequest, siteAccessCredentialsReady, siteRequestDispositionForTargets, isTrustedSiteNavigationRequest, isConfiguredSiteRequest, isPermittedBrowserRequest, isAuthorizedMcpOwner, safePagePath, redact, verifiedMcpOwnerEmail, stripSiteAccessHeaders } from "../src/security.ts";
 const CRM_ORIGIN = "https://crm-dev.crm-5bd5e1e1.workers.dev"; // Test-only configured site.
+
+test("public redirects never receive either Cloudflare Access service header", () => {
+  const headers = stripSiteAccessHeaders({
+    "cf-access-client-id": "preview-client-id",
+    "CF-Access-Client-Secret": "preview-client-secret",
+    accept: "text/html",
+    authorization: "Bearer ordinary-site-session",
+  });
+  assert.deepEqual(headers, {
+    accept: "text/html",
+    authorization: "Bearer ordinary-site-session",
+  });
+});
 
 test("site identity is configured per exact origin; ordinary browser navigation is universal", () => {
   assert.equal(browserUrl("/clients", CRM_ORIGIN + "/"), CRM_ORIGIN + "/clients");

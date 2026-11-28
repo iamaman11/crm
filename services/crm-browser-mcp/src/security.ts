@@ -57,6 +57,17 @@ export function isConfiguredSiteRequest(input: string, origin: string | null): b
   }
 }
 
+// route.continue may carry overridden headers into a redirect chain. Every
+// request outside a configured Access origin must explicitly lose both service
+// credentials before Chromium sends it to the network.
+export function stripSiteAccessHeaders(headers: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(Object.entries(headers).filter(([name]) => {
+    const normalized = name.toLowerCase();
+    return normalized !== "cf-access-client-id" &&
+      normalized !== "cf-access-client-secret";
+  }));
+}
+
 export interface SiteAccessTarget {
   origin: string;
   clientId: string | null;

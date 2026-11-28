@@ -153,10 +153,14 @@ bindings. The two branch previews use `SITE_ACCESS_PREVIEW_1_ORIGIN` and
 Worker secrets. Preview origins require credentials and fail closed if their
 pair is incomplete; the general-purpose browser remains usable for unrelated
 public sites. Credentials are injected only into the exact configured origin,
-never accepted as browser parameters. The accepted test-only native
-`route.continue` transport may propagate overridden headers across redirects;
-do not enable these bindings for production or real customer data until issue
-#357's native redirect-scoped transport is proven live. No browser tool accepts
+never accepted as browser parameters. The native `route.continue` transport is required by the current
+Browser Run provider to preserve upstream response headers and MIME. Each
+redirect is re-authorized against its exact destination: a redirect between
+preview origins is blocked, and every public-origin request has both
+`CF-Access-Client-Id` and `CF-Access-Client-Secret` stripped before Chromium
+continues it. Credentials are reselected only for an explicitly trusted
+same-origin navigation. This redirect behavior must still be verified against
+the live Browser Run provider before PRE-07 can pass. No browser tool accepts
 arbitrary credentials, and there are no CRM-specific business API or D1
 operations inside Browser MCP.
 

@@ -40,10 +40,12 @@ test("all production Cloudflare Browser Run connects use typed persistent sessio
 
 test("preview Access uses exact target credentials with the accepted native test-CRM transport", () => {
   const code = readFileSync(new URL("../src/session.ts", import.meta.url), "utf8");
-  assert.match(code, /await route\\.continue\\(\\{\\s*headers:\\s*\\{/,
+  assert.match(code, /await route\.continue\(\{\s*headers:\s*\{/,
     "Browser Run must preserve Chromium's original response headers and MIME");
   assert.ok(code.includes('"CF-Access-Client-Id": target.clientId'));
   assert.ok(code.includes('"CF-Access-Client-Secret": target.clientSecret'));
+  assert.ok(code.includes("stripSiteAccessHeaders(request.headers())"),
+    "public redirects must remove service credentials before leaving a configured origin");
   assert.ok(code.includes("siteRequestDispositionForTargets("),
     "each request is authorized against its exact configured origin");
   assert.ok(code.includes("isTrustedSiteNavigationRequest("),
