@@ -38,8 +38,8 @@ cd services/crm-browser-mcp
 npm ci
 npm run check
 npm test
-npm run test:do-lifecycle
 npx wrangler deploy --config wrangler.jsonc --dry-run --outdir /tmp/crm-browser-mcp-build
+MCP_TEST_BUNDLE_DIR=/tmp/crm-browser-mcp-build npm run test:do-lifecycle
 ```
 
 `npm ci` generates the pinned axe-core source used by the Worker. Do not edit the generated file manually.

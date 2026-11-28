@@ -40,7 +40,7 @@ Existing bindings:
 
 Preview credentials are isolated from the primary CRM pair and from each other. Incomplete required preview credentials fail closed for that preview without disabling public-site browsing.
 
-Never put secrets in source, GitHub variables, MCP tool arguments, URLs, page DOM, logs, screenshots, Live View links or results. Do not use global browser-context headers for privileged credentials. Existing request routing and redirect/origin restrictions must be preserved.
+Never put secrets in source, GitHub variables, MCP tool arguments, URLs, page DOM, logs, screenshots, Live View links or results. Do not use global browser-context headers for privileged credentials. Existing request routing and redirect/origin restrictions must be preserved. Native route.continue({headers}) may forward overridden headers across redirects; this documented limitation is accepted only for isolated test CRM data (see #357), never for customer data.
 
 ## 4. CRM business identity
 
@@ -66,8 +66,8 @@ Use the pinned Node version from the workflow and the lockfile. From this direct
 npm ci
 npm run check
 npm test
-npm run test:do-lifecycle
 npx wrangler deploy --config wrangler.jsonc --dry-run --outdir /tmp/crm-browser-mcp-build
+MCP_TEST_BUNDLE_DIR=/tmp/crm-browser-mcp-build npm run test:do-lifecycle
 ```
 
 `npm ci` runs the pinned axe-core source generator. The generated source is build output and must not be edited manually. Do not change the lockfile unless dependency work is separately approved.
@@ -84,7 +84,7 @@ npx wrangler deploy --config wrangler.jsonc --dry-run --outdir /tmp/crm-browser-
 8. Run independent live Gate B through an authorized MCP client. Test the changed behavior plus the relevant existing regression surface.
 9. Close all test workspaces and verify provider cleanup.
 
-A green PR check is Branch Gate A, not Branch Gate B. A deployment receipt is not a live browser acceptance receipt.
+A green PR check is Branch Gate A, not Production Gate B. A deployment receipt is not a live browser acceptance receipt.
 
 ## 8. Privacy and diagnostics
 

@@ -36,7 +36,7 @@ The human ChatGPT account authorized to call the MCP endpoint. Cloudflare Access
 
 ### 3.2 Target-site identity
 
-The identity used by Chromium when visiting a target website. It is normally the browser's human login/cookies, or an explicitly configured service principal whose credentials are bound to one exact HTTPS origin. Target-site credentials are never the MCP controller identity and must not escape to foreign origins, redirects, popups, iframes or subresources.
+The identity used by Chromium when visiting a target website. It is normally the browser's human login/cookies, or an explicitly configured service principal whose credentials are bound to one exact HTTPS origin. Target-site credentials are never the MCP controller identity and must not escape to foreign origins, redirects, popups, iframes or subresources. The existing native route.continue({headers}) transport has a documented cross-origin redirect residual risk; it is accepted only for isolated test CRM data, not for production/customer data. See #357 and LIVE_ACCEPTANCE.md. Refactoring does not resolve or prove this risk away.
 
 ### 3.3 CRM application identity
 
@@ -104,7 +104,7 @@ The only MCP CI/release workflow is `.github/workflows/browser-mcp.yml`. It buil
 
 The Browser MCP gates are separate from CRM gates:
 - Branch Gate A: existing MCP CI on exact PR head.
-- Branch Gate B: live MCP acceptance after protected publication of the approved SHA.
+- No separate pre-merge Branch Gate B: feature branches cannot publish and there is no preview Worker.
 - Integrated Gate A: coordinator verifies the integrated `mcp` SHA.
 - Production Gate B: coordinator verifies the published MCP endpoint and real user-level workflows.
 
