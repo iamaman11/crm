@@ -94,6 +94,7 @@ CREATE TABLE crm_activity_automation_runs (
  source_type TEXT NOT NULL CHECK(source_type IN ('interaction_created','deal_created','task_overdue')),
  source_id TEXT NOT NULL CHECK(length(source_id) BETWEEN 1 AND 180),
  source_version INTEGER NOT NULL CHECK(source_version>0),
+ source_checked_at_unix_nanos INTEGER NOT NULL DEFAULT 0 CHECK(source_checked_at_unix_nanos>=0),
  interaction_id TEXT,
  task_id TEXT NOT NULL,
  task_intent TEXT NOT NULL CHECK(json_valid(task_intent)),
@@ -188,6 +189,7 @@ BEGIN
   OR NEW.source_type IS NOT OLD.source_type
   OR NEW.source_id IS NOT OLD.source_id
   OR NEW.source_version IS NOT OLD.source_version
+  OR NEW.source_checked_at_unix_nanos IS NOT OLD.source_checked_at_unix_nanos
   OR NEW.source_stale<>0
   OR NEW.rule_version IS NOT OLD.rule_version
   OR NEW.source_event_id IS NOT OLD.source_event_id
@@ -273,7 +275,7 @@ WHEN EXISTS(
    AND json_extract(source.state,'$.status')='open'
    AND json_type(source.state,'$.due_at_unix_nanos')='integer'
    AND CAST(json_extract(source.state,'$.due_at_unix_nanos') AS INTEGER)
-       <= (CAST(strftime('%s','now') AS INTEGER)*1000000000+CAST(substr(strftime('%f','now'),4,3) AS INTEGER)*1000000)
+       <= a.source_checked_at_unix_nanos
  )
 )
 BEGIN SELECT RAISE(ABORT,'AUTOMATION_TASK_SOURCE_STALE'); END;
@@ -344,6 +346,7 @@ WHEN NEW.seq IS NOT OLD.seq OR NEW.tenant IS NOT OLD.tenant
  OR NEW.rule_id IS NOT OLD.rule_id OR NEW.rule_version IS NOT OLD.rule_version
  OR NEW.source_event_id IS NOT OLD.source_event_id OR NEW.source_type IS NOT OLD.source_type
  OR NEW.source_id IS NOT OLD.source_id OR NEW.source_version IS NOT OLD.source_version
+ OR NEW.source_checked_at_unix_nanos IS NOT OLD.source_checked_at_unix_nanos
  OR NEW.interaction_id IS NOT OLD.interaction_id
  OR NEW.task_id IS NOT OLD.task_id OR NEW.task_intent IS NOT OLD.task_intent
  OR NEW.run_request_key IS NOT OLD.run_request_key OR NEW.run_request_digest IS NOT OLD.run_request_digest

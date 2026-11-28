@@ -991,9 +991,9 @@ async fn claim_scheduled_run(
         concat!(
             "INSERT INTO crm_activity_automation_runs",
             "(tenant,rule_id,rule_version,source_event_id,source_type,source_id,source_version,",
-            "interaction_id,task_id,task_intent,run_request_key,run_request_digest,status,",
+            "source_checked_at_unix_nanos,interaction_id,task_id,task_intent,run_request_key,run_request_digest,status,",
             "requested_by,original_request_id,created_at_unix_millis)",
-            " SELECT ?,r.id,r.version,?,?,?,?,NULL,?,?,?,?,'pending',?,?,?",
+            " SELECT ?,r.id,r.version,?,?,?,?,?,NULL,?,?,?,?,'pending',?,?,?",
             " FROM crm_activity_automation_rules r WHERE r.tenant=? AND r.id=?",
             " AND r.version=? AND r.trigger_kind=? AND r.enabled=1 ON CONFLICT DO NOTHING"
         ),
@@ -1003,6 +1003,7 @@ async fn claim_scheduled_run(
             JsValue::from_str(source_type),
             JsValue::from_str(source_id),
             JsValue::from_f64(source_version as f64),
+            JsValue::from_f64(now as f64),
             JsValue::from_str(&input.id),
             JsValue::from_str(&snapshot),
             JsValue::from_str(&request_key),

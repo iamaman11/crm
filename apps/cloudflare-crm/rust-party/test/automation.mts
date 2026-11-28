@@ -446,21 +446,24 @@ export async function verifyAutomation({dispatch,sql,accountId,contactId,existin
    });
    assert.equal(overdueRule.status,200,formatRpcFailure(overdueRule));
    const overdueSourceId="automation-overdue-source-"+suffix;
+   const overdueDueAtSeconds=BigInt(Math.floor((Date.now()+30_000)/1000));
    const overdueSource=await fixtureRpc(dispatch,tasks.createTask,admin,{
      taskId:overdueSourceId,accountId,subject:"Original overdue task "+suffix,priority:2,
-     dueAt:{seconds:BigInt(Math.floor((Date.now()+30_000)/1000)),nanos:0},
+     dueAt:{seconds:overdueDueAtSeconds,nanos:0},
      precondition:key("overdue-source")
    });
    assert.equal(overdueSource.status,200,formatRpcFailure(overdueSource));
    await tick();
    await tick();
    const overdueRuns=await sql(
-     "SELECT source_version,task_id,status,attempt_count FROM crm_activity_automation_runs WHERE tenant=? AND rule_id=? AND source_type='task_overdue' AND source_id=?",
+     "SELECT source_version,source_checked_at_unix_nanos,task_id,status,attempt_count FROM crm_activity_automation_runs WHERE tenant=? AND rule_id=? AND source_type='task_overdue' AND source_id=?",
      "tenant-a",overdueRuleId,overdueSourceId);
    assert.equal(overdueRuns.length,1,"a Task source is consumed once across Cron ticks");
    const overdueRun=overdueRuns[0]!;
    assert.equal(overdueRun.status,"committed");
    assert.equal(overdueRun.source_version,1);
+   assert.ok(Number(overdueRun.source_checked_at_unix_nanos)>=Number(overdueDueAtSeconds*1_000_000_000n),
+     "the D1 source guard must use the scheduled event time, not the wall clock");
    assert.equal(overdueRun.attempt_count,1);
    const overdueTaskId=String(overdueRun.task_id);
    assert.notEqual(overdueTaskId,overdueSourceId);
