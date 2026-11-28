@@ -683,28 +683,34 @@ pub(super) async fn execute_interaction(
     }
     execute_claimed(
         db,
-        tenant,
         row,
-        &principal.identity,
-        request_id,
-        super::now_nanos(),
-        false,
-        "RunInteractionAutomation",
+        ExecutionContext {
+            tenant,
+            actor: &principal.identity,
+            request_id,
+            now: super::now_nanos(),
+            system_actor: false,
+            rpc_method: "RunInteractionAutomation",
+        },
     )
     .await
+}
+
+struct ExecutionContext<'a> {
+    tenant: &'a str,
+    actor: &'a str,
+    request_id: &'a str,
+    now: i64,
+    system_actor: bool,
+    rpc_method: &'static str,
 }
 
 // One execution path owns both manual Interaction and autonomous sources.
 // The only difference is the trusted actor supplied to the original Task owner.
 async fn execute_claimed(
     db: &D1Database,
-    tenant: &str,
     row: RunRow,
-    actor: &str,
-    request_id: &str,
-    now: i64,
-    system_actor: bool,
-    rpc_method: &'static str,
+    context: ExecutionContext<'_>,
 ) -> Result<RunSaved, ConnectError> {
     match row.disposition()? {
         RunDisposition::Committed => {
@@ -755,7 +761,7 @@ async fn execute_claimed(
     let has_receipt = bind(
         db,
         "SELECT key FROM crm_activity_task_receipts WHERE tenant=? AND key=?",
-        &[JsValue::from_str(tenant), JsValue::from_str(&row.task_id)],
+        &[JsValue::from_str(context.tenant), JsValue::from_str(&row.task_id)],
     )
     .map_err(|_| storage())?
     .first::<serde_json::Value>(None)
@@ -773,10 +779,10 @@ async fn execute_claimed(
                     " AND CAST(json_extract(state,'$.due_at_unix_nanos') AS INTEGER)<=CAST(? AS INTEGER)"
                 ),
                 &[
-                    JsValue::from_str(tenant),
+                    JsValue::from_str(context.tenant),
                     JsValue::from_str(&row.source_id),
                     JsValue::from_f64(row.source_version as f64),
-                    JsValue::from_str(&now.to_string()),
+                    JsValue::from_str(&context.now.to_string()),
                 ],
             )
             .map_err(|_| storage())?
@@ -798,19 +804,19 @@ async fn execute_claimed(
                         " AND CAST(json_extract(t.state,'$.due_at_unix_nanos') AS INTEGER)<=CAST(? AS INTEGER))"
                     ),
                     &[
-                        JsValue::from_str(tenant),
+                        JsValue::from_str(context.tenant),
                         JsValue::from_str(&row.rule_id),
                         JsValue::from_str(&row.source_event_id),
-                        JsValue::from_str(tenant),
+                        JsValue::from_str(context.tenant),
                         JsValue::from_str(&row.source_id),
                         JsValue::from_f64(row.source_version as f64),
-                        JsValue::from_str(&now.to_string()),
+                        JsValue::from_str(&context.now.to_string()),
                     ],
                 )
                 .map_err(|_| storage())?
                 .run()
                 .await;
-                let stale = read_run(db, tenant, &row.rule_id, &row.source_event_id)
+                let stale = read_run(db, context.tenant, &row.rule_id, &row.source_event_id)
                     .await?
                     .ok_or_else(storage)?;
                 return Ok(RunSaved {
@@ -820,7 +826,7 @@ async fn execute_claimed(
                 });
             }
         }
-        let current = get(db, tenant, &row.rule_id)
+        let current = get(db, context.tenant, &row.rule_id)
             .await?
             .ok_or_else(|| ConnectError::failed_precondition("AUTOMATION_RULE_DISABLED"))?;
         if current.enabled != 1 || current.version != row.rule_version {
@@ -828,10 +834,10 @@ async fn execute_claimed(
                 "AUTOMATION_RULE_DISABLED",
             ));
         }
-        acquire_attempt(db, tenant, &row, actor, request_id).await?;
+        acquire_attempt(db, context.tenant, &row, context.actor, context.request_id).await?;
     }
-    let result = if system_actor {
-        activity_tasks::create_automation_typed(input, &row.task_id, db, tenant, actor, request_id)
+    let result = if context.system_actor {
+        activity_tasks::create_automation_typed(input, &row.task_id, db, context.tenant, context.actor, context.request_id)
             .await
     } else {
         activity_tasks::create_typed(input, &row.task_id, db, tenant, actor, request_id).await
@@ -840,10 +846,10 @@ async fn execute_claimed(
         Ok(Ok(outcome)) => outcome,
         other => {
             if !has_receipt {
-                release_attempt(db, tenant, &row, request_id).await?;
+                release_attempt(db, context.tenant, &row, context.request_id).await?;
             }
             return Err(match other {
-                Ok(Err(error)) => error.connect(rpc_method, request_id),
+                Ok(Err(error)) => error.connect(context.rpc_method, context.request_id),
                 _ => storage(),
             });
         }
@@ -869,7 +875,7 @@ async fn execute_claimed(
                 .map(JsValue::from_str)
                 .unwrap_or(JsValue::NULL),
             JsValue::from_f64(js_sys::Date::now()),
-            JsValue::from_str(tenant),
+            JsValue::from_str(context.tenant),
             JsValue::from_str(&row.rule_id),
             JsValue::from_str(&row.source_event_id),
         ],
@@ -877,7 +883,7 @@ async fn execute_claimed(
     .map_err(|_| storage())?
     .run()
     .await;
-    let completed = read_run(db, tenant, &row.rule_id, &row.source_event_id)
+    let completed = read_run(db, context.tenant, &row.rule_id, &row.source_event_id)
         .await?
         .ok_or_else(storage)?;
     if completed.status != "committed" {
@@ -918,6 +924,14 @@ struct ScheduledTaskSource {
     source_version: i64,
     state: String,
 }
+#[derive(Default, Debug)]
+pub(super) struct ScheduledSource<'a> {
+    source_type: &'a str,
+    source_id: &'a str,
+    source_version: i64,
+    checked_at_unix_nanos: i64,
+}
+
 #[derive(Default, Debug)]
 pub(super) struct ScheduledSummary {
     pub recovered: u32,
@@ -961,12 +975,15 @@ async fn claim_scheduled_run(
     db: &D1Database,
     principal: &AutomationSystemActor,
     rule: &RuleRow,
-    source_type: &str,
-    source_id: &str,
-    source_version: i64,
-    now: i64,
+    source: ScheduledSource<'_>,
     input: activity_tasks::CreateInput,
 ) -> Result<Option<RunRow>, ConnectError> {
+    let ScheduledSource {
+        source_type,
+        source_id,
+        source_version,
+        checked_at_unix_nanos: now,
+    } = source;
     let tenant = principal.tenant();
     let event_id = scheduled_event_id(tenant, &rule.rule_id, rule.version, source_type, source_id)?;
     let snapshot = serde_json::to_string(&input).map_err(|_| storage())?;
@@ -1114,13 +1131,15 @@ async fn dispatch_tenant(
         let request_id = super::native_request_id().map_err(|_| storage())?;
         match execute_claimed(
             db,
-            tenant,
             row,
-            principal.identity(),
-            &request_id,
-            now,
-            true,
-            "ScheduledAutomation",
+            ExecutionContext {
+                tenant,
+                actor: principal.identity(),
+                request_id: &request_id,
+                now,
+                system_actor: true,
+                rpc_method: "ScheduledAutomation",
+            },
         )
         .await
         {
@@ -1200,10 +1219,12 @@ async fn dispatch_tenant(
             db,
             principal,
             &rule,
-            "deal_created",
-            &candidate.source_id,
-            candidate.source_version,
-            now,
+            ScheduledSource {
+                source_type: "deal_created",
+                source_id: &candidate.source_id,
+                source_version: candidate.source_version,
+                checked_at_unix_nanos: now,
+            },
             input,
         )
         .await?
@@ -1302,10 +1323,12 @@ async fn dispatch_tenant(
             db,
             principal,
             &rule,
-            "task_overdue",
-            &candidate.source_id,
-            candidate.source_version,
-            now,
+            ScheduledSource {
+                source_type: "task_overdue",
+                source_id: &candidate.source_id,
+                source_version: candidate.source_version,
+                checked_at_unix_nanos: now,
+            },
             input,
         )
         .await?
@@ -1412,16 +1435,26 @@ async fn release_attempt(
     Ok(())
 }
 
+pub(super) struct RunIdentity<'a> {
+    pub(super) rule_id: &'a str,
+    pub(super) source_type: &'a str,
+    pub(super) source_id: &'a str,
+    pub(super) rule_version: i64,
+}
+
 pub(super) async fn cancel(
     db: &D1Database,
     principal: &access::Actor,
-    rule: &str,
-    source_type: &str,
-    source_id: &str,
-    expected_version: i64,
+    identity: RunIdentity<'_>,
     key: &str,
     request_id: &str,
 ) -> Result<RunSaved, ConnectError> {
+    let RunIdentity {
+        rule_id: rule,
+        source_type,
+        source_id,
+        rule_version: expected_version,
+    } = identity;
     let tenant = &principal.tenant;
     let row = get_run(db, tenant, rule, source_type, source_id, expected_version)
         .await?

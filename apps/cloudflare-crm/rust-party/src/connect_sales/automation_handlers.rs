@@ -185,10 +185,12 @@ impl auto_wire::AutomationService for AutomationV2Service {
         let saved = automation::cancel(
             &self.d1()?,
             &self.actor,
-            &input.rule_id,
-            &source_type,
-            &source_id,
-            input.expected_rule_version,
+            automation::RunIdentity {
+                rule_id: &input.rule_id,
+                source_type: &source_type,
+                source_id: &source_id,
+                rule_version: input.expected_rule_version,
+            },
             &key,
             &self.request_id,
         )
