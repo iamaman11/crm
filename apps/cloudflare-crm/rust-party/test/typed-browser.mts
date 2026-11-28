@@ -2465,7 +2465,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,runS
    await page.getByLabel("CSV-файл",{exact:true}).setInputFiles({
      name:"source-missing-id.csv",mimeType:"text/csv",buffer:Buffer.from(sourceMissingIdCsv)});
    await page.getByRole("button",{name:"Проверить импорт",exact:true}).click();
-   await page.getByText("Для выбранного источника используйте CSV с четырьмя колонками, включая party_id.",{exact:true}).waitFor();
+   await page.getByText("Проверьте введённые данные.",{exact:false}).waitFor();
    await expect(page.getByText("Обнаружены расхождения по известному ID источника. Импорт всего файла запрещён; исправьте CSV. Данные не записаны.",
      {exact:true})).toHaveCount(0);
    await expect(page.getByRole("button",{name:"Подтвердить импорт",exact:true})).toHaveCount(0);
