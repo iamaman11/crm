@@ -55,8 +55,8 @@ test("preview Access uses exact target credentials with the accepted native test
     "route.fetch loses response headers in this Browser Run provider");
   assert.ok(!code.includes("route.fulfill("),
     "route.fulfill cannot restore upstream headers the provider did not return");
-  assert.ok(code.includes("await route.continue();"),
-    "unrelated public sites remain native Chromium requests");
+  assert.ok(code.includes("await route.continue({ headers });"),
+    "unrelated public sites remain native Chromium requests with service credentials stripped");
 });
 
 test("both download actions share one Chromium-side, same-origin byte path", () => {
