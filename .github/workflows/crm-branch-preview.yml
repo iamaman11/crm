@@ -45,6 +45,7 @@ jobs:
       preview_host: ${{ steps.gate.outputs.preview_host }}
       expected_migration: ${{ steps.gate.outputs.expected_migration }}
       cron_schedule: ${{ steps.gate.outputs.cron_schedule }}
+      production_access_audience: ${{ steps.source.outputs.production_access_audience }}
     env:
       GH_TOKEN: ${{ github.token }}
       SOURCE_RUN_ID: ${{ inputs.source_run_id }}
@@ -154,6 +155,62 @@ jobs:
           console.log("Validated exact successful Gate A run " + runId + " attempt " + attempt + " at " + sha + "; preview slot " + target.slot + ".");
           NODE
 
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ steps.gate.outputs.source_sha }}
+          path: .preflight-source
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate frozen-base migration and runtime audience without Cloudflare credentials
+        id: source
+        env:
+          SOURCE_SHA: ${{ steps.gate.outputs.source_sha }}
+          EXPECTED_MIGRATION: ${{ steps.gate.outputs.expected_migration }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C .preflight-source rev-parse HEAD)" = "$SOURCE_SHA"
+          git -C .preflight-source fetch --no-tags origin dev:refs/remotes/origin/dev
+          git -C .preflight-source merge-base --is-ancestor refs/remotes/origin/dev "$SOURCE_SHA"
+          BASE_SHA="$(git -C .preflight-source merge-base refs/remotes/origin/dev "$SOURCE_SHA")"
+          SOURCE_SHA="$SOURCE_SHA" BASE_SHA="$BASE_SHA" EXPECTED_MIGRATION="$EXPECTED_MIGRATION" node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import {execFileSync} from "node:child_process";
+          import {lstatSync} from "node:fs";
+          const cwd=".preflight-source";
+          const base=process.env.BASE_SHA;
+          const sha=process.env.SOURCE_SHA;
+          const expected="apps/cloudflare-crm/migrations/"+process.env.EXPECTED_MIGRATION;
+          const diff=execFileSync("git",[
+            "diff","--name-status","--find-renames",base,sha,"--","apps/cloudflare-crm/migrations"
+          ],{cwd,encoding:"utf8"}).trim().split("\n").filter(Boolean);
+          assert.deepEqual(diff,["A\t"+expected],
+            "only the one branch-approved migration may be added; historical migrations cannot change, disappear or be renamed");
+          const stat=lstatSync(cwd+"/"+expected);
+          assert.ok(stat.isFile() && !stat.isSymbolicLink(),"approved migration must be a regular file");
+          assert.ok(stat.size>0,"approved migration cannot be empty");
+          const accessSource=execFileSync("git",["show",sha+":apps/cloudflare-crm/rust-party/src/access.rs"],{cwd,encoding:"utf8"});
+          assert.ok(accessSource.includes('env.var("CRM_ACCESS_AUDIENCE")'),
+            "the exact preview artifact source must use runtime-configured Access audience");
+          assert.ok(!accessSource.includes('const AUDIENCE: &str'),
+            "the compile-time production audience must not remain in preview code");
+          const productionConfigText=execFileSync("git",[
+            "show","refs/remotes/origin/dev:apps/cloudflare-crm/wrangler.jsonc"
+          ],{cwd,encoding:"utf8"});
+          const productionAudience=JSON.parse(productionConfigText).vars?.CRM_ACCESS_AUDIENCE;
+          assert.match(productionAudience??"",/^[0-9a-f]{64}$/,
+            "canonical dev must pin its existing production Access audience before previews");
+          const sourceConfigText=execFileSync("git",[
+            "show",sha+":apps/cloudflare-crm/wrangler.jsonc"
+          ],{cwd,encoding:"utf8"});
+          assert.equal(JSON.parse(sourceConfigText).vars?.CRM_ACCESS_AUDIENCE,productionAudience,
+            "the exact tested source must retain the production audience in its normal Wrangler config");
+          writeFileSync(process.env.GITHUB_OUTPUT,
+            "production_access_audience="+productionAudience+"\n",{flag:"a"});
+          console.log("Read-only preflight accepted the exact additive migration and runtime audience contract.");
+          NODE
+
   preview:
     needs: preflight
     if: ${{ github.ref == 'refs/heads/main' && needs.preflight.result == 'success' }}
@@ -183,6 +240,7 @@ jobs:
       EXPECTED_PREVIEW_HOST: ${{ needs.preflight.outputs.preview_host }}
       EXPECTED_MIGRATION: ${{ needs.preflight.outputs.expected_migration }}
       PREVIEW_CRON_SCHEDULE: ${{ needs.preflight.outputs.cron_schedule }}
+      PRODUCTION_ACCESS_AUDIENCE: ${{ needs.preflight.outputs.production_access_audience }}
     steps:
       - name: Keep preview fail-closed until the owner enables it
         id: gate
@@ -311,7 +369,8 @@ jobs:
           const productionAudience=JSON.parse(productionConfigText).vars?.CRM_ACCESS_AUDIENCE;
           assert.match(productionAudience??"",/^[0-9a-f]{64}$/,
             "dev must pin its existing production Access audience before any preview can run");
-          writeFileSync(process.env.GITHUB_ENV,"PRODUCTION_ACCESS_AUDIENCE="+productionAudience+"\n",{flag:"a"});
+          assert.equal(productionAudience,process.env.PRODUCTION_ACCESS_AUDIENCE,
+            "dev production audience must match the no-secret preflight result");
           console.log("Frozen-base migration scope and runtime Access audience are valid.");
           NODE
 
