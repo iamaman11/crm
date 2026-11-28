@@ -16,10 +16,7 @@ const ISSUER: &str = "https://royal-limit-ea43.cloudflareaccess.com";
 // Each Worker receives exactly one trusted Access application audience at deploy
 // time. Production and branch previews share the verifier but never share aud.
 fn valid_access_audience(value: &str) -> bool {
-    value.len() == 64
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_hexdigit())
+    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
 fn audience_matches(claims: &Value, expected_audience: &str) -> bool {
@@ -524,7 +521,9 @@ pub async fn actor(req: &Request, env: &Env) -> Result<Option<Actor>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{access_jwks_cache_is_fresh, audience_matches, identity_key, valid_access_audience};
+    use super::{
+        access_jwks_cache_is_fresh, audience_matches, identity_key, valid_access_audience,
+    };
     use serde_json::json;
 
     #[test]
@@ -537,10 +536,16 @@ mod tests {
         assert!(valid_access_audience(preview_one));
         assert!(valid_access_audience(preview_two));
         assert!(audience_matches(&json!({"aud": production}), production));
-        assert!(audience_matches(&json!({"aud": [preview_one, "other"]}), preview_one));
+        assert!(audience_matches(
+            &json!({"aud": [preview_one, "other"]}),
+            preview_one
+        ));
         assert!(!audience_matches(&json!({"aud": preview_one}), production));
         assert!(!audience_matches(&json!({"aud": preview_two}), preview_one));
-        assert!(!audience_matches(&json!({"aud": ["production", "preview"]}), preview_one));
+        assert!(!audience_matches(
+            &json!({"aud": ["production", "preview"]}),
+            preview_one
+        ));
         assert!(!valid_access_audience("wrong-audience"));
     }
 
