@@ -1,6 +1,6 @@
 # Universal Browser MCP — single live acceptance procedure
 
-This is the **one** repeatable smoke procedure for the 21 existing tools and the two-controller isolation contract.
+This is the **one** repeatable smoke procedure for the 21 existing tools and the three-controller isolation contract.
 Canonical branch: `mcp`, Issue [#357](https://github.com/iamaman11/crm/issues/357).
 No new Worker, browser runtime, CI, credentials, or HTTP-proxy is required.
 Run against **the released Worker**, not the PR preview. Existing `browser-mcp.yml`
@@ -8,9 +8,9 @@ still owns CI/release, including workerd Durable Object restart tests.
 
 ## Preconditions
 
-- Universal Browser MCP is connected in ChatGPT with two separately authenticated, Access-allowlisted controller accounts.
+- Universal Browser MCP is connected in ChatGPT with three separately authenticated, Access-allowlisted controller accounts (the current Access policy has exactly three intended controllers).
 - Each account has completed its own Managed OAuth authorization; do not share cookies or workspace handles.
-- Browser Run has capacity for two short concurrent sessions.
+- Browser Run has capacity for three short concurrent sessions.
 - CRM is a **test** tenant, and an existing service principal has `admin`.
 - **Never paste Access tokens or Live View signed URLs into reports.**
 - Use a separate fresh UUID `workspaceId` for each controller; keep tests read-only in CRM.
@@ -53,26 +53,79 @@ use a separate short test session and Close it. For HAR, use the recording-enabl
 session, Close and fetch recording only then. To test native `mobile` device,
 Close first, then `browser_open(device=mobile)` and assert React/admin again.
 
-### Two-controller parallel isolation (required for multi-account release)
+### Three-controller parallel isolation (required for multi-account release)
 
-1. In ChatGPT account A, open `https://example.org/` and retain workspace A.
+1. In ChatGPT account A (the owner controller), open `https://example.org/`
+   and retain workspace A.
 2. In ChatGPT account B, independently authorize the same MCP endpoint and open
    `https://www.iana.org/`, retaining workspace B.
-3. Confirm the returned workspace UUIDs differ and each account sees only its
-   own page, title, tabs and status.
-4. While both are open, run a harmless snapshot in each account. A command in
-   account B using account A's UUID must resolve only within B's controller
-   partition and must never expose or close A's page.
-5. Close workspace A. Verify workspace B remains open and usable. Then close B
-   and verify the provider reports zero active sessions.
-6. In each account, confirm the same complete 21-tool MCP surface is available.
-7. For CRM, read `/api/session` in each browser and confirm the configured
+3. In ChatGPT account C, independently authorize the same MCP endpoint and open
+   `https://www.cloudflare.com/`, retaining workspace C.
+4. Confirm all three returned workspace UUIDs differ. In each account, run
+   `browser_status` and `browser_snapshot`; each must show only its own URL,
+   title and tabs.
+5. Run cross-controller negative checks: from B, call `browser_status` with
+   A's UUID; from C, call it with A's and B's UUIDs. Each foreign namespace
+   must report `closed` with no foreign path/title/session. Re-read A and B
+   from their own accounts and confirm both remain open. Never pass a foreign
+   UUID to `browser_open` during this check.
+6. Close A from account A. Verify B and C remain open and usable. Close B from
+   account B. Verify C remains open and usable. Close C from account C and
+   verify provider `activeSessionCount=0`.
+7. In each account, confirm the same complete 21-tool MCP surface is available.
+   A stale cached schema is a client refresh issue; do not change the Worker
+   contract to accommodate one stale connection.
+8. For CRM, read `/api/session` in each browser and confirm the configured
    service identity's real role. Record explicitly that this is a shared
    service-principal actor; it is not per-human CRM audit attribution.
 
-Do not mark multi-controller LIVE PASS until both actual ChatGPT accounts have
-completed the concurrent test. Unit tests and the owner account alone cannot
-prove the second OAuth identity.
+The current Access policy readback has exactly three allowlisted controllers.
+The Worker allowlist secret binding is present, but Cloudflare does not expose
+its value for readback. The independent login tests below are still required
+to prove each controller is actually accepted by the Worker.
+
+Do not mark multi-controller LIVE PASS until all three actual ChatGPT accounts
+have completed the concurrent test. Unit tests, a single account with three
+workspaces, or a policy readback cannot prove three independent OAuth
+identities.
+
+
+### Cloudflare-hosted Durable Object restart (required)
+
+1. Open a desktop test workspace on `https://the-internet.herokuapp.com/drag_and_drop`
+   (or another public fixture), and retain its `workspaceId`. Do not use a
+   service-credential CRM workspace for this restart test.
+2. Record the exact URL/title and original target identity using the existing
+   read-only browser tools. Keep this workspace open; do not call Close/Open.
+3. From the protected GitHub Actions workflow, dispatch **Universal Browser MCP CI**
+   on branch `mcp` with `release_browser_mcp=true`, `expected_sha` equal to the
+   exact current `mcp` HEAD, and `restart_do_immediately=true`. This is an
+   explicit exact-SHA redeploy of the same Worker, not a feature-branch deploy.
+4. After the deploy job reports success and Cloudflare shows its new Worker
+   Version ID, use the same controller and same `workspaceId` for
+   `browser_status`, `browser_snapshot` and a real DOM assertion.
+5. Require `state=open`, the exact same original URL/title/target identity,
+   and a successful post-restart page action. Provider active-session count
+   must not increase: recovery must reconnect the original Browser Run session,
+   never acquire a replacement or create a new tab.
+6. If the original target is missing, report FAIL/needs_reopen. Do not call
+   `browser_open` to hide the failure. Close the original workspace only after
+   recording the result; verify provider `activeSessionCount=0`.
+
+The local workerd test proves persisted DO storage across a host restart; it
+is not this Cloudflare-hosted test. A deploy receipt alone is not recovery proof.
+
+### Human Handoff — real Done (required separately from timeout)
+
+1. Open a clean public `https://example.org/` workspace and start
+   `browser_handoff` with a clear instruction to inspect the page and press Done.
+2. The authorized human opens the short-lived Live View, confirms the page, and
+   presses **Done** before expiry.
+3. Read the provider's actual handoff status. Require the real terminal
+   `completed` state, then verify the same workspace is usable again and the
+   original page remains open. Do not infer Done from a closed Live View tab or
+   from the agent's own action.
+4. Close the test workspace and verify provider cleanup.
 
 ---
 
