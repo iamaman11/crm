@@ -265,7 +265,7 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='te
  await verifySalesCoverage({dispatch:rpcFetch,sql,accountId,admin,viewer,tenantB});
  await verifySalesCommercial({dispatch:rpcFetch,sql,statement,batch,accountId,admin,viewer,tenantB});
  await verifyLifecycle({dispatch:rpcFetch,sql,jwt,accountId,admin,viewer,tenantB});
- const automationFixture={dispatch:rpcFetch,sql,accountId,contactId,admin,viewer,tenantB,runScheduled};
+ const automationFixture={dispatch:rpcFetch,sql,accountId,contactId,dealId,admin,viewer,tenantB,knownService,runScheduled};
  await verifyAutomation(automationFixture);
  await verifySalesLeads({dispatch:rpcFetch,sql,admin,viewer,tenantB});
 

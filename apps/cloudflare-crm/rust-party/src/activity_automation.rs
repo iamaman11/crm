@@ -1033,7 +1033,7 @@ pub(super) async fn dispatch_scheduled(
             deal_id: &candidate.source_id,
             account_id: &candidate.account_id,
             source_version: candidate.source_version,
-        }, now).map_err(|error| invalid_code(error.code))?;
+        }, now).map_err(|_| invalid("ACTIVITIES_AUTOMATION_SOURCE_INVALID"))?;
         let Some(plan) = plan else { continue; };
         let input = activity_tasks::CreateInput {
             id: plan.task_id.as_str().to_owned(),
@@ -1095,7 +1095,7 @@ pub(super) async fn dispatch_scheduled(
         let plan = domain.plan(AutomationSource::TaskOverdue {
             task: &task,
             generated_by_automation: false,
-        }, now).map_err(|error| invalid_code(error.code))?;
+        }, now).map_err(|_| invalid("ACTIVITIES_AUTOMATION_SOURCE_INVALID"))?;
         let Some(plan) = plan else { continue; };
         let input = activity_tasks::CreateInput {
             id: plan.task_id.as_str().to_owned(),

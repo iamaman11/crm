@@ -13,17 +13,16 @@ import { formatRpcFailure } from "../../scripts/rpc-error-response.mts";
 type AutomationFixture = {
  dispatch: RpcDispatch;
  sql: (statement: string, ...bindings: (string | number)[]) => Promise<ReadonlyArray<Record<string, unknown>>>;
- accountId: string; contactId: string; admin: string; viewer: string; tenantB: string;
+ accountId: string; contactId: string; dealId: string; admin: string; viewer: string; tenantB: string; knownService: string;
  runScheduled: (input:{cron:string;scheduledTime:Date})=>Promise<{outcome:string;noRetry:boolean}>;
 };
-export async function verifyAutomation({dispatch,sql,accountId,contactId,admin,viewer,tenantB,runScheduled}: AutomationFixture) {
+export async function verifyAutomation({dispatch,sql,accountId,contactId,dealId,admin,viewer,tenantB,knownService,runScheduled}: AutomationFixture) {
  const automation=AutomationService.method;
  const interaction=InteractionService.method;
  const tasks=TaskService.method;
  const member=MemberService.method;
- // SK-08A: the only first executable use case is a signed administrator
- // explicitly running a published rule for one original Interaction.
- // The write delegates to the original Task aggregate, never direct SQL.
+ // SK-08A: preserve the signed manual Interaction workflow while scheduled
+ // Deal and Task sources use the same durable run ledger and original Task owner.
  {
    const suffix=randomUUID(),ruleId="automation-rule-"+suffix;
    const sourceId="automation-source-"+suffix;
@@ -386,7 +385,7 @@ export async function verifyAutomation({dispatch,sql,accountId,contactId,admin,v
    // discovered from the immutable Sales lifecycle event after publication.
    const oldDealRunCount=(await sql(
      "SELECT COUNT(*) n FROM crm_activity_automation_runs WHERE tenant=? AND source_type='deal_created' AND source_id=?",
-     "tenant-a","deal-existing")).at(0)?.n;
+     "tenant-a",dealId)).at(0)?.n;
    const dealRuleId="automation-deal-rule-"+suffix;
    const dealRule=await fixtureRpc(dispatch,automation.putAutomationRule,admin,{
      ruleId:dealRuleId,trigger:3,enabled:true,taskSubject:"Deal-created follow-up "+suffix,
@@ -418,7 +417,7 @@ export async function verifyAutomation({dispatch,sql,accountId,contactId,admin,v
    assert.equal(dealTask.accountId,accountId);
    assert.equal(dealTask.owner?.owner.value,person);
    assert.equal(dealTask.subject,"Deal-created follow-up "+suffix);
-   assert.equal(dealTask.relatedResources.some(value=>value.resourceId===dealId),true);
+   assert.equal(dealTask.relatedDealId,dealId);
    assert.equal((await sql(
      "SELECT COUNT(*) n FROM crm_activity_task_receipts WHERE tenant=? AND key=?",
      "tenant-a",dealTaskId))[0]?.n,1);
@@ -543,7 +542,7 @@ export async function verifyAutomation({dispatch,sql,accountId,contactId,admin,v
      "SELECT task_id FROM crm_activity_automation_runs WHERE tenant=? AND rule_id=? AND source_type='task_overdue' AND source_id=?",
      "tenant-a",overdueRuleId,staleSourceId))[0];
    assert.ok(staleRun);
-   assert.equal((await fixtureRpc(dispatch,tasks.completeTask,admin,{
+   assert.equal((await fixtureRpc(dispatch,tasks.completeTask,knownService,{
      taskId:staleSourceId,precondition:{expectedVersion:1n,idempotencyKey:"automation-complete-stale-"+suffix}
    })).status,200);
    await sql("UPDATE crm_activity_automation_runs SET next_attempt_at_unix_millis=0 "+
