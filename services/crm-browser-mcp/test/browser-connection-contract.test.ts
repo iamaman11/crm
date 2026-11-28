@@ -38,18 +38,24 @@ test("all production Cloudflare Browser Run connects use typed persistent sessio
   assert.match(code, /serviceWorkers:\s*"block"/, "SSRF interception relies on blocked Service Workers");
 });
 
-test("test CRM uses native Playwright continuation so Chromium owns the response", () => {
+test("site Access uses one-hop scoped fetches and never forwards credentials across redirects", () => {
   const code = readFileSync(new URL("../src/session.ts", import.meta.url), "utf8");
-  assert.ok(code.includes("await route.continue({\n          headers:"),
-    "native Playwright continues the request with the configured test identity");
-  assert.ok(code.includes('"CF-Access-Client-Id": this.env.SITE_ACCESS_CLIENT_ID!'));
-  assert.ok(code.includes('"CF-Access-Client-Secret": this.env.SITE_ACCESS_CLIENT_SECRET!'));
-  assert.ok(code.includes("siteRequestDisposition("),
-    "site-origin request disposition is unchanged");
-  assert.ok(!code.includes("route.fetch("),
-    "MCP no longer downloads HTML, JS or CSS on Chromium's behalf");
-  assert.ok(!code.includes("route.fulfill("),
-    "MCP no longer replays responses without Content-Type");
+  assert.ok(code.includes("await route.fetch({"),
+    "the exact configured origin receives one privileged upstream request");
+  assert.ok(code.includes("maxRedirects: 0"),
+    "the privileged fetch must stop before following any redirect");
+  assert.ok(code.includes("await route.fulfill({"),
+    "Chromium receives the upstream status, headers and body and owns redirect handling");
+  assert.ok(code.includes('"CF-Access-Client-Id": target.clientId'));
+  assert.ok(code.includes('"CF-Access-Client-Secret": target.clientSecret'));
+  assert.ok(code.includes("siteRequestDispositionForTargets("),
+    "each request is authorized against its exact configured origin");
+  assert.ok(code.includes("isTrustedSiteNavigationRequest("),
+    "controller trust is scoped to the exact origin originally requested");
+  assert.ok(!code.includes("await route.continue({\\n          headers:"),
+    "injected service headers are never delegated to Chromium redirect handling");
+  assert.ok(code.includes("await route.continue();"),
+    "unrelated public sites remain native Chromium requests");
 });
 
 test("both download actions share one Chromium-side, same-origin byte path", () => {
