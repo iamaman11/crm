@@ -9,7 +9,9 @@
   "vars": {
     "CRM_MCP_ACCESS_AUD": "8d0515ac0f3dc33e9a39bebe5e4530f70056e6ddf3d4cb910df80e7ba5f6b67c",
     "CF_BROWSER_ACCOUNT_ID": "5bd5e1e1e813f061afc259e91334262d",
-    "SITE_ACCESS_ORIGIN": "https://crm-dev.crm-5bd5e1e1.workers.dev"
+    "SITE_ACCESS_ORIGIN": "https://crm-dev.crm-5bd5e1e1.workers.dev",
+    "SITE_ACCESS_PREVIEW_1_ORIGIN": "https://crm-writer-preview-1.crm-5bd5e1e1.workers.dev",
+    "SITE_ACCESS_PREVIEW_2_ORIGIN": "https://crm-writer-preview-2.crm-5bd5e1e1.workers.dev"
   },
   "browser": {
     "binding": "BROWSER"

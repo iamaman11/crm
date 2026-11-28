@@ -14,12 +14,13 @@ export interface NavigablePage {
 export async function navigatePage(
   page: NavigablePage,
   destination: string,
-  setTrustedSiteNavigation: (enabled: boolean) => void,
+  setTrustedSiteNavigation: (origin: string | null) => void,
   timeoutMs = 25_000,
   privilegedOrigin: string | null = null,
 ) {
   // Trust is ephemeral and only exists for explicitly configured service auth.
-  setTrustedSiteNavigation(isConfiguredSiteRequest(destination, privilegedOrigin));
+  const trustedOrigin = isConfiguredSiteRequest(destination, privilegedOrigin) ? privilegedOrigin : null;
+  setTrustedSiteNavigation(trustedOrigin);
   try {
     const response = await page.goto(destination, {
       waitUntil: "domcontentloaded",
@@ -31,6 +32,6 @@ export async function navigatePage(
       title: await page.title(),
     };
   } finally {
-    setTrustedSiteNavigation(false);
+    setTrustedSiteNavigation(null);
   }
 }

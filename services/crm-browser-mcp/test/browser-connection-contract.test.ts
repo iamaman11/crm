@@ -38,18 +38,23 @@ test("all production Cloudflare Browser Run connects use typed persistent sessio
   assert.match(code, /serviceWorkers:\s*"block"/, "SSRF interception relies on blocked Service Workers");
 });
 
-test("test CRM uses native Playwright continuation so Chromium owns the response", () => {
+test("preview Access uses exact target credentials with the accepted native test-CRM transport", () => {
   const code = readFileSync(new URL("../src/session.ts", import.meta.url), "utf8");
-  assert.ok(code.includes("await route.continue({\n          headers:"),
-    "native Playwright continues the request with the configured test identity");
-  assert.ok(code.includes('"CF-Access-Client-Id": this.env.SITE_ACCESS_CLIENT_ID!'));
-  assert.ok(code.includes('"CF-Access-Client-Secret": this.env.SITE_ACCESS_CLIENT_SECRET!'));
-  assert.ok(code.includes("siteRequestDisposition("),
-    "site-origin request disposition is unchanged");
+  assert.match(code, /await route\.continue\(\{\s*headers:\s*\{/ ,
+    "Browser Run must preserve Chromium's original response headers and MIME");
+  assert.ok(code.includes('"CF-Access-Client-Id": target.clientId'));
+  assert.ok(code.includes('"CF-Access-Client-Secret": target.clientSecret'));
+  assert.ok(code.includes("siteRequestDispositionForTargets("),
+    "each request is authorized against its exact configured origin");
+  assert.ok(code.includes("isTrustedSiteNavigationRequest("),
+    "controller trust is scoped to the exact origin originally requested");
+  assert.ok(code.includes("MUST NOT be reused for production or"));
   assert.ok(!code.includes("route.fetch("),
-    "MCP no longer downloads HTML, JS or CSS on Chromium's behalf");
+    "route.fetch loses response headers in this Browser Run provider");
   assert.ok(!code.includes("route.fulfill("),
-    "MCP no longer replays responses without Content-Type");
+    "route.fulfill cannot restore upstream headers the provider did not return");
+  assert.ok(code.includes("await route.continue();"),
+    "unrelated public sites remain native Chromium requests");
 });
 
 test("both download actions share one Chromium-side, same-origin byte path", () => {

@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { acquire, connect, history, limits, type Browser, type BrowserContext, type Page } from "@cloudflare/playwright";
-import { DEFAULT_BROWSER_URL, browserUrl, siteAccessConfiguration, siteRequestDisposition, isPermittedBrowserRequest, redact, safePagePath } from "./security";
+import { DEFAULT_BROWSER_URL, browserUrl, siteAccessTargets, siteAccessForRequest, siteAccessCredentialsReady, siteRequestDispositionForTargets, isTrustedSiteNavigationRequest, isPermittedBrowserRequest, redact, safePagePath } from "./security";
 import { chooseDevice, deviceOptions, type BrowserDevice } from "./browser-device";
 import { WEB_VITALS_INIT, readVitals, type WebVitals } from "./browser-performance";
 import { AXE_SOURCE } from "./axe-source.generated";
@@ -22,6 +22,12 @@ export interface Env {
   SITE_ACCESS_ORIGIN?: string; // Optional exact HTTPS origin for automated Cloudflare Access.
   SITE_ACCESS_CLIENT_ID?: string; // Optional Worker secret, never a browser parameter.
   SITE_ACCESS_CLIENT_SECRET?: string; // Must be paired with CLIENT_ID.
+  SITE_ACCESS_PREVIEW_1_ORIGIN?: string; // Exact Access origin for isolated Writer #490.
+  SITE_ACCESS_PREVIEW_1_CLIENT_ID?: string; // Separate protected Worker secret.
+  SITE_ACCESS_PREVIEW_1_CLIENT_SECRET?: string; // Separate protected Worker secret.
+  SITE_ACCESS_PREVIEW_2_ORIGIN?: string; // Exact Access origin for isolated Writer #491.
+  SITE_ACCESS_PREVIEW_2_CLIENT_ID?: string; // Separate protected Worker secret.
+  SITE_ACCESS_PREVIEW_2_CLIENT_SECRET?: string; // Separate protected Worker secret.
   CRM_MCP_OWNER_EMAIL: string;
   CRM_MCP_ACCESS_AUD: string;
   CF_BROWSER_ACCOUNT_ID: string;
@@ -115,7 +121,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
   private nextOperation: Promise<void> = Promise.resolve();
   private pendingOperations = 0;
   private acceptingDialog = false;
-  private ownerDirectedSiteNavigation = false;
+  private ownerDirectedSiteNavigationOrigin: string | null = null;
   // The original Playwright context remains the sole CDP owner while the
   // human controls the page. Completion events are checkpointed to DO SQLite.
   private handoffCdp: Awaited<ReturnType<BrowserContext["newCDPSession"]>> | null = null;
@@ -152,20 +158,39 @@ export class CrmBrowserSession extends DurableObject<Env> {
   // Both Open and navigate use one Playwright page owner. Service access, if
   // configured, is an optional origin-bound transport; interactive login is normal.
   private siteAccess() {
-    return siteAccessConfiguration(
-      this.env.SITE_ACCESS_ORIGIN, this.env.SITE_ACCESS_CLIENT_ID,
-      this.env.SITE_ACCESS_CLIENT_SECRET,
-    );
+    return siteAccessTargets([
+      {
+        origin: this.env.SITE_ACCESS_ORIGIN,
+        clientId: this.env.SITE_ACCESS_CLIENT_ID,
+        clientSecret: this.env.SITE_ACCESS_CLIENT_SECRET,
+      },
+      {
+        origin: this.env.SITE_ACCESS_PREVIEW_1_ORIGIN,
+        clientId: this.env.SITE_ACCESS_PREVIEW_1_CLIENT_ID,
+        clientSecret: this.env.SITE_ACCESS_PREVIEW_1_CLIENT_SECRET,
+        requiredCredentials: true,
+      },
+      {
+        origin: this.env.SITE_ACCESS_PREVIEW_2_ORIGIN,
+        clientId: this.env.SITE_ACCESS_PREVIEW_2_CLIENT_ID,
+        clientSecret: this.env.SITE_ACCESS_PREVIEW_2_CLIENT_SECRET,
+        requiredCredentials: true,
+      },
+    ]);
   }
 
   private async navigateTo(destination: string, runDeadline?: number) {
     const page = this.page;
     if (!page || page.isClosed()) throw new Error("CRM_BROWSER_NOT_OPEN");
     const access = this.siteAccess();
+    if (!siteAccessCredentialsReady(destination, access)) {
+      throw new Error("BROWSER_SITE_ACCESS_CREDENTIALS_REQUIRED");
+    }
+    const target = siteAccessForRequest(destination, access);
     return navigatePage(
-      page, destination, enabled => { this.ownerDirectedSiteNavigation = enabled; },
+      page, destination, origin => { this.ownerDirectedSiteNavigationOrigin = origin; },
       operationTimeout(25_000, runDeadline),
-      access.serviceCredentials ? access.origin : null,
+      target?.serviceCredentials ? target.origin : null,
     );
   }
 
@@ -283,12 +308,13 @@ export class CrmBrowserSession extends DurableObject<Env> {
         try {
           const frame = request.frame();
           initiator = frame.url();
-          trustedMainNavigation = this.ownerDirectedSiteNavigation &&
-            request.isNavigationRequest() && frame === this.page?.mainFrame();
+          trustedMainNavigation = isTrustedSiteNavigationRequest(
+            request.url(), this.ownerDirectedSiteNavigationOrigin,
+            request.isNavigationRequest(), frame === this.page?.mainFrame(),
+          );
         } catch { /* Service-worker requests have no frame; never authorize. */ }
-        const disposition = siteRequestDisposition(
-          request.url(), initiator, trustedMainNavigation,
-          siteAccess.origin, siteAccess.serviceCredentials,
+        const disposition = siteRequestDispositionForTargets(
+          request.url(), initiator, trustedMainNavigation, siteAccess,
         );
         if (disposition === "block") {
           // Browser-managed CRM cookies can survive earlier authenticated
@@ -301,19 +327,23 @@ export class CrmBrowserSession extends DurableObject<Env> {
           await route.continue();
           return;
         }
-        // The test CRM already has an enrolled service principal with admin
-        // rights in the owner's existing tenant. Let Chromium receive the real
-        // HTTP response from the site: Playwright only overrides the request
-        // headers, not the status, MIME, body, or redirects.
-        //
-        // This is deliberately dev-only. Playwright propagates overridden
-        // headers on redirects, so this shortcut must be replaced by a
-        // redirect-scoped transport before production with real data.
+        const target = siteAccessForRequest(request.url(), siteAccess);
+        if (!target?.serviceCredentials || !target.clientId || !target.clientSecret) {
+          await route.abort("blockedbyclient");
+          return;
+        }
+        // Accepted native Browser Run transport for this TEST CRM: route.fetch →
+        // route.fulfill loses upstream response headers/MIME in this provider,
+        // so Chromium must continue the original request. Playwright may forward
+        // overridden headers across redirects; this residual risk is accepted
+        // only for isolated test data and MUST NOT be reused for production or
+        // real customer data. A production-safe redirect-scoped native transport
+        // remains a separate prerequisite (see issue #357).
         await route.continue({
           headers: {
             ...request.headers(),
-            "CF-Access-Client-Id": this.env.SITE_ACCESS_CLIENT_ID!,
-            "CF-Access-Client-Secret": this.env.SITE_ACCESS_CLIENT_SECRET!,
+            "CF-Access-Client-Id": target.clientId,
+            "CF-Access-Client-Secret": target.clientSecret,
           },
         });
       });
@@ -372,7 +402,10 @@ export class CrmBrowserSession extends DurableObject<Env> {
   private async open(path: string = DEFAULT_BROWSER_URL, recording: boolean = false,
       requestedDevice?: BrowserDevice) {
     const destination = browserUrl(path);
-    this.siteAccess(); // Reject a partial secret configuration before acquire().
+    const access = this.siteAccess(); // Validate every configured exact-origin credential pair.
+    if (!siteAccessCredentialsReady(destination, access)) {
+      throw new Error("BROWSER_SITE_ACCESS_CREDENTIALS_REQUIRED");
+    }
     const activeDevice = await this.ctx.storage.get<BrowserDevice>("browser_device") ?? null;
     const device = chooseDevice(requestedDevice, activeDevice);
     // The user explicitly requested Open: replace a lost browser only after
@@ -616,7 +649,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
       this.page = null;
       this.tabIds.clear();
       this.acceptingDialog = false;
-      this.ownerDirectedSiteNavigation = false;
+      this.ownerDirectedSiteNavigationOrigin = null;
       this.requestLog = [];
       this.consoleLog = [];
       this.transfers.clear();
