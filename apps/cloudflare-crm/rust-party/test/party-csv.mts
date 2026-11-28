@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { PartyCsvService } from "../../../../packages/client/gen/crm/customer_data_operations/v2/party_csv_pb.js";
 import { PartyKind, PartyService } from "../../../../packages/client/gen/crm/parties/v3/party_pb.js";
 import { DomainErrorDetailSchema, MutationCommitOutcome } from "../../../../packages/client/gen/crm/core/v2/operation_pb.js";
-import { decodeFixtureDetail, fixtureRpc, fixtureRpcError, sendFixtureRpc } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
+import { decodeFixtureDetail, fixtureRpc, fixtureRpcError, fixtureRpcRace, sendFixtureRpc } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
 import type { RpcDispatch } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
 import { record, records } from "../../scripts/json-boundary.mts";
 import { formatRpcFailure } from "../../scripts/rpc-error-response.mts";
@@ -20,6 +20,8 @@ type CsvFixture = {
  unknownService: string;
 };
 
+// Source identity regression coverage: stable reimports, mixed conflicts, tenant isolation,
+// stale previews, concurrent Apply, receipt recovery and atomic workerd/D1 rollback.
 export async function verifyPartyCsv({dispatch,rpcFetch,sql,partySnapshot,admin,viewer,tenantB,knownService,unknownService}: CsvFixture) {
  const methods=PartyCsvService.method;
  const parties=PartyService.method;
@@ -271,6 +273,352 @@ export async function verifyPartyCsv({dispatch,rpcFetch,sql,partySnapshot,admin,
  console.log(JSON.stringify({event:"crm.native-simple-csv-original-owner",result:"PASS",
    native_csv:true,headers_two_or_four:true,tenant:true,original_position_id:true,
    row_errors:true,atomic:true,replay:true,quoted_values:true,audit:true}));
+
+ // Optional named sources bind a stable external-ID digest to the original Party owner.
+ const registerSourceInput={displayName:"Pilot CRM",precondition:{idempotencyKey:"csv-source-register"}};
+ const registeredSource=await fixtureRpc(dispatch,methods.registerPartyImportSource,admin,registerSourceInput);
+ assert.equal(registeredSource.status,200,formatRpcFailure(registeredSource));
+ assert.equal(registeredSource.body.receipt?.replayed,false);
+ const sourceId=registeredSource.body.source?.sourceId;
+ assert.ok(typeof sourceId==="string"&&sourceId.startsWith("csv-source-"));
+ const listedSources=await fixtureRpc(dispatch,methods.listPartyImportSources,admin,{});
+ assert.ok(listedSources.body.sources.some(source=>source.sourceId===sourceId&&source.displayName==="Pilot CRM"));
+ assert.equal((await fixtureRpc(dispatch,methods.listPartyImportSources,tenantB,{})).body.sources.length,0);
+ assert.equal((await sendFixtureRpc(dispatch,methods.listPartyImportSources,viewer,{},403)).status,403);
+ assert.equal((await sendFixtureRpc(dispatch,methods.registerPartyImportSource,viewer,{displayName:"Forbidden"},403)).status,403);
+ assert.equal((await sendFixtureRpc(dispatch,methods.listPartyImportSources,null,{},401)).status,401);
+ assert.equal((await sendFixtureRpc(dispatch,methods.registerPartyImportSource,null,{displayName:"Unauthenticated"},401)).status,401);
+ const sameSourceInput={displayName:"  pilot crm  ",precondition:{idempotencyKey:"csv-source-register-alias"}};
+ const sameSource=await fixtureRpc(dispatch,methods.registerPartyImportSource,admin,sameSourceInput);
+ assert.equal(sameSource.body.source?.sourceId,sourceId,"Source registration is stable and case-insensitive");
+ assert.equal(sameSource.body.receipt?.replayed,false);
+ const sameSourceReplay=await fixtureRpc(dispatch,methods.registerPartyImportSource,admin,sameSourceInput);
+ assert.equal(sameSourceReplay.body.source?.sourceId,sourceId);
+ assert.equal(sameSourceReplay.body.receipt?.replayed,true);
+
+ const sourceCsv1=new TextEncoder().encode(
+   "party_id,kind,display_name,resource_version\r\nsource-ext-1,person,Source Person,1\r\nsource-ext-2,organization,Source Org,1\r\n");
+ const sourcePreview1=await fixtureRpc(dispatch,methods.previewPartyImport,admin,{csv:sourceCsv1,sourceId});
+ assert.equal(sourcePreview1.status,200,formatRpcFailure(sourcePreview1));
+ assert.equal(sourcePreview1.body.newCount,2);
+ assert.equal(sourcePreview1.body.matchedCount,0);
+ assert.equal(sourcePreview1.body.rowIssues.length,0);
+ assert.ok(sourcePreview1.body.previewFingerprint.length===64);
+ const sourceIds1=[...sourcePreview1.body.targetPartyIds];
+ const sourceApply1=await fixtureRpc(dispatch,methods.applyPartyImport,admin,{
+   csv:sourceCsv1,sourceId,expectedSha256Hex:sourcePreview1.body.csvSha256Hex,
+   expectedPreviewFingerprint:sourcePreview1.body.previewFingerprint,
+   precondition:{idempotencyKey:"csv-source-first-import"}
+ });
+ assert.equal(sourceApply1.status,200,formatRpcFailure(sourceApply1));
+ assert.equal(sourceApply1.body.createdCount,2);
+ assert.equal(sourceApply1.body.replayedCount,0);
+ assert.equal(sourceApply1.body.receipt?.replayed,false);
+ const sourceReplay=await fixtureRpc(dispatch,methods.applyPartyImport,knownService,{
+   csv:sourceCsv1,sourceId,expectedSha256Hex:sourcePreview1.body.csvSha256Hex,
+   expectedPreviewFingerprint:sourcePreview1.body.previewFingerprint,
+   precondition:{idempotencyKey:"csv-source-first-import"}
+ });
+ assert.equal(sourceReplay.body.createdCount,0);
+ assert.equal(sourceReplay.body.replayedCount,2);
+ assert.equal(sourceReplay.body.receipt?.replayed,true);
+
+ // Different file bytes, same source and same external IDs: old Party IDs survive;
+ // only the genuinely new external ID creates another Party.
+ const sourceCsv2=new TextEncoder().encode(
+   "party_id,kind,display_name,resource_version\r\nsource-ext-1,person,Source Person,2\r\nsource-ext-2,organization,Source Org,2\r\nsource-ext-3,person,New Source Person,1\r\n");
+ const sourcePreview2=await fixtureRpc(dispatch,methods.previewPartyImport,admin,{csv:sourceCsv2,sourceId});
+ assert.equal(sourcePreview2.status,200,formatRpcFailure(sourcePreview2));
+ assert.equal(sourcePreview2.body.newCount,1);
+ assert.equal(sourcePreview2.body.matchedCount,2);
+ assert.deepEqual(sourcePreview2.body.targetPartyIds.slice(0,2),sourceIds1);
+ const sourceApply2=await fixtureRpc(dispatch,methods.applyPartyImport,admin,{
+   csv:sourceCsv2,sourceId,expectedSha256Hex:sourcePreview2.body.csvSha256Hex,
+   expectedPreviewFingerprint:sourcePreview2.body.previewFingerprint,
+   precondition:{idempotencyKey:"csv-source-second-import"}
+ });
+ assert.equal(sourceApply2.status,200,formatRpcFailure(sourceApply2));
+ assert.equal(sourceApply2.body.createdCount,1);
+ assert.equal(sourceApply2.body.replayedCount,2);
+ assert.equal(sourceApply2.body.receipt?.replayed,false);
+ assert.equal(await count("SELECT COUNT(*) AS n FROM crm_party_source_identities WHERE tenant='tenant-a' AND source_id='"+sourceId+"'"),3);
+
+ // A matched-only reimport still commits an auditable operation receipt; replay adds no second audit.
+ const matchedOnlyPreview=await fixtureRpc(dispatch,methods.previewPartyImport,admin,{csv:sourceCsv2,sourceId});
+ assert.equal(matchedOnlyPreview.body.newCount,0);
+ assert.equal(matchedOnlyPreview.body.matchedCount,3);
+ const applyAuditBefore=await count("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' AND action='customer_data.csv_import.apply'");
+ const matchedOnlyInput={csv:sourceCsv2,sourceId,
+   expectedSha256Hex:matchedOnlyPreview.body.csvSha256Hex,
+   expectedPreviewFingerprint:matchedOnlyPreview.body.previewFingerprint,
+   precondition:{idempotencyKey:"csv-source-matched-only"}};
+ const matchedOnlyApply=await fixtureRpc(dispatch,methods.applyPartyImport,admin,matchedOnlyInput);
+ assert.equal(matchedOnlyApply.status,200,formatRpcFailure(matchedOnlyApply));
+ assert.equal(matchedOnlyApply.body.createdCount,0);
+ assert.equal(matchedOnlyApply.body.replayedCount,3);
+ assert.equal(matchedOnlyApply.body.receipt?.replayed,false);
+ const matchedOnlyRequestId=matchedOnlyApply.headers.get("x-request-id");
+ assert.ok(matchedOnlyRequestId);
+ assert.deepEqual(await sql("SELECT action,subject_id,actor,request_id FROM crm_audit WHERE tenant_id=? AND request_id=?",
+   "tenant-a",matchedOnlyRequestId),[{
+     action:"customer_data.csv_import.apply",subject_id:sourceId,
+     actor:"native-a@example.test",request_id:matchedOnlyRequestId
+   }]);
+ const matchedOnlyReplay=await fixtureRpc(dispatch,methods.applyPartyImport,knownService,matchedOnlyInput);
+ assert.equal(matchedOnlyReplay.body.receipt?.replayed,true);
+ assert.equal(await count("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' AND action='customer_data.csv_import.apply'"),
+   applyAuditBefore+1);
+
+ // A changed known ID is a visible, non-committable preview; it never silently updates Party.
+ const sourceConflictBytes=new TextEncoder().encode(
+   "party_id,kind,display_name,resource_version\r\nsource-ext-1,person,Changed Source Person,3\r\n");
+ const conflictPartyCount=await count("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant='tenant-a'");
+ const sourceConflict=await fixtureRpc(dispatch,methods.previewPartyImport,admin,{csv:sourceConflictBytes,sourceId});
+ assert.equal(sourceConflict.status,200,formatRpcFailure(sourceConflict));
+ assert.deepEqual(sourceConflict.body.targetPartyIds,[]);
+ assert.deepEqual(sourceConflict.body.rowIssues.map(issue=>[issue.rowPosition,issue.field,issue.code]),[
+   [1,"display_name","IMPORT_SOURCE_IDENTITY_CONFLICT"]
+ ]);
+ assert.equal((await fixtureRpcError(dispatch,methods.applyPartyImport,admin,{
+   csv:sourceConflictBytes,sourceId,expectedSha256Hex:sourceConflict.body.csvSha256Hex,
+   expectedPreviewFingerprint:sourceConflict.body.previewFingerprint,
+   precondition:{idempotencyKey:"csv-source-conflict-denied"}
+ })).body.code,"aborted");
+ assert.equal(await count("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant='tenant-a'"),conflictPartyCount);
+ assert.equal(await count("SELECT COUNT(*) AS n FROM crm_party_import_receipts WHERE key='csv-source-conflict-denied'"),0);
+ const kindConflict=await fixtureRpc(dispatch,methods.previewPartyImport,admin,{
+   csv:new TextEncoder().encode("party_id,kind,display_name,resource_version\r\nsource-ext-2,person,Source Org,2\r\n"),
+   sourceId
+ });
+ assert.deepEqual(kindConflict.body.rowIssues.map(issue=>[issue.rowPosition,issue.field,issue.code]),[
+   [1,"kind","IMPORT_SOURCE_IDENTITY_CONFLICT"]
+ ]);
+ const mixedConflictBytes=new TextEncoder().encode(
+   "party_id,kind,display_name,resource_version\r\nsource-ext-1,person,Changed Name,3\r\nmixed-new-ext,person,Mixed New Party,1\r\n");
+ const mixedConflictBefore=await count("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant='tenant-a'");
+ const mixedConflictPreview=await fixtureRpc(dispatch,methods.previewPartyImport,admin,{
+   csv:mixedConflictBytes,sourceId
+ });
+ assert.equal(mixedConflictPreview.body.newCount,1);
+ assert.equal(mixedConflictPreview.body.rowIssues.length,1);
+ assert.deepEqual(mixedConflictPreview.body.targetPartyIds,[]);
+ assert.equal((await fixtureRpcError(dispatch,methods.applyPartyImport,admin,{
+   csv:mixedConflictBytes,sourceId,expectedSha256Hex:mixedConflictPreview.body.csvSha256Hex,
+   expectedPreviewFingerprint:mixedConflictPreview.body.previewFingerprint,
+   precondition:{idempotencyKey:"csv-source-mixed-conflict-denied"}
+ })).body.code,"aborted");
+ assert.equal(await count("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant='tenant-a'"),mixedConflictBefore);
+ assert.equal(await count("SELECT COUNT(*) AS n FROM crm_party_import_receipts WHERE key='csv-source-mixed-conflict-denied'"),0);
+
+ // A different source and a different tenant never inherit this source's mapping.
+ const secondSource=await fixtureRpc(dispatch,methods.registerPartyImportSource,admin,{
+   displayName:"Other Pilot",precondition:{idempotencyKey:"csv-source-other-source"}
+ });
+ assert.equal(secondSource.body.receipt?.replayed,false);
+ const secondSourceId=secondSource.body.source?.sourceId;
+ assert.ok(typeof secondSourceId==="string"&&secondSourceId!==sourceId);
+ const independent=await fixtureRpc(dispatch,methods.previewPartyImport,admin,{
+   csv:new TextEncoder().encode("party_id,kind,display_name,resource_version\r\nsource-ext-1,person,Source Person,1\r\n"),
+   sourceId:secondSourceId
+ });
+ assert.equal(independent.body.newCount,1);
+ assert.notEqual(independent.body.targetPartyIds[0],sourceIds1[0]);
+ const tenantBSource=await fixtureRpc(dispatch,methods.registerPartyImportSource,tenantB,{
+   displayName:"Pilot CRM",precondition:{idempotencyKey:"csv-source-tenant-b"}
+ });
+ assert.equal(tenantBSource.body.receipt?.replayed,false);
+ const tenantBSourceId=tenantBSource.body.source?.sourceId;
+ assert.ok(typeof tenantBSourceId==="string"&&tenantBSourceId!==sourceId);
+ const tenantBPreview=await fixtureRpc(dispatch,methods.previewPartyImport,tenantB,{
+   csv:sourceCsv1,sourceId:tenantBSourceId
+ });
+ assert.equal(tenantBPreview.body.newCount,2);
+ assert.notDeepEqual(tenantBPreview.body.targetPartyIds,sourceIds1);
+ assert.equal((await fixtureRpcError(dispatch,methods.previewPartyImport,tenantB,{
+   csv:sourceCsv1,sourceId
+ })).body.code,"not_found");
+
+ // Source registration and its idempotency receipt are one atomic D1 batch.
+ const atomicSourceKey="csv-source-register-atomic";
+ const sourceRegistrationAuditBefore=await count("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' AND action='customer_data.csv_import_source.register'");
+ const atomicSourceInput={
+   displayName:"Atomic Receipt Source",
+   precondition:{idempotencyKey:atomicSourceKey}
+ };
+ await sql("CREATE TRIGGER fixture_fail_source_registration_receipt BEFORE INSERT ON crm_party_import_source_receipts "+
+   "WHEN NEW.key='"+atomicSourceKey+"' BEGIN SELECT RAISE(ABORT,'fixture source receipt failure'); END;");
+ try {
+   await assertUnconfirmed(await sendFixtureRpc(
+     dispatch,methods.registerPartyImportSource,admin,atomicSourceInput,503
+   ),"IMPORT_SOURCE_REGISTER_UNCONFIRMED");
+ } finally { await sql("DROP TRIGGER fixture_fail_source_registration_receipt"); }
+ assert.equal(await count("SELECT COUNT(*) AS n FROM crm_party_import_sources WHERE tenant='tenant-a' AND normalized_name='atomic receipt source'"),0);
+ assert.equal(await count("SELECT COUNT(*) AS n FROM crm_party_import_source_receipts WHERE tenant='tenant-a' AND key='"+atomicSourceKey+"'"),0);
+ assert.equal(await count("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' AND action='customer_data.csv_import_source.register'"),sourceRegistrationAuditBefore);
+ const atomicSourceRetry=await fixtureRpc(dispatch,methods.registerPartyImportSource,admin,atomicSourceInput);
+ assert.equal(atomicSourceRetry.status,200,formatRpcFailure(atomicSourceRetry));
+ assert.equal(atomicSourceRetry.body.receipt?.replayed,false);
+ const atomicSourceReplay=await fixtureRpc(dispatch,methods.registerPartyImportSource,admin,atomicSourceInput);
+ assert.equal(atomicSourceReplay.body.source?.sourceId,atomicSourceRetry.body.source?.sourceId);
+ assert.equal(atomicSourceReplay.body.receipt?.replayed,true);
+
+ // A preview is invalidated when another import binds its previously-new external ID.
+ const staleBytes=new TextEncoder().encode(
+   "party_id,kind,display_name,resource_version\r\nsource-ext-1,person,Source Person,2\r\nstale-ext,person,Stale Preview Person,1\r\n");
+ const stalePreview=await fixtureRpc(dispatch,methods.previewPartyImport,admin,{csv:staleBytes,sourceId});
+ assert.equal(stalePreview.body.newCount,1);
+ assert.equal(stalePreview.body.matchedCount,1);
+ const concurrentWinner=await fixtureRpc(dispatch,methods.applyPartyImport,admin,{
+   csv:staleBytes,sourceId,expectedSha256Hex:stalePreview.body.csvSha256Hex,
+   expectedPreviewFingerprint:stalePreview.body.previewFingerprint,
+   precondition:{idempotencyKey:"csv-source-stale-winner"}
+ });
+ assert.equal(concurrentWinner.status,200,formatRpcFailure(concurrentWinner));
+ assert.equal(concurrentWinner.body.createdCount,1);
+ assert.equal(concurrentWinner.body.replayedCount,1);
+ const beforeStaleLoser=await count("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant='tenant-a'");
+ assert.equal((await fixtureRpcError(dispatch,methods.applyPartyImport,admin,{
+   csv:staleBytes,sourceId,expectedSha256Hex:stalePreview.body.csvSha256Hex,
+   expectedPreviewFingerprint:stalePreview.body.previewFingerprint,
+   precondition:{idempotencyKey:"csv-source-stale-loser"}
+ })).body.code,"aborted");
+ assert.equal(await count("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant='tenant-a'"),beforeStaleLoser);
+
+ // Reordering rows preserves source identity, while a Party version change invalidates
+ // an older preview even if the visible Party fields are later restored.
+ const reorderedSourceCsv=new TextEncoder().encode(
+   "party_id,kind,display_name,resource_version\r\nsource-ext-3,person,New Source Person,1\r\n"+
+   "source-ext-2,organization,Source Org,2\r\nsource-ext-1,person,Source Person,2\r\n");
+ const reorderedPreview=await fixtureRpc(dispatch,methods.previewPartyImport,admin,{
+   csv:reorderedSourceCsv,sourceId
+ });
+ assert.equal(reorderedPreview.status,200,formatRpcFailure(reorderedPreview));
+ assert.equal(reorderedPreview.body.newCount,0);
+ assert.equal(reorderedPreview.body.matchedCount,3);
+ assert.deepEqual(reorderedPreview.body.targetPartyIds,[
+   sourcePreview2.body.targetPartyIds[2],sourcePreview2.body.targetPartyIds[1],sourcePreview2.body.targetPartyIds[0]
+ ]);
+ const versionGuardPartyId=sourcePreview2.body.targetPartyIds[0];
+ assert.ok(versionGuardPartyId);
+ const [initialVersionRow]=await sql(
+   "SELECT version FROM crm_party_records WHERE tenant=? AND id=?","tenant-a",versionGuardPartyId
+ );
+ assert.ok(typeof initialVersionRow?.version==="number");
+ const temporaryPartyName="Temporary source version";
+ const temporaryPartyUpdate=await fixtureRpc(dispatch,parties.updateParty,admin,{
+   partyId:versionGuardPartyId,displayName:temporaryPartyName,
+   precondition:{idempotencyKey:"csv-source-version-change-a",expectedVersion:BigInt(initialVersionRow.version)}
+ });
+ assert.equal(temporaryPartyUpdate.status,200,formatRpcFailure(temporaryPartyUpdate));
+ const [temporaryVersionRow]=await sql(
+   "SELECT version FROM crm_party_records WHERE tenant=? AND id=?","tenant-a",versionGuardPartyId
+ );
+ assert.ok(typeof temporaryVersionRow?.version==="number");
+ const restoredPartyUpdate=await fixtureRpc(dispatch,parties.updateParty,admin,{
+   partyId:versionGuardPartyId,displayName:"Source Person",
+   precondition:{idempotencyKey:"csv-source-version-change-b",expectedVersion:BigInt(temporaryVersionRow.version)}
+ });
+ assert.equal(restoredPartyUpdate.status,200,formatRpcFailure(restoredPartyUpdate));
+ const [restoredVersionRow]=await sql(
+   "SELECT state,version FROM crm_party_records WHERE tenant=? AND id=?","tenant-a",versionGuardPartyId
+ );
+ assert.equal(restoredVersionRow?.version,initialVersionRow.version+2);
+ const versionStaleKey="csv-source-version-stale";
+ const beforeVersionStaleAudit=await count("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'");
+ const beforeVersionStaleReceipt=await count("SELECT COUNT(*) AS n FROM crm_party_import_receipts WHERE tenant='tenant-a'");
+ assert.equal((await fixtureRpcError(dispatch,methods.applyPartyImport,admin,{
+   csv:reorderedSourceCsv,sourceId,expectedSha256Hex:reorderedPreview.body.csvSha256Hex,
+   expectedPreviewFingerprint:reorderedPreview.body.previewFingerprint,
+   precondition:{idempotencyKey:versionStaleKey}
+ })).body.code,"aborted");
+ assert.deepEqual(await sql(
+   "SELECT state,version FROM crm_party_records WHERE tenant=? AND id=?","tenant-a",versionGuardPartyId
+ ),[restoredVersionRow],"A stale preview must not mutate a Party whose version advanced");
+ assert.equal(await count("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"),beforeVersionStaleAudit);
+ assert.equal(await count("SELECT COUNT(*) AS n FROM crm_party_import_receipts WHERE tenant='tenant-a'"),beforeVersionStaleReceipt);
+ assert.equal(await count("SELECT COUNT(*) AS n FROM crm_party_import_receipts WHERE tenant='tenant-a' AND key='"+versionStaleKey+"'"),0);
+ const refreshedVersionPreview=await fixtureRpc(dispatch,methods.previewPartyImport,admin,{
+   csv:reorderedSourceCsv,sourceId
+ });
+ assert.equal(refreshedVersionPreview.body.newCount,0);
+ assert.equal(refreshedVersionPreview.body.matchedCount,3);
+ const refreshedVersionApply=await fixtureRpc(dispatch,methods.applyPartyImport,admin,{
+   csv:reorderedSourceCsv,sourceId,expectedSha256Hex:refreshedVersionPreview.body.csvSha256Hex,
+   expectedPreviewFingerprint:refreshedVersionPreview.body.previewFingerprint,
+   precondition:{idempotencyKey:"csv-source-version-refreshed"}
+ });
+ assert.equal(refreshedVersionApply.status,200,formatRpcFailure(refreshedVersionApply));
+ assert.equal(refreshedVersionApply.body.createdCount,0);
+ assert.equal(refreshedVersionApply.body.replayedCount,3);
+
+ // Two concurrent commits for the same source/external ID cannot create duplicates.
+ const concurrentBytes=new TextEncoder().encode(
+   "party_id,kind,display_name,resource_version\r\nconcurrent-ext,person,Concurrent Source Person,1\r\n");
+ const concurrentPreview=await fixtureRpc(dispatch,methods.previewPartyImport,admin,{csv:concurrentBytes,sourceId});
+ const concurrentInput={
+   csv:concurrentBytes,sourceId,expectedSha256Hex:concurrentPreview.body.csvSha256Hex,
+   expectedPreviewFingerprint:concurrentPreview.body.previewFingerprint
+ };
+ const [raceA,raceB]=await Promise.all([
+   fixtureRpcRace(dispatch,methods.applyPartyImport,admin,{
+     ...concurrentInput,precondition:{idempotencyKey:"csv-source-race-a"}
+   }),
+   fixtureRpcRace(dispatch,methods.applyPartyImport,knownService,{
+     ...concurrentInput,precondition:{idempotencyKey:"csv-source-race-b"}
+   })
+ ]);
+ assert.equal([raceA,raceB].filter(result=>result.status===200).length,1);
+ const raceFailure=[raceA,raceB].find(result=>result.status!==200);
+ assert.ok(raceFailure&&[409,503].includes(raceFailure.status));
+ const concurrentDigest=createHash("sha256").update("concurrent-ext").digest("hex");
+ assert.equal(await count("SELECT COUNT(*) AS n FROM crm_party_source_identities WHERE tenant='tenant-a' AND source_id='"+
+   sourceId+"' AND external_id_sha256='"+concurrentDigest+"'"),1);
+
+ // A late identity-row failure rolls back Party, identity, receipt and audit together.
+ const rollbackSource=await fixtureRpc(dispatch,methods.registerPartyImportSource,admin,{
+   displayName:"Rollback Source",precondition:{idempotencyKey:"csv-source-rollback"}
+ });
+ assert.equal(rollbackSource.body.receipt?.replayed,false);
+ const rollbackSourceId=rollbackSource.body.source?.sourceId;
+ assert.ok(typeof rollbackSourceId==="string");
+ const rollbackSourceCsv=new TextEncoder().encode(
+   "party_id,kind,display_name,resource_version\r\nrollback-ext-1,person,Rollback One,1\r\nrollback-ext-2,person,Rollback Two,1\r\n");
+ const rollbackSourcePreview=await fixtureRpc(dispatch,methods.previewPartyImport,admin,{
+   csv:rollbackSourceCsv,sourceId:rollbackSourceId
+ });
+ const rollbackSourceKey="csv-source-atomic-rollback";
+ const rollbackSourceInput={
+   csv:rollbackSourceCsv,sourceId:rollbackSourceId,
+   expectedSha256Hex:rollbackSourcePreview.body.csvSha256Hex,
+   expectedPreviewFingerprint:rollbackSourcePreview.body.previewFingerprint,
+   precondition:{idempotencyKey:rollbackSourceKey}
+ };
+ const rollbackSourceDigest=createHash("sha256").update("rollback-ext-2").digest("hex");
+ const sourceRollbackAuditBefore=await count("SELECT COUNT(*) AS n FROM crm_audit");
+ const sourceRollbackPartyBefore=await count("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant='tenant-a'");
+ const sourceRollbackPartyReceiptsBefore=await count("SELECT COUNT(*) AS n FROM crm_party_receipts WHERE tenant='tenant-a'");
+ await sql("CREATE TRIGGER fixture_fail_source_identity BEFORE INSERT ON crm_party_source_identities "+
+   "WHEN NEW.external_id_sha256='"+rollbackSourceDigest+"' BEGIN SELECT RAISE(ABORT,'fixture source identity failure'); END;");
+ try {
+   await assertUnconfirmed(await sendFixtureRpc(dispatch,methods.applyPartyImport,knownService,rollbackSourceInput,503),
+     "IMPORT_WRITE_UNCONFIRMED");
+ } finally { await sql("DROP TRIGGER fixture_fail_source_identity"); }
+ assert.equal(await count("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant='tenant-a'"),sourceRollbackPartyBefore);
+ assert.equal(await count("SELECT COUNT(*) AS n FROM crm_party_receipts WHERE tenant='tenant-a'"),sourceRollbackPartyReceiptsBefore);
+ assert.equal(await count("SELECT COUNT(*) AS n FROM crm_party_source_identities WHERE tenant='tenant-a' AND source_id='"+rollbackSourceId+"'"),0);
+ assert.equal(await count("SELECT COUNT(*) AS n FROM crm_party_import_receipts WHERE key='"+rollbackSourceKey+"'"),0);
+ assert.equal(await count("SELECT COUNT(*) AS n FROM crm_audit"),sourceRollbackAuditBefore);
+ const rollbackSourceRetry=await fixtureRpc(dispatch,methods.applyPartyImport,knownService,rollbackSourceInput);
+ assert.equal(rollbackSourceRetry.status,200,formatRpcFailure(rollbackSourceRetry));
+ assert.equal(rollbackSourceRetry.body.createdCount,2);
+ assert.equal(await count("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' AND action='customer_data.csv_import_identity.bind'"),7);
+ // Pilot CRM, Other Pilot, Atomic Receipt Source and Rollback Source are tenant-A sources.
+ assert.equal(await count("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' AND action='customer_data.csv_import_source.register'"),4);
+ assert.equal(await count("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' AND subject_id IN ('source-ext-1','source-ext-2','source-ext-3','stale-ext','concurrent-ext','rollback-ext-1','rollback-ext-2')"),0);
+ console.log(JSON.stringify({event:"crm.native-party-csv-source-identity",result:"PASS",
+   source_registry:true,stable_external_id:true,changed_bytes:true,mixed_new_and_known:true,
+   conflict_preview:true,no_silent_update:true,tenant_and_source_scoped:true,
+   stale_preview:true,atomic_identity_binding:true,receipt_recovery:true}));
  assert.equal((await fixtureRpcError(dispatch, methods.previewPartyExport, admin, {kind:0})).body.code,"invalid_argument");
  assert.equal((await fixtureRpcError(dispatch, methods.previewPartyExport, admin, {kind:999 as PartyKind})).body.code,"invalid_argument");
  const exportBefore=await count("SELECT COUNT(*) AS n FROM crm_audit");

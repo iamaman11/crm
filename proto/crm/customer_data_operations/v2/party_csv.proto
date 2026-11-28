@@ -21,9 +21,32 @@ message PreviewPartyExportResponse {
   bytes csv = 6;
 }
 
+message PartyImportSource {
+  string source_id = 1;
+  string display_name = 2;
+}
+
+message ListPartyImportSourcesRequest {}
+
+message ListPartyImportSourcesResponse {
+  repeated PartyImportSource sources = 1;
+}
+
+message RegisterPartyImportSourceRequest {
+  string display_name = 1;
+  crm.core.v2.MutationPrecondition precondition = 2;
+}
+
+message RegisterPartyImportSourceResponse {
+  PartyImportSource source = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
 message PreviewPartyImportRequest {
   bytes csv = 1;
   optional string receipt_idempotency_key = 2;
+  // Omitted preserves the established create-only import behavior.
+  optional string source_id = 3;
 }
 
 // One-based DATA record position, never a physical line number: a quoted CSV
@@ -42,12 +65,18 @@ message PreviewPartyImportResponse {
   crm.core.v2.MutationCommitEvidence confirmed_mutation = 5;
   // When nonempty, no target IDs are actionable and Apply rejects ALL rows.
   repeated PartyCsvRowIssue row_issues = 6;
+  uint32 new_count = 7;
+  uint32 matched_count = 8;
+  // Binds source identity mappings and Party versions observed by this preview.
+  string preview_fingerprint = 9;
 }
 
 message ApplyPartyImportRequest {
   bytes csv = 1;
   string expected_sha256_hex = 2;
   crm.core.v2.MutationPrecondition precondition = 3;
+  optional string source_id = 4;
+  string expected_preview_fingerprint = 5;
 }
 
 message ApplyPartyImportResponse {
@@ -60,6 +89,12 @@ message ApplyPartyImportResponse {
 service PartyCsvService {
   rpc PreviewPartyExport(PreviewPartyExportRequest) returns (PreviewPartyExportResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListPartyImportSources(ListPartyImportSourcesRequest) returns (ListPartyImportSourcesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc RegisterPartyImportSource(RegisterPartyImportSourceRequest) returns (RegisterPartyImportSourceResponse) {
+    option idempotency_level = IDEMPOTENT;
   }
   rpc PreviewPartyImport(PreviewPartyImportRequest) returns (PreviewPartyImportResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;

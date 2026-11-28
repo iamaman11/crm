@@ -2399,6 +2399,86 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,runS
    assert.equal(record((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0]).n,simpleAuditBefore+2);
    checkpoint("Simple two-column CSV template -> original Rust preview -> atomic Party apply / D1 audit");
 
+   const browserSourceName="Browser CSV Source "+runId;
+   await page.getByLabel("Название нового источника",{exact:true}).fill(browserSourceName);
+   await page.getByRole("button",{name:"Добавить источник",exact:true}).click();
+   const sourcePicker=page.getByLabel("Источник CSV (необязательно)",{exact:true});
+   await expect(sourcePicker.locator("option").filter({hasText:browserSourceName})).toHaveCount(1);
+   const browserSourceId=await sourcePicker.inputValue();
+   assert.ok(browserSourceId.startsWith("csv-source-"));
+   const sourceCsvOne="party_id,kind,display_name,resource_version\r\nbrowser-source-1,person,Browser Source Person "+runId+",1\r\n";
+   await page.getByLabel("CSV-файл",{exact:true}).setInputFiles({
+     name:"source-one.csv",mimeType:"text/csv",buffer:Buffer.from(sourceCsvOne)});
+   await page.getByRole("button",{name:"Проверить импорт",exact:true}).click();
+   await page.getByText(/новых участников 1, найдено по внешнему ID 0/).waitFor();
+   const sourceOnePartyCount=number(record((await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant='"+
+     tenantSql+"'"))[0]).n);
+   await mutation(page.getByRole("button",{name:"Подтвердить импорт",exact:true}),PartyCsvService.method.applyPartyImport);
+   assert.equal(number(record((await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant='"+
+     tenantSql+"'"))[0]).n),sourceOnePartyCount+1);
+   const sourceOnePartyId=string(record((await sql("SELECT party_id FROM crm_party_source_identities WHERE tenant=? AND source_id=?",
+     tenantA,browserSourceId))[0]).party_id);
+
+   const sourceCsvTwo="party_id,kind,display_name,resource_version\r\nbrowser-source-1,person,Browser Source Person "+runId+",2\r\nbrowser-source-2,organization,Browser New Organization "+runId+",1\r\n";
+   await page.getByLabel("CSV-файл",{exact:true}).setInputFiles({
+     name:"source-two.csv",mimeType:"text/csv",buffer:Buffer.from(sourceCsvTwo)});
+   await page.getByRole("button",{name:"Проверить импорт",exact:true}).click();
+   await page.getByText(/новых участников 1, найдено по внешнему ID 1/).waitFor();
+   await mutation(page.getByRole("button",{name:"Подтвердить импорт",exact:true}),PartyCsvService.method.applyPartyImport);
+   assert.equal(record((await sql("SELECT party_id FROM crm_party_source_identities WHERE tenant=? AND source_id=? AND party_id=?",
+     tenantA,browserSourceId,sourceOnePartyId))[0]).party_id,sourceOnePartyId);
+   const sourceIdentityMappings=records(await sql(
+     "SELECT external_id_sha256,party_id FROM crm_party_source_identities WHERE tenant=? AND source_id=? ORDER BY external_id_sha256",
+     tenantA,browserSourceId));
+   assert.equal(sourceIdentityMappings.length,2,"both external IDs must have durable source bindings");
+   assert.equal(new Set(sourceIdentityMappings.map(row=>string(row.party_id))).size,2,
+     "the new external ID must map to a distinct Party, not overwrite the known identity");
+   assert.ok(sourceIdentityMappings.some(row=>string(row.party_id)===sourceOnePartyId),
+     "the changed-byte reimport must preserve the original Party mapping");
+
+   const sourceConflictCsv="party_id,kind,display_name,resource_version\r\nbrowser-source-1,person,Browser Changed Name "+runId+",3\r\n";
+   const beforeSourceConflict=number(record((await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant=?",
+     tenantA))[0]).n);
+   await page.getByLabel("CSV-файл",{exact:true}).setInputFiles({
+     name:"source-conflict.csv",mimeType:"text/csv",buffer:Buffer.from(sourceConflictCsv)});
+   await page.getByRole("button",{name:"Проверить импорт",exact:true}).click();
+   await page.getByText("Обнаружены расхождения по известному ID источника. Импорт всего файла запрещён; исправьте CSV. Данные не записаны.",{exact:true}).waitFor();
+   await expect(page.getByRole("button",{name:"Подтвердить импорт",exact:true})).toHaveCount(0);
+   assert.equal(number(record((await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant=?",
+     tenantA))[0]).n),beforeSourceConflict);
+   await reloadDocument();
+   await expect(page.getByLabel("Источник CSV (необязательно)",{exact:true})
+     .locator("option").filter({hasText:browserSourceName})).toHaveCount(1);
+   await page.getByLabel("Источник CSV (необязательно)",{exact:true}).selectOption(browserSourceId);
+   await page.getByLabel("CSV-файл",{exact:true}).setInputFiles({
+     name:"source-after-reload.csv",mimeType:"text/csv",buffer:Buffer.from(sourceCsvTwo)});
+   await page.getByRole("button",{name:"Проверить импорт",exact:true}).click();
+   await page.getByText(/новых участников 0, найдено по внешнему ID 2/).waitFor();
+   const afterReloadPartyCount=number(record((await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant=?",
+     tenantA))[0]).n);
+   await mutation(page.getByRole("button",{name:"Подтвердить импорт",exact:true}),PartyCsvService.method.applyPartyImport);
+   assert.equal(number(record((await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant=?",
+     tenantA))[0]).n),afterReloadPartyCount);
+   const beforeReloadConflict=number(record((await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant=?",
+     tenantA))[0]).n);
+   await page.getByLabel("CSV-файл",{exact:true}).setInputFiles({
+     name:"source-conflict-after-reload.csv",mimeType:"text/csv",buffer:Buffer.from(sourceConflictCsv)});
+   await page.getByRole("button",{name:"Проверить импорт",exact:true}).click();
+   await page.getByText("Обнаружены расхождения по известному ID источника. Импорт всего файла запрещён; исправьте CSV. Данные не записаны.",{exact:true}).waitFor();
+   await expect(page.getByRole("button",{name:"Подтвердить импорт",exact:true})).toHaveCount(0);
+   assert.equal(number(record((await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant=?",
+     tenantA))[0]).n),beforeReloadConflict);
+   // A selected source with the old two-column CSV is a schema error, not a known-ID conflict.
+   const sourceMissingIdCsv="kind,display_name\r\nperson,Missing External ID "+runId+"\r\n";
+   await page.getByLabel("CSV-файл",{exact:true}).setInputFiles({
+     name:"source-missing-id.csv",mimeType:"text/csv",buffer:Buffer.from(sourceMissingIdCsv)});
+   await page.getByRole("button",{name:"Проверить импорт",exact:true}).click();
+   await page.getByText("Проверьте введённые данные.",{exact:false}).waitFor();
+   await expect(page.getByText("Обнаружены расхождения по известному ID источника. Импорт всего файла запрещён; исправьте CSV. Данные не записаны.",
+     {exact:true})).toHaveCount(0);
+   await expect(page.getByRole("button",{name:"Подтвердить импорт",exact:true})).toHaveCount(0);
+   checkpoint("CSV source registry survives reload; changed-byte reimport reuses Party; known-ID conflict blocks writes; schema errors remain distinct");
+
    const exportReply=page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(PartyCsvService.method.previewPartyExport)));
    const downloadPending=page.waitForEvent("download");
    await page.getByRole("button",{name:"Скачать CSV",exact:true}).click();

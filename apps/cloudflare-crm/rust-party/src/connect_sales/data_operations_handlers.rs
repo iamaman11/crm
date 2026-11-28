@@ -21,6 +21,65 @@ impl PartyCsvV2Service {
 }
 impl csv_wire::PartyCsvService for PartyCsvV2Service {
     #[worker::send]
+    async fn list_party_import_sources(
+        &self,
+        _ctx: RequestContext,
+        _req: ServiceRequest<'_, csv_wire::ListPartyImportSourcesRequest>,
+    ) -> ServiceResult<csv_wire::ListPartyImportSourcesResponse> {
+        let sources = owner::list_import_sources(&self.d1()?, &self.actor.tenant)
+            .await
+            .map_err(|error| crate::diagnostics::read_error(&self.request_id, &error))?;
+        RpcResponse::ok(csv_wire::ListPartyImportSourcesResponse {
+            sources: sources
+                .into_iter()
+                .map(|source| csv_wire::PartyImportSource {
+                    source_id: source.id,
+                    display_name: source.display_name,
+                    ..Default::default()
+                })
+                .collect(),
+            ..Default::default()
+        })
+    }
+
+    #[worker::send]
+    async fn register_party_import_source(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, csv_wire::RegisterPartyImportSourceRequest>,
+    ) -> ServiceResult<csv_wire::RegisterPartyImportSourceResponse> {
+        let input = req.to_owned_message();
+        let (key, _) = wire_precondition(input.precondition.as_option(), true)?;
+        let (source, saved) = owner::register_import_source(
+            &self.d1()?,
+            &self.actor,
+            &input.display_name,
+            &key,
+            &self.request_id,
+        )
+        .await
+        .map_err(|error| crate::diagnostics::read_error(&self.request_id, &error))?
+        .map_err(|failure| failure.connect("RegisterPartyImportSource", &self.request_id))?;
+        RpcResponse::ok(csv_wire::RegisterPartyImportSourceResponse {
+            source: Some(csv_wire::PartyImportSource {
+                source_id: source.id,
+                display_name: source.display_name,
+                ..Default::default()
+            })
+            .into(),
+            receipt: Some(core_v2::MutationReceipt {
+                request_id: self.request_id.clone(),
+                resource_version: 1,
+                replayed: saved.operation_replayed,
+                original_request_id: Some(saved.original_request_id),
+                ..Default::default()
+            })
+            .into(),
+            ..Default::default()
+        })
+    }
+
+    #[worker::send]
     async fn preview_party_export(
         &self,
         _ctx: RequestContext,
@@ -93,15 +152,23 @@ impl csv_wire::PartyCsvService for PartyCsvV2Service {
                 "CSV_RECEIPT_LOOKUP_REQUIRES_EMPTY_FILE",
             ));
         }
-        let preview = owner::preview_import(&input.csv, &db, &self.actor.tenant)
-            .await
-            .map_err(|error| crate::diagnostics::read_error(&self.request_id, &error))?
-            .map_err(|failure| failure.connect("PreviewPartyImport", &self.request_id))?;
+        let preview = owner::preview_import(
+            &input.csv,
+            input.source_id.as_deref(),
+            &db,
+            &self.actor.tenant,
+        )
+        .await
+        .map_err(|error| crate::diagnostics::read_error(&self.request_id, &error))?
+        .map_err(|failure| failure.connect("PreviewPartyImport", &self.request_id))?;
         RpcResponse::ok(csv_wire::PreviewPartyImportResponse {
             count: preview.count as u32,
             csv_sha256_hex: preview.hash,
             previously_imported: preview.already as u32,
             target_party_ids: preview.target_ids,
+            new_count: preview.new_count as u32,
+            matched_count: preview.matched_count as u32,
+            preview_fingerprint: preview.preview_fingerprint,
             row_issues: preview
                 .row_issues
                 .into_iter()
@@ -125,7 +192,11 @@ impl csv_wire::PartyCsvService for PartyCsvV2Service {
         let (key, _) = wire_precondition(input.precondition.as_option(), true)?;
         let applied = owner::apply_import(
             &input.csv,
-            &input.expected_sha256_hex,
+            input.source_id.as_deref(),
+            owner::ImportProof {
+                source_hash: &input.expected_sha256_hex,
+                preview_fingerprint: &input.expected_preview_fingerprint,
+            },
             &key,
             &self.d1()?,
             &self.actor,
