@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { SCENARIO_OPERATIONS, validateScenarioSteps, boundedRunTimeout, operationTimeout, isFailedVerdict, boundedWaitTimeout, compareBrowserAssertion, safeAssertionValue } from "../src/browser-checks.ts";
-import { browserUrl } from "../src/security.ts";
+import { browserUrl } from "../src/browser/security.ts";
 
 test("wait timeout is bounded and has a single stable default", () => {
   assert.equal(boundedWaitTimeout(undefined), 10_000);

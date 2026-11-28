@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { MCP_HOST } from "../src/security.ts";
+import { MCP_HOST } from "../src/endpoint.ts";
 
 const root = new URL("../chatgpt-plugin/universal-browser-mcp/", import.meta.url);
 

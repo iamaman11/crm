@@ -48,7 +48,8 @@ The target structure is intentionally small. It describes responsibilities, not 
 
 | Module | Responsibility | Migration status |
 |---|---|---|
-| `index.ts` | Worker entrypoint, MCP transport boundary | Current entrypoint; tool registrations move in a later slice |
+| `index.ts` | Worker entrypoint and MCP transport boundary | Current entrypoint; tool registrations move in a later slice |
+| `endpoint.ts` | Canonical public MCP hostname and route | Slice A |
 | `contracts.ts` | Shared `Env`, `Command`, `Target` and compile-time types | Slice A |
 | `tools.ts` | Existing 21 public tool schemas and thin adapters | Planned |
 | `controller-auth.ts` | Signed human controller identity, audience and allowlist | Slice A |
