@@ -563,6 +563,26 @@ export async function verifyAutomation({dispatch,sql,accountId,contactId,existin
      "SELECT COUNT(*) n FROM crm_activity_task_records WHERE tenant=? AND id=?",
      "tenant-a",String(staleRun.task_id)))[0]?.n,0);
 
+   // Cloudflare may invoke Cron after its nominal scheduledTime. A Task
+   // that became overdue during that delay must be caught up on this tick.
+   const delayedSourceId="automation-overdue-delayed-"+suffix;
+   const delayedDueAtSeconds=BigInt(Math.floor((Date.now()-30_000)/1000));
+   assert.equal((await fixtureRpc(dispatch,tasks.createTask,admin,{
+     taskId:delayedSourceId,accountId,subject:"Overdue delayed source",priority:2,
+     dueAt:{seconds:delayedDueAtSeconds,nanos:0},precondition:key("delayed-source")
+   })).status,200);
+   const delayedTick=await runScheduled({
+     cron:"*/5 * * * *",scheduledTime:new Date(Date.now()-60_000)
+   });
+   assert.equal(delayedTick.outcome,"ok");
+   const delayedRun=(await sql(
+     "SELECT source_version,source_checked_at_unix_nanos,task_id,status FROM crm_activity_automation_runs WHERE tenant=? AND rule_id=? AND source_type='task_overdue' AND source_id=?",
+     "tenant-a",overdueRuleId,delayedSourceId))[0];
+   assert.ok(delayedRun,"a delayed scheduled invocation must catch up overdue Tasks");
+   assert.equal(delayedRun.status,"committed");
+   assert.ok(Number(delayedRun.source_checked_at_unix_nanos)>=Number(delayedDueAtSeconds*1_000_000_000n),
+     "the D1 guard must use the later actual Worker clock after a delayed Cron event");
+
    // A task rescheduled before its first due scan is not an overdue source.
    const rescheduledSourceId="automation-overdue-rescheduled-"+suffix;
    assert.equal((await fixtureRpc(dispatch,tasks.createTask,admin,{

@@ -16,9 +16,12 @@ pub(super) async fn scheduled(event: ScheduledEvent, env: Env, _ctx: ScheduleCon
     };
     let result = async {
         let db = env.d1("DB")?;
-        let now = scheduled_nanos.ok_or_else(|| {
+        let scheduled_nanos = scheduled_nanos.ok_or_else(|| {
             worker::Error::RustError("CRM_AUTOMATION_INVALID_SCHEDULED_TIME".to_owned())
         })?;
+        // A delayed Cron invocation must catch up to the actual clock, while
+        // tests can advance the scheduled event into the future deterministically.
+        let now = scheduled_nanos.max(super::now_nanos());
         super::activity_automation::dispatch_scheduled(&db, now)
             .await
             .map_err(|error| worker::Error::RustError(format!("{error:?}")))
