@@ -3,7 +3,7 @@
 //! One typed rule service for Deal/Task scheduled sources and retained signed
 //! manual Interaction→Task execution.
 use super::*;
-use crate::activity_automation as automation;
+use super::activity_automation as automation;
 
 impl auto_wire::AutomationService for AutomationV2Service {
     #[worker::send]
