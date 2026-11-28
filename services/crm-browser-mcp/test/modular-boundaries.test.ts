@@ -43,9 +43,32 @@ test("lifecycle has no independent browser owner and both tab and open share one
   assert.match(session, /openBrowser\(this\.lifecycleDependencies\(\)/);
   assert.match(session, /restoreBrowser\(this\.lifecycleDependencies\(\)/);
   assert.match(session, /closeBrowser\(this\.lifecycleDependencies\(\)/);
-  assert.match(session, /await ensureBrowserContext\(/);
+  assert.match(session, /tabsBrowser\(this\.lifecycleDependencies\(\)/);
+  assert.match(lifecycle, /state\.context \?\? await ensureBrowserContext\(/);
   assert.match(lifecycle, /await ensureBrowserContext\(deps, device\)/);
   assert.equal((lifecycle.match(/\.newContext\(/g) ?? []).length, 1);
   assert.doesNotMatch(session, /\.newContext\(/);
   assert.doesNotMatch(lifecycle, /extends DurableObject|from ["'].*session|from ["'].*index/);
+});
+
+test("entrypoint, tool adapters and browser capabilities have a single typed route", () => {
+  const index = source("../src/index.ts");
+  const tools = source("../src/tools.ts");
+  const router = source("../src/command-router.ts");
+  const session = source("../src/session.ts");
+  assert.doesNotMatch(index, /registerTool\(/);
+  assert.match(index, /createServer\(env, controllerEmail\)/);
+  assert.match(tools, /executeWorkspaceCommand\(env, controllerEmail, payload\)/);
+  assert.match(router, /stub\.fetch\(/);
+  assert.match(session, /switch \(command\.op\)/);
+  for (const [file, command] of [
+    ["navigation", "navigationCommand"], ["inspection", "inspectionCommand"],
+    ["interactions", "interactionCommand"], ["artifacts", "artifactCommand"], ["handoff", "structuredHandoff"],
+  ]) {
+    const code = source("../src/browser/" + file + ".ts");
+    assert.match(session, new RegExp(command + "\\("));
+    assert.match(code, new RegExp("export async function " + command + "\\("));
+    assert.doesNotMatch(code, /extends DurableObject|\b(?:acquire|connect)\s*\(|from ["'].*(?:index|session|command-router|tools)["']/);
+  }
+  assert.doesNotMatch(session, /\.dragTo\(|\.ariaSnapshot\(|\.setInputFiles\(|\.route\(/);
 });

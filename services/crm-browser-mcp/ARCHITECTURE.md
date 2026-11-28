@@ -48,19 +48,21 @@ The target structure is intentionally small. It describes responsibilities, not 
 
 | Module | Responsibility | Migration status |
 |---|---|---|
-| `index.ts` | Worker entrypoint and MCP transport boundary | Current entrypoint; tool registrations move in a later slice |
+| `index.ts` | Worker entrypoint and MCP transport boundary | Slice C; transport only |
 | `endpoint.ts` | Canonical public MCP hostname and route | Slice A |
 | `contracts.ts` | Shared `Env`, `Command`, `Target` and compile-time types | Slice A |
-| `tools.ts` | Existing 21 public tool schemas and thin adapters | Planned |
+| `tools.ts` | Existing 21 public tool schemas and thin adapters | Slice C |
+| `command-router.ts` | Verified controller/workspace command route and epoch/response adapter | Slice C |
 | `controller-auth.ts` | Signed human controller identity, audience and allowlist | Slice A |
 | `site-access.ts` | Target-site exact-origin Access configuration and request disposition | Slice A |
-| `workspaces.ts` | Controller + workspace UUID → DO identity | Existing `browser-workspaces.ts`; rename only if it improves clarity |
-| `browser-session.ts` | The single Durable Object and command orchestration | Existing `session.ts`; split in later slices |
+| `browser-workspaces.ts` | Controller + workspace UUID → DO identity | Existing; name retained |
+| `session.ts` | The single Durable Object and command orchestration | `session.ts`; one DO, state, serialization, dispatch |
 | `browser/lifecycle.ts` | Open, close, reconnect, page identity and context setup | Slice B; acts on DO-owned state |
-| `browser/navigation.ts` | Navigation and browser request policy | Planned extraction; existing `page-navigation.ts` is a small helper |
-| `browser/interactions.ts` | Locators, actions, waits, assertions and scenarios | Planned extraction |
-| `browser/inspection.ts` | Snapshot, frames, screenshots, diagnostics, performance and accessibility | Planned extraction |
-| `browser/artifacts.ts` | Files, recording/HAR and visual baselines | Planned extraction |
+| `browser/navigation.ts` | Navigation and browser request policy | Slice C; uses existing `page-navigation.ts` |
+| `browser/interactions.ts` | Locators, actions, waits, assertions and scenarios | Slice C |
+| `browser/inspection.ts` | Snapshot, frames, screenshots, diagnostics, performance and accessibility | Slice C |
+| `browser/artifacts.ts` | Files, recording/HAR and visual baselines | Slice C |
+| `browser/handoff.ts` | Human handoff, CDP completion and read-only Live View | Slice C |
 | `browser/security.ts` | Public-web URL guard and safe diagnostic formatting | Slice A |
 
 Small existing pure helpers such as recovery, runtime epoch, browser checks, device configuration and binary transfer remain separate while their contracts and focused tests add value. Do not consolidate or split them mechanically.

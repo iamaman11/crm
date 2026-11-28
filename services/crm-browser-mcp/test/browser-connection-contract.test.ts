@@ -41,7 +41,7 @@ test("all production Cloudflare Browser Run connects use typed persistent sessio
 });
 
 test("preview Access uses exact target credentials with the accepted native test-CRM transport", () => {
-  const code = readFileSync(new URL("../src/session.ts", import.meta.url), "utf8");
+  const code = readFileSync(new URL("../src/browser/navigation.ts", import.meta.url), "utf8");
   assert.match(code, /await route\.continue\(\{\s*headers:\s*\{/ ,
     "Browser Run must preserve Chromium's original response headers and MIME");
   assert.ok(code.includes('"CF-Access-Client-Id": target.clientId'));
@@ -60,7 +60,7 @@ test("preview Access uses exact target credentials with the accepted native test
 });
 
 test("both download actions share one Chromium-side, same-origin byte path", () => {
-  const code = readFileSync(new URL("../src/session.ts", import.meta.url), "utf8");
+  const code = readFileSync(new URL("../src/browser/artifacts.ts", import.meta.url), "utf8");
   assert.ok(code.includes('command.fileAction === "download_link" || command.fileAction === "download"'),
     "legacy and chunked download paths must share one browser mechanism");
   assert.ok(code.includes('const downloaded = await fetch(url.href,'),
@@ -69,7 +69,7 @@ test("both download actions share one Chromium-side, same-origin byte path", () 
     "cross-origin links must not be represented as downloadable bytes");
   assert.ok(code.includes('...transferDownload(response.name, [bytes])'),
     "legacy inline bytes use the existing size and nonempty checks");
-  assert.ok(code.includes("this.transfers.storeDownload(response.name, response.mimeType, response.base64)"),
+  assert.ok(code.includes("transfers.storeDownload(response.name, response.mimeType, response.base64)"),
     "large verified file receipts still support chunk and discard");
   assert.ok(!code.includes('page.waitForEvent("download"'),
     "CDP event streams are not a supported file transport on Browser Run");
@@ -78,32 +78,34 @@ test("both download actions share one Chromium-side, same-origin byte path", () 
 });
 
 test("native keyboard press targets the requested locator, never a generic page when scoped", () => {
-  const code = readFileSync(new URL("../src/session.ts", import.meta.url), "utf8");
-  assert.match(code, /if \(command\.target\) \{\s*await this\.target\(command\.target\)\.press\(/,
+  const code = readFileSync(new URL("../src/browser/interactions.ts", import.meta.url), "utf8");
+  assert.match(code, /if \(command\.target\) \{\s*await resolveTarget\(page, command\.target\)\.press\(/,
     "targeted press must use the official Playwright locator.press API");
   assert.match(code, /else \{\s*await page\.keyboard\.press\(/,
     "non-targeted press retains the native page keyboard");
 });
 
 test("failed browser runs keep typed receipts compact and screenshot separately", () => {
-  const session = readFileSync(new URL("../src/session.ts", import.meta.url), "utf8");
-  const index = readFileSync(new URL("../src/index.ts", import.meta.url), "utf8");
+  const session = readFileSync(new URL("../src/browser/interactions.ts", import.meta.url), "utf8");
+  const inspection = readFileSync(new URL("../src/browser/inspection.ts", import.meta.url), "utf8");
+  const router = readFileSync(new URL("../src/command-router.ts", import.meta.url), "utf8");
+  const tools = readFileSync(new URL("../src/tools.ts", import.meta.url), "utf8");
   assert.ok(session.includes('key !== "latest_requests"'),
     "request diagnostics must not be duplicated in every run step");
   assert.ok(session.includes("image: Buffer.from(png).toString"),
     "capture exactly the original failure image in workspace-local memory");
   assert.ok(session.includes("capturedPath: safePagePath(page.url())"),
     "the failure screenshot retains its original page identity across navigation");
-  assert.ok(session.includes("path: this.lastFailureScreenshot.capturedPath"),
+  assert.ok(inspection.includes("path: lastFailureScreenshot.capturedPath"),
     "retrieving a failure screenshot must never claim the currently open page");
-  assert.ok(session.includes('command.screenshotSource === "last_failure"'),
+  assert.ok(inspection.includes('command.screenshotSource === "last_failure"'),
     "the existing screenshot tool retrieves a recorded failure separately");
-  assert.ok(session.includes("this.lastFailureScreenshot = null"),
+  assert.ok(session.includes("state.lastFailureScreenshot = null"),
     "stale failure screenshots must be cleared");
-  const failed = index.slice(index.indexOf("if (isFailedVerdict(data))"),
-    index.indexOf("if (result.image)", index.indexOf("if (isFailedVerdict(data))")));
+  const failed = router.slice(router.indexOf("if (isFailedVerdict(data))"),
+    router.indexOf("if (result.image)", router.indexOf("if (isFailedVerdict(data))")));
   assert.ok(failed.includes("isError: true"), "a failed scenario is an MCP error");
   assert.ok(!failed.includes('type: "image"'), "failed MCP tools must not inline PNGs in errors");
-  assert.ok(index.includes('source: z.enum(["current","last_failure"])'),
+  assert.ok(tools.includes('source: z.enum(["current","last_failure"])'),
     "no second screenshot MCP tool is introduced");
 });

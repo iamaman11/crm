@@ -6,8 +6,8 @@ import * as ts from "typescript";
 // Structural guard: discover tools from the actual source AST rather than
 // keeping yet another manually maintained tool catalogue in CI.
 test("every published MCP tool has the correct workspace contract", () => {
-  const code = readFileSync(new URL("../src/index.ts", import.meta.url), "utf8");
-  const source = ts.createSourceFile("index.ts", code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const code = readFileSync(new URL("../src/tools.ts", import.meta.url), "utf8");
+  const source = ts.createSourceFile("tools.ts", code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   const tools = new Set<string>();
   function visit(node: ts.Node): void {
     if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) &&
@@ -38,17 +38,18 @@ test("every published MCP tool has the correct workspace contract", () => {
     ts.forEachChild(node, visit);
   }
   visit(source);
-  assert.ok(tools.size > 0, "MCP tools were discovered from the source");
+  assert.equal(tools.size, 21, "the existing public tool surface has exactly 21 tools");
   assert.ok(tools.has("browser_open"));
-  assert.match(code, /selectWorkspaceId\(payload.op, payload.workspaceId\)/);
-  assert.doesNotMatch(code, /idFromName\("owner:/);
+  const router = readFileSync(new URL("../src/command-router.ts", import.meta.url), "utf8");
+  assert.match(router, /selectWorkspaceId\(payload.op, payload.workspaceId\)/);
+  assert.doesNotMatch(router, /idFromName\("owner:/);
 });
 
 test("published action and scenario schemas both expose official Playwright drag_to", () => {
-  const index = readFileSync(new URL("../src/index.ts", import.meta.url), "utf8");
-  const session = readFileSync(new URL("../src/session.ts", import.meta.url), "utf8");
+  const index = readFileSync(new URL("../src/tools.ts", import.meta.url), "utf8");
+  const session = readFileSync(new URL("../src/browser/interactions.ts", import.meta.url), "utf8");
   assert.match(index, /"drag_to"/);
   assert.match(index, /destination: target\.optional\(\)/);
   assert.match(session, /case "drag_to":/);
-  assert.match(session, /locator\.dragTo\(this\.target\(command\.destination\)/);
+  assert.match(session, /locator\.dragTo\(resolveTarget\(page, command\.destination\)/);
 });

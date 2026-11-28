@@ -31,7 +31,7 @@ test("installed axe-core is the real pinned engine, not a DOM heuristic",()=>{
 });
 
 test("axe injection uses original immutable source through Playwright, not transformed function.toString",()=>{
-  const source=readFileSync(new URL("../src/session.ts",import.meta.url),"utf8");
+  const source=readFileSync(new URL("../src/browser/inspection.ts",import.meta.url),"utf8");
   assert.match(source,/await page\.evaluate\(AXE_SOURCE\)/);
   assert.doesNotMatch(source,/page\.addScriptTag\(/);
   assert.doesNotMatch(source,/axe\.source/);

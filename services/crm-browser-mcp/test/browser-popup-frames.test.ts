@@ -33,18 +33,20 @@ test("scenario preflight rejects conflicting iframe addressing", () => {
 });
 
 test("MCP exposes stable iframe selectors and opt-in popup following in existing tools", () => {
-  const code = readFileSync(new URL("../src/index.ts", import.meta.url), "utf8");
+  const code = readFileSync(new URL("../src/tools.ts", import.meta.url), "utf8");
   const session = readFileSync(new URL("../src/session.ts", import.meta.url), "utf8");
+  const interactions = readFileSync(new URL("../src/browser/interactions.ts", import.meta.url), "utf8");
+  const inspection = readFileSync(new URL("../src/browser/inspection.ts", import.meta.url), "utf8");
   assert.match(code, /const frameSelector = z\.string\(\)\.min\(1\)\.max\(512\)\.optional\(\)/);
   assert.match(code, /frameIndex, frameSelector/);
   assert.match(code, /followPopup: z\.boolean\(\)\.optional\(\)/);
   assert.match(code, /followPopup: params\.followPopup/);
-  assert.match(session, /this\.lifecycle\.page\.frameLocator\(target\.frameSelector\)/);
-  assert.match(session, /page\.frameLocator\(command\.frameSelector\)/);
-  assert.match(session, /page\.waitForEvent\("popup"/);
-  assert.match(session, /await Promise\.all\(\[/);
+  assert.match(interactions, /page\.frameLocator\(target\.frameSelector\)/);
+  assert.match(inspection, /page\.frameLocator\(command\.frameSelector\)/);
+  assert.match(interactions, /page\.waitForEvent\("popup"/);
+  assert.match(interactions, /await Promise\.all\(\[/);
   assert.match(session, /this\.lifecycle\.page = popup;/);
   assert.match(session, /await this\.rememberSelectedPageIdentity\(\)/);
-  assert.match(session, /followedPopup: true, tabId: this\.lifecycle\.tabIds\.get\(followedPopup\)/);
+  assert.match(interactions, /followedPopup: true, tabId: deps\.tabId\(followedPopup\)/);
   assert.doesNotMatch(session, /puppeteer\.connect|agents\/browser/);
 });

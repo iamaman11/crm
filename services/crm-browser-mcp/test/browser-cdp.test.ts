@@ -102,8 +102,8 @@ test("CDP validates count, JSON-serializable payload and total input budget", ()
 });
 
 test("published MCP and DO share the SAME Playwright Page with a single CDPSession", () => {
-  const server = readFileSync(new URL("../src/index.ts", import.meta.url), "utf8");
-  const session = readFileSync(new URL("../src/session.ts", import.meta.url), "utf8");
+  const server = readFileSync(new URL("../src/tools.ts", import.meta.url), "utf8");
+  const session = readFileSync(new URL("../src/browser/interactions.ts", import.meta.url), "utf8");
   assert.match(server, /registerTool\("browser_execute"/);
   assert.match(server, /op: "execute", workspaceId, cdpCommands: commands/);
   assert.match(session, /case "execute":/);
