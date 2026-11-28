@@ -376,7 +376,9 @@ export async function verifyAutomation({dispatch,sql,accountId,contactId,existin
      email:person,role:1,precondition:key("member")
    })).status,200);
    const tick=async()=>{
-     const result=await runScheduled({cron:"*/5 * * * *",scheduledTime:new Date()});
+     const result=await runScheduled({
+       cron:"*/5 * * * *",scheduledTime:new Date(Date.now()+60_000)
+     });
      assert.equal(result.outcome,"ok","native Cron callback must return without throwing");
      assert.equal(result.noRetry,false);
    };
