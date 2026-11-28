@@ -15,11 +15,9 @@ permissions:
 
 jobs:
   preview:
-    if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'push' &&
-      startsWith(github.event.workflow_run.head_branch, 'feat/parallel/') &&
-      github.event.workflow_run.head_repository.full_name == github.repository
+    # Disabled fail-closed: the compiled Worker currently pins the production Access audience.
+    # Re-enable only after a distinct preview Access audience can be validated by the exact artifact.
+    if: false
     runs-on: ubuntu-26.04
     environment: crm-dev
     timeout-minutes: 45
