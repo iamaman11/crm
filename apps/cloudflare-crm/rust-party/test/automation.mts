@@ -484,6 +484,31 @@ export async function verifyAutomation({dispatch,sql,accountId,contactId,existin
      "SELECT COUNT(*) n FROM crm_activity_task_receipts WHERE tenant=? AND key=?",
      "tenant-a",overdueTaskId))[0]?.n,1);
 
+   // Two overlapping real scheduled callbacks may discover the same overdue
+   // source. The durable run identity and lease must still commit one Task.
+   const concurrentSourceId="automation-overdue-concurrent-"+suffix;
+   assert.equal((await fixtureRpc(dispatch,tasks.createTask,admin,{
+     taskId:concurrentSourceId,accountId,subject:"Overdue concurrent source",priority:2,
+     dueAt:{seconds:1700000000n,nanos:0},precondition:key("concurrent-source")
+   })).status,200);
+   const concurrentTicks=await Promise.all([0,1].map(()=>runScheduled({
+     cron:"*/5 * * * *",scheduledTime:new Date(Date.now()+60_000)
+   })));
+   assert.ok(concurrentTicks.every(result=>result.outcome==="ok"));
+   const concurrentRuns=await sql(
+     "SELECT task_id,status,attempt_count FROM crm_activity_automation_runs WHERE tenant=? AND rule_id=? AND source_type='task_overdue' AND source_id=?",
+     "tenant-a",overdueRuleId,concurrentSourceId);
+   assert.equal(concurrentRuns.length,1,"concurrent Cron callbacks share one durable source run");
+   assert.equal(concurrentRuns[0]?.status,"committed");
+   assert.equal(concurrentRuns[0]?.attempt_count,1);
+   const concurrentTaskId=String(concurrentRuns[0]?.task_id);
+   assert.equal((await sql(
+     "SELECT COUNT(*) n FROM crm_activity_task_receipts WHERE tenant=? AND key=?",
+     "tenant-a",concurrentTaskId))[0]?.n,1);
+   assert.equal((await sql(
+     "SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND action='activity_tasks.create'",
+     "tenant-a",concurrentTaskId))[0]?.n,1);
+
    // Lost acknowledgement after the original Task receipt is durable:
    // recovery replays that exact receipt, never creates a second Task.
    const reconcileSourceId="automation-overdue-reconcile-"+suffix;
