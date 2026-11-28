@@ -46,7 +46,7 @@ jobs:
         with:
           ref: ${{ github.sha }}
           fetch-depth: 1
-      - name: Validate trusted preview workflow with pinned actionlint
+      - name: Validate YAML, expressions and embedded Node scripts
         shell: bash
         run: |
           set -euo pipefail
@@ -55,6 +55,25 @@ jobs:
           echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum --check --strict
           tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP/actionlint" actionlint
           "$RUNNER_TEMP/actionlint/actionlint" -color -ignore 'label "ubuntu-26.04" is unknown' .github/workflows/crm-branch-preview.yml
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import {mkdtempSync,readFileSync,writeFileSync} from "node:fs";
+          import {spawnSync} from "node:child_process";
+          import {tmpdir} from "node:os";
+          import {join} from "node:path";
+          const source=readFileSync(".github/workflows/crm-branch-preview.yml","utf8");
+          const blocks=[...source.matchAll(/^[ \t]*node --input-type=module <<'NODE'\r?\n([\s\S]*?)^[ \t]*NODE[ \t]*$/gm)];
+          assert.ok(blocks.length>=8,"all embedded controller Node scripts must be discovered");
+          const directory=mkdtempSync(join(tmpdir(),"crm-preview-controller-"));
+          for(const [index,match] of blocks.entries()){
+            const file=join(directory,"block-"+index+".mjs");
+            writeFileSync(file,match[1]);
+            const result=spawnSync(process.execPath,["--check",file],{encoding:"utf8"});
+            assert.equal(result.status,0,
+              "embedded Node block "+index+" has a syntax error:\n"+result.stderr+result.stdout);
+          }
+          console.log("Node syntax PASS for "+blocks.length+" embedded controller scripts.");
+          NODE
 
   preflight:
     if: ${{ github.ref == 'refs/heads/main' && github.actor == 'iamaman11' }}
