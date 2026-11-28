@@ -484,6 +484,73 @@ export async function verifyPartyCsv({dispatch,rpcFetch,sql,partySnapshot,admin,
  })).body.code,"aborted");
  assert.equal(await count("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant='tenant-a'"),beforeStaleLoser);
 
+ // Reordering rows preserves source identity, while a Party version change invalidates
+ // an older preview even if the visible Party fields are later restored.
+ const reorderedSourceCsv=new TextEncoder().encode(
+   "party_id,kind,display_name,resource_version\r\nsource-ext-3,person,New Source Person,1\r\n"+
+   "source-ext-2,organization,Source Org,2\r\nsource-ext-1,person,Source Person,2\r\n");
+ const reorderedPreview=await fixtureRpc(dispatch,methods.previewPartyImport,admin,{
+   csv:reorderedSourceCsv,sourceId
+ });
+ assert.equal(reorderedPreview.status,200,formatRpcFailure(reorderedPreview));
+ assert.equal(reorderedPreview.body.newCount,0);
+ assert.equal(reorderedPreview.body.matchedCount,3);
+ assert.deepEqual(reorderedPreview.body.targetPartyIds,[
+   sourcePreview2.body.targetPartyIds[2],sourcePreview2.body.targetPartyIds[1],sourcePreview2.body.targetPartyIds[0]
+ ]);
+ const versionGuardPartyId=sourcePreview2.body.targetPartyIds[0];
+ assert.ok(versionGuardPartyId);
+ const [initialVersionRow]=await sql(
+   "SELECT version FROM crm_party_records WHERE tenant=? AND id=?","tenant-a",versionGuardPartyId
+ );
+ assert.ok(typeof initialVersionRow?.version==="number");
+ const temporaryPartyName="Temporary source version "+runId;
+ const temporaryPartyUpdate=await fixtureRpc(dispatch,parties.updateParty,admin,{
+   partyId:versionGuardPartyId,displayName:temporaryPartyName,
+   precondition:{idempotencyKey:"csv-source-version-change-a",expectedVersion:BigInt(initialVersionRow.version)}
+ });
+ assert.equal(temporaryPartyUpdate.status,200,formatRpcFailure(temporaryPartyUpdate));
+ const [temporaryVersionRow]=await sql(
+   "SELECT version FROM crm_party_records WHERE tenant=? AND id=?","tenant-a",versionGuardPartyId
+ );
+ assert.ok(typeof temporaryVersionRow?.version==="number");
+ const restoredPartyUpdate=await fixtureRpc(dispatch,parties.updateParty,admin,{
+   partyId:versionGuardPartyId,displayName:"Source Person",
+   precondition:{idempotencyKey:"csv-source-version-change-b",expectedVersion:BigInt(temporaryVersionRow.version)}
+ });
+ assert.equal(restoredPartyUpdate.status,200,formatRpcFailure(restoredPartyUpdate));
+ const [restoredVersionRow]=await sql(
+   "SELECT state,version FROM crm_party_records WHERE tenant=? AND id=?","tenant-a",versionGuardPartyId
+ );
+ assert.equal(restoredVersionRow?.version,initialVersionRow.version+2);
+ const versionStaleKey="csv-source-version-stale";
+ const beforeVersionStaleAudit=await count("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'");
+ const beforeVersionStaleReceipt=await count("SELECT COUNT(*) AS n FROM crm_party_import_receipts WHERE tenant='tenant-a'");
+ assert.equal((await fixtureRpcError(dispatch,methods.applyPartyImport,admin,{
+   csv:reorderedSourceCsv,sourceId,expectedSha256Hex:reorderedPreview.body.csvSha256Hex,
+   expectedPreviewFingerprint:reorderedPreview.body.previewFingerprint,
+   precondition:{idempotencyKey:versionStaleKey}
+ })).body.code,"aborted");
+ assert.deepEqual(await sql(
+   "SELECT state,version FROM crm_party_records WHERE tenant=? AND id=?","tenant-a",versionGuardPartyId
+ ),[restoredVersionRow],"A stale preview must not mutate a Party whose version advanced");
+ assert.equal(await count("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"),beforeVersionStaleAudit);
+ assert.equal(await count("SELECT COUNT(*) AS n FROM crm_party_import_receipts WHERE tenant='tenant-a'"),beforeVersionStaleReceipt);
+ assert.equal(await count("SELECT COUNT(*) AS n FROM crm_party_import_receipts WHERE tenant='tenant-a' AND key='"+versionStaleKey+"'"),0);
+ const refreshedVersionPreview=await fixtureRpc(dispatch,methods.previewPartyImport,admin,{
+   csv:reorderedSourceCsv,sourceId
+ });
+ assert.equal(refreshedVersionPreview.body.newCount,0);
+ assert.equal(refreshedVersionPreview.body.matchedCount,3);
+ const refreshedVersionApply=await fixtureRpc(dispatch,methods.applyPartyImport,admin,{
+   csv:reorderedSourceCsv,sourceId,expectedSha256Hex:refreshedVersionPreview.body.csvSha256Hex,
+   expectedPreviewFingerprint:refreshedVersionPreview.body.previewFingerprint,
+   precondition:{idempotencyKey:"csv-source-version-refreshed"}
+ });
+ assert.equal(refreshedVersionApply.status,200,formatRpcFailure(refreshedVersionApply));
+ assert.equal(refreshedVersionApply.body.createdCount,0);
+ assert.equal(refreshedVersionApply.body.replayedCount,3);
+
  // Two concurrent commits for the same source/external ID cannot create duplicates.
  const concurrentBytes=new TextEncoder().encode(
    "party_id,kind,display_name,resource_version\r\nconcurrent-ext,person,Concurrent Source Person,1\r\n");
