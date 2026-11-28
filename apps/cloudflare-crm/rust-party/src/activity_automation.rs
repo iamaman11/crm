@@ -776,6 +776,10 @@ async fn execute_claimed(
     .is_some();
     if !has_receipt {
         if row.source_type == "task_overdue" {
+            // Preserve the full nanosecond timestamp and fence against a concurrent
+            // worker. The request id belongs to the new attempt, not the expired
+            // lease recorded on this durable run.
+            let now = context.now.to_string();
             let current = bind(
                 db,
                 concat!(
@@ -788,7 +792,7 @@ async fn execute_claimed(
                     JsValue::from_str(context.tenant),
                     JsValue::from_str(&row.source_id),
                     JsValue::from_f64(row.source_version as f64),
-                    JsValue::from_str(&context.now.to_string()),
+                    JsValue::from_str(&now),
                 ],
             )
             .map_err(|_| storage())?
@@ -797,13 +801,22 @@ async fn execute_claimed(
             .map_err(|_| storage())?
             .is_some();
             if !current {
+                // A failed previous attempt leaves its old lease_request_id on the
+                // run. Compare against that observed lease, not this retry's new
+                // request id, and only stale the run after the lease has expired.
                 let _write = bind(
                     db,
                     concat!(
-                        "UPDATE crm_activity_automation_runs SET source_stale=1",
+                        "UPDATE crm_activity_automation_runs SET source_stale=1,",
+                        "last_error_code='AUTOMATION_TASK_SOURCE_STALE'",
                         " WHERE tenant=? AND rule_id=? AND source_event_id=?",
                         " AND status='pending' AND source_type='task_overdue'",
-                        " AND source_stale=0 AND NOT EXISTS(",
+                        " AND source_stale=0 AND cancel_request_id IS NULL",
+                        " AND lease_request_id IS ? AND lease_until_unix_millis=?",
+                        " AND attempt_count=? AND next_attempt_at_unix_millis=?",
+                        " AND lease_until_unix_millis<=unixepoch('now')*1000",
+                        " AND next_attempt_at_unix_millis<=unixepoch('now')*1000",
+                        " AND NOT EXISTS(",
                         " SELECT 1 FROM crm_activity_task_records t WHERE t.tenant=?",
                         " AND t.id=? AND t.version=? AND json_extract(t.state,'$.status')='open'",
                         " AND json_type(t.state,'$.due_at_unix_nanos')='integer'",
@@ -813,10 +826,14 @@ async fn execute_claimed(
                         JsValue::from_str(context.tenant),
                         JsValue::from_str(&row.rule_id),
                         JsValue::from_str(&row.source_event_id),
+                        row.lease_request_id.as_deref().map(JsValue::from_str).unwrap_or(JsValue::NULL),
+                        JsValue::from_f64(row.lease_until_unix_millis as f64),
+                        JsValue::from_f64(row.attempt_count as f64),
+                        JsValue::from_f64(row.next_attempt_at_unix_millis as f64),
                         JsValue::from_str(context.tenant),
                         JsValue::from_str(&row.source_id),
                         JsValue::from_f64(row.source_version as f64),
-                        JsValue::from_str(&context.now.to_string()),
+                        JsValue::from_str(&now),
                     ],
                 )
                 .map_err(|_| storage())?
@@ -825,6 +842,18 @@ async fn execute_claimed(
                 let stale = read_run(db, context.tenant, &row.rule_id, &row.source_event_id)
                     .await?
                     .ok_or_else(storage)?;
+                if stale.source_stale != 1 {
+                    // A concurrent cancellation or successful commit is already
+                    // a terminal outcome. Any other fence loss must be retried.
+                    if stale.status == "committed" || stale.cancel_request_id.is_some() {
+                        return Ok(RunSaved {
+                            original_request_id: stale.task_request_id.clone(),
+                            replayed: stale.status == "committed",
+                            run: stale,
+                        });
+                    }
+                    return Err(ConnectError::aborted("AUTOMATION_SOURCE_STALE_FENCE_LOST"));
+                }
                 return Ok(RunSaved {
                     run: stale,
                     replayed: false,

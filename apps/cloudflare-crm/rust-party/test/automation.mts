@@ -572,7 +572,7 @@ export async function verifyAutomation({dispatch,sql,accountId,contactId,existin
      "tenant-a",overdueRuleId,cancelSourceId))[0]?.n,1);
 
    // If the source is completed while a failed run is waiting for backoff,
-   // the exact source version is marked stale and cannot create a follow-up.
+   // an active lease must fence stale-source marking until the lease expires.
    const staleSourceId="automation-overdue-stale-"+suffix;
    assert.equal((await fixtureRpc(dispatch,tasks.createTask,admin,{
      taskId:staleSourceId,accountId,subject:"Overdue stale source",priority:2,
@@ -588,14 +588,28 @@ export async function verifyAutomation({dispatch,sql,accountId,contactId,existin
    assert.equal((await fixtureRpc(dispatch,tasks.completeTask,knownService,{
      taskId:staleSourceId,precondition:{expectedVersion:1n,idempotencyKey:"automation-complete-stale-"+suffix}
    })).status,200);
-   await sql("UPDATE crm_activity_automation_runs SET next_attempt_at_unix_millis=0 "+
+   const staleLeaseRequest="fixture-stale-live-lease-"+suffix;
+   await sql("UPDATE crm_activity_automation_runs SET lease_request_id=?,lease_actor=?, "+
+     "lease_until_unix_millis=unixepoch('now')*1000+60000,next_attempt_at_unix_millis=0 "+
      "WHERE tenant=? AND rule_id=? AND source_type='task_overdue' AND source_id=?",
-     "tenant-a",overdueRuleId,staleSourceId);
+     staleLeaseRequest,"service:crm-automation","tenant-a",overdueRuleId,staleSourceId);
    await tick();
-   const stale=(await sql(
+   const liveLeaseRun=(await sql(
      "SELECT source_stale FROM crm_activity_automation_runs WHERE tenant=? AND rule_id=? AND source_type='task_overdue' AND source_id=?",
      "tenant-a",overdueRuleId,staleSourceId))[0];
+   assert.equal(liveLeaseRun?.source_stale,0,"a live lease must fence the stale-source transition");
+   await sql("UPDATE crm_activity_automation_runs SET lease_until_unix_millis=0,next_attempt_at_unix_millis=0 "+
+     "WHERE tenant=? AND rule_id=? AND source_type='task_overdue' AND source_id=? AND lease_request_id=?",
+     "tenant-a",overdueRuleId,staleSourceId,staleLeaseRequest);
+   await tick();
+   const stale=(await sql(
+     "SELECT source_stale,last_error_code FROM crm_activity_automation_runs WHERE tenant=? AND rule_id=? AND source_type='task_overdue' AND source_id=?",
+     "tenant-a",overdueRuleId,staleSourceId))[0];
    assert.equal(stale?.source_stale,1);
+   assert.equal(stale?.last_error_code,"AUTOMATION_TASK_SOURCE_STALE");
+   assert.equal((await sql(
+     "SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND action='activities.automation.run.source_stale'",
+     "tenant-a",String(staleRun.task_id)))[0]?.n,1);
    assert.equal((await sql(
      "SELECT COUNT(*) n FROM crm_activity_task_records WHERE tenant=? AND id=?",
      "tenant-a",String(staleRun.task_id)))[0]?.n,0);
