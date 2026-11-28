@@ -4,7 +4,7 @@
 //! original receipt and audit. This module only owns rule/run provenance.
 use super::d1_write::{self, Confirmation};
 use super::{access, activity_interactions, activity_tasks, bind, now_nanos};
-use connectrpc::{ConnectError, ErrorCode};
+use connectrpc::ConnectError;
 use crm_activities::automation::{AutomationRule, AutomationSource, AutomationTrigger};
 use crm_activities::{TaskOwner, TaskPriority};
 use crm_module_sdk::{ActorId, RecordId};
@@ -704,7 +704,7 @@ async fn execute_claimed(
     actor: &str,
     request_id: &str,
     system_actor: bool,
-    rpc_method: &str,
+    rpc_method: &'static str,
 ) -> Result<RunSaved, ConnectError> {
     match row.disposition()? {
         RunDisposition::Committed => {
