@@ -761,7 +761,10 @@ async fn execute_claimed(
     let has_receipt = bind(
         db,
         "SELECT key FROM crm_activity_task_receipts WHERE tenant=? AND key=?",
-        &[JsValue::from_str(context.tenant), JsValue::from_str(&row.task_id)],
+        &[
+            JsValue::from_str(context.tenant),
+            JsValue::from_str(&row.task_id),
+        ],
     )
     .map_err(|_| storage())?
     .first::<serde_json::Value>(None)
@@ -837,8 +840,15 @@ async fn execute_claimed(
         acquire_attempt(db, context.tenant, &row, context.actor, context.request_id).await?;
     }
     let result = if context.system_actor {
-        activity_tasks::create_automation_typed(input, &row.task_id, db, context.tenant, context.actor, context.request_id)
-            .await
+        activity_tasks::create_automation_typed(
+            input,
+            &row.task_id,
+            db,
+            context.tenant,
+            context.actor,
+            context.request_id,
+        )
+        .await
     } else {
         activity_tasks::create_typed(
             input,
