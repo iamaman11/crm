@@ -104,12 +104,13 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,runS
  let firstBrowserNavigation=true;
  const navigate=async(hash: string,title: string)=>{
    phase="navigation";
-   const first=firstBrowserNavigation;
+   // Cron scenarios intentionally unload the document; the next UI route must remount the CRM shell.
+   const first=firstBrowserNavigation||page.url()==="about:blank";
    const limit=first?6:1;
    for(let attempt=0;attempt<limit;attempt++){
      const offset=shellResponses.length;
-     // Mount the document once, then navigate through the real SPA hash router.
-     // Repeated page.goto() re-downloaded the shell and assets for every module.
+     // Mount initially and after an intentional unload; otherwise use the SPA hash router.
+     // Repeated page.goto() re-downloads the shell and assets for every module.
      if(first)await page.goto(base+"/#"+hash);else
        await page.evaluate(next=>{window.location.hash="#"+next;return null;},hash);
      try {
