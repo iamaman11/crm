@@ -3,7 +3,7 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
 import { z } from "zod";
 import type { Env, Command, Target } from "./session";
-import { DEFAULT_BROWSER_URL, MCP_HOST, verifiedMcpOwnerEmail } from "./security";
+import { DEFAULT_BROWSER_URL, MCP_HOST, verifiedMcpControllerEmail } from "./security";
 import { DEVICE_TYPES } from "./browser-device";
 import { SCENARIO_OPERATIONS, isFailedVerdict } from "./browser-checks";
 import { selectWorkspaceId, workspaceObjectName } from "./browser-workspaces";
@@ -55,11 +55,11 @@ const scenarioStep = z.object({
 });
 
 
-function createServer(env: Env, ownerEmail: string) {
+function createServer(env: Env, controllerEmail: string) {
   const server = new McpServer({ name: "crm-browser-mcp", version: "0.1.0" });
   async function command(payload: Command) {
     const workspaceId = selectWorkspaceId(payload.op, payload.workspaceId);
-    const sessionId = env.SESSIONS.idFromName(workspaceObjectName(ownerEmail, workspaceId));
+    const sessionId = env.SESSIONS.idFromName(workspaceObjectName(controllerEmail, workspaceId));
     const stub = env.SESSIONS.get(sessionId);
     // Workspace identity is solely a routing selector, never page-supplied.
     const { workspaceId: _transportWorkspaceId, ...browserCommand } = payload;
@@ -328,12 +328,12 @@ export default {
     if (new URL(request.url).pathname !== "/mcp") return new Response("Not found", { status: 404 });
     // Cloudflare Access must authenticate the *human controller*. Its signed
     // ctx.access is not forwarded from another Worker and cannot be model-supplied.
-    const email = await verifiedMcpOwnerEmail(
-      ctx.access, env.CRM_MCP_ACCESS_AUD, env.CRM_MCP_OWNER_EMAIL,
+    const controllerEmail = await verifiedMcpControllerEmail(
+      ctx.access, env.CRM_MCP_ACCESS_AUD, env.CRM_MCP_ALLOWED_EMAILS,
     );
-    if (!email) return new Response("Access forbidden", { status: 403 });
+    if (!controllerEmail) return new Response("Access forbidden", { status: 403 });
     return createMcpHandler(
-      () => createServer(env, email),
+      () => createServer(env, controllerEmail),
       {
         route: "/mcp",
         corsOptions: false,

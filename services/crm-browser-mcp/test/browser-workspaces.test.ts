@@ -21,12 +21,14 @@ test("all later commands require a handle, with no implicit owner-wide fallback"
   }
 });
 
-test("different owner+workspace tuples cannot map to the same DO", () => {
+test("different controller+workspace tuples cannot map to the same DO", () => {
   const a=workspaceObjectName("Owner@Example.com ",first);
   const b=workspaceObjectName("owner@example.com",second);
   assert.notEqual(a,b);
   assert.equal(a,workspaceObjectName("owner@example.com",first));
   assert.notEqual(a,workspaceObjectName("other@example.com",first));
+  assert.notEqual(a,workspaceObjectName("rozaliyazaleuskaya@gmail.com",first),
+    "the same workspace UUID under another controller maps to a different DO");
   assert.equal(a,workspaceObjectName("owner@example.com",first.toUpperCase()));
   assert.throws(()=>workspaceObjectName("",first),/BROWSER_WORKSPACE_INVALID/);
 });

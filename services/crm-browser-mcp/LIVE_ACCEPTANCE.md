@@ -1,6 +1,6 @@
 # Universal Browser MCP — single live acceptance procedure
 
-This is the **one** repeatable owner-run smoke procedure for the 21 existing tools.
+This is the **one** repeatable smoke procedure for the 21 existing tools and the two-controller isolation contract.
 Canonical branch: `mcp`, Issue [#357](https://github.com/iamaman11/crm/issues/357).
 No new Worker, browser runtime, CI, credentials, or HTTP-proxy is required.
 Run against **the released Worker**, not the PR preview. Existing `browser-mcp.yml`
@@ -8,15 +8,16 @@ still owns CI/release, including workerd Durable Object restart tests.
 
 ## Preconditions
 
-- Universal Browser MCP is connected in ChatGPT with the actual Access owner.
-- Browser Run has capacity for one short recording session.
+- Universal Browser MCP is connected in ChatGPT with two separately authenticated, Access-allowlisted controller accounts.
+- Each account has completed its own Managed OAuth authorization; do not share cookies or workspace handles.
+- Browser Run has capacity for two short concurrent sessions.
 - CRM is a **test** tenant, and an existing service principal has `admin`.
 - **Never paste Access tokens or Live View signed URLs into reports.**
-- Use one fresh UUID `workspaceId` throughout; keep tests read-only in CRM.
+- Use a separate fresh UUID `workspaceId` for each controller; keep tests read-only in CRM.
 - Public file/popup/iframe fixture: `https://the-internet.herokuapp.com`.
   This fixture may change; report unavailable instead of claiming a product regression.
 
-## Ordered live smoke (one real Browser Run owner)
+## Ordered live smoke (one controller's real Browser Run)
 
 The table names the actual public MCP tool/operation, actual input and required
 **observable** receipt. An API being registered, TypeScript passing, or a 200
@@ -51,6 +52,29 @@ files, snapshots, diagnostics, visuals and PDF while Open. For handoff timeout,
 use a separate short test session and Close it. For HAR, use the recording-enabled
 session, Close and fetch recording only then. To test native `mobile` device,
 Close first, then `browser_open(device=mobile)` and assert React/admin again.
+
+### Two-controller parallel isolation (required for multi-account release)
+
+1. In ChatGPT account A, open `https://example.org/` and retain workspace A.
+2. In ChatGPT account B, independently authorize the same MCP endpoint and open
+   `https://www.iana.org/`, retaining workspace B.
+3. Confirm the returned workspace UUIDs differ and each account sees only its
+   own page, title, tabs and status.
+4. While both are open, run a harmless snapshot in each account. A command in
+   account B using account A's UUID must resolve only within B's controller
+   partition and must never expose or close A's page.
+5. Close workspace A. Verify workspace B remains open and usable. Then close B
+   and verify the provider reports zero active sessions.
+6. In each account, confirm the same complete 21-tool MCP surface is available.
+7. For CRM, read `/api/session` in each browser and confirm the configured
+   service identity's real role. Record explicitly that this is a shared
+   service-principal actor; it is not per-human CRM audit attribution.
+
+Do not mark multi-controller LIVE PASS until both actual ChatGPT accounts have
+completed the concurrent test. Unit tests and the owner account alone cannot
+prove the second OAuth identity.
+
+---
 
 ### Provider limitations and truthfulness
 

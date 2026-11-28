@@ -14,8 +14,10 @@ export function selectWorkspaceId(
   return id.toLowerCase();
 }
 
-export function workspaceObjectName(ownerEmail: string, workspaceId: string): string {
-  const owner = ownerEmail.trim().toLowerCase();
-  if (!owner || !UUID.test(workspaceId)) throw new Error("BROWSER_WORKSPACE_INVALID");
-  return `owner:${owner}:workspace:${workspaceId.toLowerCase()}`;
+export function workspaceObjectName(controllerEmail: string, workspaceId: string): string {
+  const controller = controllerEmail.trim().toLowerCase();
+  if (!controller || !UUID.test(workspaceId)) throw new Error("BROWSER_WORKSPACE_INVALID");
+  // Keep the historical "owner:" prefix so existing controller workspaces
+  // remain addressable after the allowlist becomes multi-user.
+  return `owner:${controller}:workspace:${workspaceId.toLowerCase()}`;
 }

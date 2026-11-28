@@ -1,3 +1,43 @@
+## 28 November 2026 — multi-controller access and parallel workspaces
+
+Universal Browser MCP supports multiple independently authenticated ChatGPT
+controllers through the same endpoint and the same 21-tool surface.
+
+- Cloudflare Access authenticates each human controller through the existing
+  Managed OAuth application and its exact audience.
+- The Worker independently checks the signed `ctx.access` identity against
+  the Worker secret `CRM_MCP_ALLOWED_EMAILS`, a comma/newline-separated
+  allowlist. Missing, malformed, expired, wrong-audience or unlisted identities
+  fail closed.
+- The same allowlist must be reflected in the existing Cloudflare Access
+  application policy `crm-browser-mcp-access`; neither check replaces the
+  other.
+- Each controller is routed to a separate Durable Object namespace key:
+  `owner:{normalized-controller-email}:workspace:{workspace-uuid}`.
+  The historical `owner:` prefix is deliberately retained so existing
+  owner workspaces survive this change. A workspace UUID from one controller
+  cannot address another controller's Durable Object.
+- Each ChatGPT account performs its own OAuth authorization. Never share
+  cookies, OAuth tokens, signed URLs or browser workspace handles between
+  accounts. Closing one controller's workspace must not close the other's.
+- Both controllers receive the same complete MCP tool surface. CRM access,
+  when configured, still uses the existing origin-scoped CRM service identity.
+  The live CRM `/api/session` check currently reports `authenticated=true`
+  and `role=admin`; this is a shared service principal, not the human
+  controller. CRM audit events therefore do not identify which ChatGPT
+  controller initiated an operation. Do not claim per-human CRM attribution.
+- This change does not grant Cloudflare dashboard/account roles or change CRM
+  user roles. It grants only permission to operate the Browser MCP endpoint.
+- To revoke an operator, remove the email from both the Access policy and
+  `CRM_MCP_ALLOWED_EMAILS`, then require the affected ChatGPT account to
+  reconnect. Existing sessions are isolated by controller identity.
+
+The second controller must complete their own ChatGPT custom MCP OAuth setup.
+A successful CI run proves the code contract, not the second account's live
+OAuth login; that final check requires a real login from that account.
+
+---
+
 ## 15 November 2026 — explicit APIResponse binary replay diagnostic (#357)
 
 After the native `route.fulfill({response,headers:response.headers()})` change,
