@@ -71,7 +71,7 @@ jobs:
           gh run download "$SOURCE_RUN_ID" --repo "$GITHUB_REPOSITORY" \
             --name "$artifact" --dir apps/cloudflare-crm/.release/preview
           test "$(cat apps/cloudflare-crm/.release/preview/.release/source-sha.txt)" = "$SOURCE_SHA"
-          sha256sum --check --strict apps/cloudflare-crm/.release/preview/.release/compiled-sha256.txt
+          (cd apps/cloudflare-crm/.release/preview && sha256sum --check --strict .release/compiled-sha256.txt)
           SOURCE_SHA="$SOURCE_SHA" node --input-type=module -e '
             import assert from "node:assert/strict";
             import {readFileSync} from "node:fs";
