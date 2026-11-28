@@ -96,7 +96,8 @@ export async function verifyBrowserAutomation({page,sql,tenantA,dealId,laterCall
      AutomationService.method.putAutomationRule);
    // Let the post-mutation rule-list query settle before unmounting this screen;
    // an intentional AbortSignal cancellation must not be mistaken for a 5xx.
-   await page.getByText(dealFollowupTitle,{exact:true}).waitFor();
+   await page.getByRole("region",{name:"Правила автоматизации"})
+     .getByText(dealFollowupTitle,{exact:true}).waitFor();
    const dealRuleRow=(await sql(
      "SELECT id FROM crm_activity_automation_rules WHERE tenant=? AND task_subject=?",
      tenantA,dealFollowupTitle))[0];
@@ -176,7 +177,8 @@ export async function verifyBrowserAutomation({page,sql,tenantA,dealId,laterCall
    await page.getByLabel("Активировать правило",{exact:true}).check();
    await mutation(page.getByRole("button",{name:"Опубликовать правило",exact:true}),
      AutomationService.method.putAutomationRule);
-   await page.getByText(overdueTitle,{exact:true}).waitFor();
+   await page.getByRole("region",{name:"Правила автоматизации"})
+     .getByText(overdueTitle,{exact:true}).waitFor();
    const overdueRuleRow=(await sql(
      "SELECT id FROM crm_activity_automation_rules WHERE tenant=? AND task_subject=?",
      tenantA,overdueTitle))[0];
