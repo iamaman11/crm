@@ -156,7 +156,7 @@ jobs:
             (original.replace("      - 'integration/parallel/**'\n", "", 1), "CRM push must be restricted to dev, feat/parallel/** and integration/parallel/**"),
             (original.replace("      - 'integration/parallel/**'", "      - 'untrusted/**'"), "CRM push must be restricted to dev, feat/parallel/** and integration/parallel/**"),
             (original.replace("if: github.event_name == 'push' && github.ref == 'refs/heads/dev'", "if: always()", 1), "CRM deploy job must run only on push to dev"),
-            (original.replace("      - dev\n", "      - dev\n      - experimental\n", 1), "CRM push must be restricted to dev and integration/parallel/**"),
+            (original.replace("      - dev\n", "      - dev\n      - experimental\n", 1), "CRM push must be restricted to dev, feat/parallel/** and integration/parallel/**"),
         )
         for contents, expected_error in cases:
             with self.subTest(expected_error=expected_error):
