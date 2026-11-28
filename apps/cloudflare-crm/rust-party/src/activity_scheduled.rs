@@ -7,7 +7,7 @@ use worker::*;
 #[cfg(feature = "native")]
 pub(super) async fn scheduled(event: ScheduledEvent, env: Env, _ctx: ScheduleContext) {
     // Cloudflare exposes scheduledTime in milliseconds since Unix epoch.
-    // Use the event's time for business due checks, not the Worker wall clock.
+    // Use the later of scheduled and actual time so delayed Cron invocations catch up.
     let scheduled_millis = event.schedule();
     let scheduled_nanos = if scheduled_millis.is_finite() && scheduled_millis >= 0.0 {
         (scheduled_millis as i64).checked_mul(1_000_000)
