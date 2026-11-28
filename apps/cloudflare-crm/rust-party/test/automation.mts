@@ -432,7 +432,7 @@ export async function verifyAutomation({dispatch,sql,accountId,contactId,dealId,
      "tenant-b",newDealId))[0]?.n,0,"tenant B must not observe or execute tenant A's source");
    assert.equal((await sql(
      "SELECT COUNT(*) n FROM crm_activity_automation_runs WHERE tenant=? AND source_type='deal_created' AND source_id=?",
-     "tenant-a","deal-existing"))[0]?.n,oldDealRunCount,
+     "tenant-a",dealId))[0]?.n,oldDealRunCount,
      "publishing a Deal rule must not replay old lifecycle events");
 
    // Task-overdue is a timer over the current open Task version. A completed
