@@ -134,7 +134,10 @@ const kid="local-signed-rsa-fixture";
 const originalJwk={...publicKey.export({format:"jwk"}),kid,alg:"RS256",use:"sig"};
 const jwks={keys:[originalJwk]};
 const iss="https://royal-limit-ea43.cloudflareaccess.com";
-const aud="e0a664cf4f46f0d13d0ac0d8dd621c718c70842a377bf6738d1a24f0d16cedc7";
+const configPath=join(cwd,"wrangler.jsonc");
+const config=record(JSON.parse(readFileSync(configPath,"utf8")));
+const aud=string(record(config.vars).CRM_ACCESS_AUDIENCE);
+assert.match(aud,/^[a-f0-9]{64}$/);
 const now=Math.floor(Date.now()/1000);
 function signedJwt(identityClaims: Claims,signingKey=privateKey,signingKid=kid){
  const parts=[{alg:"RS256",kid:signingKid,typ:"JWT"},{iss,aud,exp:now+3600,iat:now-10,...identityClaims}]
@@ -144,8 +147,6 @@ function signedJwt(identityClaims: Claims,signingKey=privateKey,signingKid=kid){
 }
 const jwt=(email: string,signingKey=privateKey,signingKid=kid)=>signedJwt({sub:email,email},signingKey,signingKid);
 const serviceJwt=(common_name: string,signingKey=privateKey,signingKid=kid)=>signedJwt({sub:"",common_name},signingKey,signingKid);
-const configPath=join(cwd,"wrangler.jsonc");
-const config=record(JSON.parse(readFileSync(configPath,"utf8")));
 const databases=records(config.d1_databases);
 assert.equal(databases.length,1);
 assert.equal(record(databases[0]).binding,"DB");

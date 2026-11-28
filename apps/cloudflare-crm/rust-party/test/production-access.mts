@@ -28,7 +28,14 @@ const artifact=()=>({
 });
 const before=artifact();
 const issuer="https://royal-limit-ea43.cloudflareaccess.com";
-const audience="e0a664cf4f46f0d13d0ac0d8dd621c718c70842a377bf6738d1a24f0d16cedc7";
+const configPath=join(root,"wrangler.jsonc");
+const config=JSON.parse(readFileSync(configPath,"utf8"));
+const audience=string(record(record(config).vars).CRM_ACCESS_AUDIENCE);
+const devConfig=record(JSON.parse(readFileSync(join(root,"../wrangler.jsonc"),"utf8")));
+const devAudience=string(record(devConfig.vars).CRM_ACCESS_AUDIENCE);
+assert.match(audience,/^[a-f0-9]{64}$/);
+assert.match(devAudience,/^[a-f0-9]{64}$/);
+assert.notEqual(audience,devAudience,"the local runtime must use its own Access audience");
 const {publicKey,privateKey}=generateKeyPairSync("rsa",{modulusLength:2048});
 const other=generateKeyPairSync("rsa",{modulusLength:2048}).privateKey;
 const kid="production-artifact-local-fixture";
@@ -56,8 +63,6 @@ mock.method(globalThis,"fetch",async(...args: Parameters<typeof fetch>)=>{
   }
   return fetchOriginal(input,init);
 });
-const configPath=join(root,"wrangler.jsonc");
-const config=JSON.parse(readFileSync(configPath,"utf8"));
 assert.equal(config.d1_databases.length,1);
 assert.equal(config.d1_databases[0].database_id,"00000000-0000-4000-8000-000000000001");
 assert.equal(config.main,"./build/index.js");
@@ -87,11 +92,12 @@ try{
   const initial=jwksRequests;
   await call("/api/session",null,401);
   await call("/api/session",token(admin,{aud:"wrong-audience"}),401);
+  await call("/api/session",token(admin,{aud:[devAudience]}),401);
   await call("/api/session",token(admin,{exp:now-1}),401);
   assert.equal(jwksRequests,initial,"invalid claims must fail before JWKS fetch");
   assert.equal((await call("/api/session",token(admin),200)).role,"admin");
   assert.equal(jwksRequests,initial+1,"first valid key must be fetched once");
-  assert.equal((await call("/api/session",token(viewer),200)).role,"viewer");
+  assert.equal((await call("/api/session",token(viewer,{aud:[audience]}),200)).role,"viewer");
   assert.equal((await call("/api/version",token(admin),200)).source,sha);
   await call("/api/session",token(admin,{},other),401);
   assert.equal(jwksRequests,initial+1,"bad signatures must be rejected using the cached key");
@@ -247,6 +253,7 @@ try{
       previous_key_overlap:true,unknown_kid_denied:true,provider_failure_denied:true},
     signed_admin_viewer:true,invalid_signature_denied:true,wrong_claims_denied:true,
     unknown_service_denied:true,provider_failure_denied:true,ci_endpoint_absent:true,
+    configured_audience_enforced:true,
     unchanged_d1:true,compiled_router_policy_parity:true,production_rpc_d1:{generated_binary:true,role_denial:true,
       receipt_read_failure:true,replay:true,cas:true,atomic_link:true},
     scope:"production Access and selected RPC/D1 parity; full native-ci suite still mandatory"};
