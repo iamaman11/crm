@@ -1,8 +1,10 @@
 //! Activities-owned implementation of the sole native scheduled entrypoint.
 //! Cron reads immutable Deal events and overdue Tasks, then uses the existing
 //! Automation run ledger and original Task owner. No HTTP/RPC emulation.
+#[cfg(feature = "native")]
 use worker::*;
 
+#[cfg(feature = "native")]
 pub(super) async fn scheduled(_event: ScheduledEvent, env: Env, _ctx: ScheduleContext) {
     let result = async {
         let db = env.d1("DB")?;
@@ -16,3 +18,10 @@ pub(super) async fn scheduled(_event: ScheduledEvent, env: Env, _ctx: ScheduleCo
         Err(error) => console_error!("CRM_AUTOMATION_SCHEDULED_DISPATCH_FAILED: {:?}", error),
     }
 }
+
+#[cfg(not(feature = "native"))]
+pub(super) async fn scheduled(
+    _event: worker::ScheduledEvent,
+    _env: worker::Env,
+    _ctx: worker::ScheduleContext,
+) {}
