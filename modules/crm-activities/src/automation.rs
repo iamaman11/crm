@@ -170,8 +170,9 @@ impl AutomationRule {
         // Length-delimited serialization prevents ambiguous concatenated IDs.
         // A published rule version is part of source identity: each revision
         // can consume a source once, while retries of that exact revision stay idempotent.
-        let identity = serde_json::to_vec(&(self.rule_id.as_str(), self.version, kind.code(), source_id))
-            .map_err(|_| invalid("ACTIVITIES_AUTOMATION_IDENTITY_INVALID"))?;
+        let identity =
+            serde_json::to_vec(&(self.rule_id.as_str(), self.version, kind.code(), source_id))
+                .map_err(|_| invalid("ACTIVITIES_AUTOMATION_IDENTITY_INVALID"))?;
         let digest = format!("{:x}", Sha256::digest(identity));
         let due_at_unix_nanos = self
             .due_after_seconds
@@ -296,8 +297,8 @@ mod tests {
         assert_eq!(first.source_version, 1);
         assert_eq!(first.account_id, "account-1");
         assert_eq!(first.deal_id.as_deref(), Some("deal-created-1"));
-        assert!(rule
-            .plan(
+        assert!(
+            rule.plan(
                 AutomationSource::DealCreated {
                     deal_id: "deal-created-1",
                     account_id: "account-1",
@@ -306,9 +307,10 @@ mod tests {
                 25,
             )
             .unwrap()
-            .is_some_and(|next| next.task_id == first.task_id));
-        assert!(rule
-            .plan(
+            .is_some_and(|next| next.task_id == first.task_id)
+        );
+        assert!(
+            rule.plan(
                 AutomationSource::DealCreated {
                     deal_id: "deal-created-1",
                     account_id: "account-1",
@@ -317,7 +319,8 @@ mod tests {
                 25,
             )
             .unwrap()
-            .is_none());
+            .is_none()
+        );
     }
 
     #[test]
