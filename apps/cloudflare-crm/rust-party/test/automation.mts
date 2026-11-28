@@ -537,7 +537,7 @@ export async function verifyAutomation({dispatch,sql,accountId,contactId,dealId,
      "tenant-a",overdueRuleId,cancelSourceId))[0];
    assert.ok(cancelRun);
    const cancelled=await fixtureRpc(dispatch,automation.cancelAutomationRun,admin,{
-     ruleId:overdueRuleId,sourceType:2,sourceId:cancelSourceId,expectedRuleVersion:1n,
+     ruleId:overdueRuleId,sourceType:2,sourceId:cancelSourceId,expectedRuleVersion:2n,
      precondition:key("cancel-scheduled")
    });
    assert.equal(cancelled.status,200,formatRpcFailure(cancelled));
