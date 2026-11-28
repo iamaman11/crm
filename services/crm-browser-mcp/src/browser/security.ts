@@ -78,29 +78,6 @@ export function isPermittedBrowserRequest(input: string): boolean {
   }
 }
 
-// Credentials are injected ONLY into a configured exact origin for a trusted
-// controller navigation or requests initiated within that same origin.
-// Without configured service credentials the browser uses normal login flows,
-// including identity-provider redirects and SameSite browser cookie policy.
-export function siteCredentialsAllowed(
-  destination: string, initiator: string, authorizedMainNavigation: boolean,
-  siteOrigin: string,
-): boolean {
-  return isConfiguredSiteRequest(destination, siteOrigin) &&
-    (isConfiguredSiteRequest(initiator, siteOrigin) || authorizedMainNavigation);
-}
-
-export function siteRequestDisposition(
-  destination: string, initiator: string, authorizedMainNavigation: boolean,
-  siteOrigin: string | null, serviceCredentials: boolean,
-): "public" | "site" | "block" {
-  if (!siteOrigin || !serviceCredentials || !isConfiguredSiteRequest(destination, siteOrigin)) {
-    return "public";
-  }
-  return siteCredentialsAllowed(destination, initiator, authorizedMainNavigation, siteOrigin)
-    ? "site" : "block";
-}
-
 export function safePagePath(input: string): string {
   try {
     const url = new URL(input);
