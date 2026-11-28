@@ -12,7 +12,6 @@ use web_sys::{Crypto, CryptoKey};
 use worker::{D1Database, Date, Env, Fetch, Request, Result};
 
 const ISSUER: &str = "https://royal-limit-ea43.cloudflareaccess.com";
-const AUDIENCE: &str = "e0a664cf4f46f0d13d0ac0d8dd621c718c70842a377bf6738d1a24f0d16cedc7";
 
 // Access rotates signing keys on a multi-week schedule and retains the previous
 // key for seven days. Cache only public key material; unknown kid forces refresh.
@@ -254,61 +253,44 @@ fn identity_key(claims: &Value) -> Option<String> {
     }
 }
 
-fn valid_claims(claims: &Value) -> bool {
-    let now = (Date::now().as_millis() / 1000) as i64;
-    let aud_ok = match claims.get("aud") {
-        Some(Value::String(s)) => s == AUDIENCE,
-        Some(Value::Array(items)) => items.iter().any(|x| x.as_str() == Some(AUDIENCE)),
-        _ => false,
-    };
-    claims.get("iss").and_then(Value::as_str) == Some(ISSUER)
-        && aud_ok
-        && claims.get("exp").and_then(Value::as_i64).is_some_and(|exp| exp > now)
-        && claims.get("nbf").and_then(Value::as_i64).is_none_or(|nbf| nbf <= now)
-        && claims.get("iat").and_then(Value::as_i64).is_none_or(|iat| iat <= now + 60)
-        // identity_key checks presence of sub and requires either a signed
-        // human email with nonempty sub, or a service common_name with empty sub.
-        && identity_key(claims).is_some()
-}
-
 // Report only a fixed rejection category; never emit JWT claims or credentials.
-fn invalid_claim_reason(claims: &Value) -> &'static str {
+fn invalid_claim_reason(claims: &Value, audience: &str) -> Option<&'static str> {
     let now = (Date::now().as_millis() / 1000) as i64;
     if claims.get("iss").and_then(Value::as_str) != Some(ISSUER) {
-        return "jwt_issuer_invalid";
+        return Some("jwt_issuer_invalid");
     }
     let aud_ok = match claims.get("aud") {
-        Some(Value::String(s)) => s == AUDIENCE,
-        Some(Value::Array(items)) => items.iter().any(|x| x.as_str() == Some(AUDIENCE)),
+        Some(Value::String(s)) => s == audience,
+        Some(Value::Array(items)) => items.iter().any(|x| x.as_str() == Some(audience)),
         _ => false,
     };
     if !aud_ok {
-        return "jwt_audience_invalid";
+        return Some("jwt_audience_invalid");
     }
-    if !claims
+    if claims
         .get("exp")
         .and_then(Value::as_i64)
-        .is_some_and(|exp| exp > now)
+        .is_none_or(|exp| exp <= now)
     {
-        return "jwt_exp_invalid";
+        return Some("jwt_exp_invalid");
     }
-    if !claims
+    if claims
         .get("nbf")
         .and_then(Value::as_i64)
-        .is_none_or(|nbf| nbf <= now)
+        .is_some_and(|nbf| nbf > now)
     {
-        return "jwt_nbf_future";
+        return Some("jwt_nbf_future");
     }
-    if !claims
+    if claims
         .get("iat")
         .and_then(Value::as_i64)
-        .is_none_or(|iat| iat <= now + 60)
+        .is_some_and(|iat| iat > now + 60)
     {
-        return "jwt_iat_future";
+        return Some("jwt_iat_future");
     }
     if identity_key(claims).is_none() {
         // These are static categories only: no token/claim values are logged.
-        return match claims.get("sub") {
+        return Some(match claims.get("sub") {
             None => "jwt_identity_sub_absent",
             Some(Value::String(sub)) if sub.is_empty() => match claims.get("common_name") {
                 None => "jwt_service_name_absent",
@@ -327,12 +309,12 @@ fn invalid_claim_reason(claims: &Value) -> &'static str {
                 _ => "jwt_human_email_absent",
             },
             _ => "jwt_identity_sub_type",
-        };
+        });
     }
-    "jwt_claims_invalid_other"
+    None
 }
 
-async fn verify(req: &Request, _env: &Env) -> Result<Option<String>> {
+async fn verify(req: &Request, env: &Env) -> Result<Option<String>> {
     // Only the release version probe emits a safe, static rejection category.
     // Never log or expose Access assertions, service credentials, or claims.
     let reject = |reason: &'static str| -> Result<Option<String>> {
@@ -368,8 +350,16 @@ async fn verify(req: &Request, _env: &Env) -> Result<Option<String>> {
     if header.get("alg").and_then(Value::as_str) != Some("RS256") {
         return reject("jwt_alg_invalid");
     }
-    if !valid_claims(&claims) {
-        return reject(invalid_claim_reason(&claims));
+    // Each deployment must name its own Access application. There is no fallback.
+    let Ok(audience) = env.var("CRM_ACCESS_AUDIENCE") else {
+        return reject("access_audience_not_configured");
+    };
+    let audience = audience.to_string();
+    if audience.len() != 64 || !audience.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return reject("access_audience_not_configured");
+    }
+    if let Some(reason) = invalid_claim_reason(&claims, &audience) {
+        return reject(reason);
     }
     let Some(kid) = header
         .get("kid")
@@ -387,7 +377,7 @@ async fn verify(req: &Request, _env: &Env) -> Result<Option<String>> {
         if host != "localhost" && host != "127.0.0.1" {
             return reject("ci_host_invalid");
         }
-        if _env.var("CRM_CI_LOCAL_ONLY")?.to_string() != "yes" {
+        if env.var("CRM_CI_LOCAL_ONLY")?.to_string() != "yes" {
             return reject("ci_fixture_missing");
         }
     }
