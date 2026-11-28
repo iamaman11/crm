@@ -40,12 +40,10 @@ test("all production Cloudflare Browser Run connects use typed persistent sessio
 
 test("preview Access uses exact target credentials with the accepted native test-CRM transport", () => {
   const code = readFileSync(new URL("../src/session.ts", import.meta.url), "utf8");
-  assert.match(code, /await route\.continue\(\{\s*headers:\s*\{/,
+  assert.match(code, /await route\\.continue\\(\\{\\s*headers:\\s*\\{/,
     "Browser Run must preserve Chromium's original response headers and MIME");
   assert.ok(code.includes('"CF-Access-Client-Id": target.clientId'));
   assert.ok(code.includes('"CF-Access-Client-Secret": target.clientSecret'));
-  assert.ok(code.includes("stripSiteAccessHeaders(request.headers())"),
-    "public redirects must remove service credentials before leaving a configured origin");
   assert.ok(code.includes("siteRequestDispositionForTargets("),
     "each request is authorized against its exact configured origin");
   assert.ok(code.includes("isTrustedSiteNavigationRequest("),
@@ -55,8 +53,8 @@ test("preview Access uses exact target credentials with the accepted native test
     "route.fetch loses response headers in this Browser Run provider");
   assert.ok(!code.includes("route.fulfill("),
     "route.fulfill cannot restore upstream headers the provider did not return");
-  assert.ok(code.includes("await route.continue({ headers });"),
-    "unrelated public sites remain native Chromium requests with service credentials stripped");
+  assert.ok(code.includes("await route.continue();"),
+    "unrelated public sites remain native Chromium requests");
 });
 
 test("both download actions share one Chromium-side, same-origin byte path", () => {

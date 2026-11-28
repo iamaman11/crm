@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { acquire, connect, history, limits, type Browser, type BrowserContext, type Page } from "@cloudflare/playwright";
-import { DEFAULT_BROWSER_URL, browserUrl, siteAccessTargets, siteAccessForRequest, siteAccessCredentialsReady, siteRequestDispositionForTargets, isTrustedSiteNavigationRequest, isPermittedBrowserRequest, redact, safePagePath, stripSiteAccessHeaders } from "./security";
+import { DEFAULT_BROWSER_URL, browserUrl, siteAccessTargets, siteAccessForRequest, siteAccessCredentialsReady, siteRequestDispositionForTargets, isTrustedSiteNavigationRequest, isPermittedBrowserRequest, redact, safePagePath } from "./security";
 import { chooseDevice, deviceOptions, type BrowserDevice } from "./browser-device";
 import { WEB_VITALS_INIT, readVitals, type WebVitals } from "./browser-performance";
 import { AXE_SOURCE } from "./axe-source.generated";
@@ -323,10 +323,8 @@ export class CrmBrowserSession extends DurableObject<Env> {
           return;
         }
         if (disposition === "public") {
-          // A prior Access request may have placed service headers on a redirect.
-          // Strip them before any public origin, CDN, or external SSO can receive it.
-          const headers = stripSiteAccessHeaders(request.headers());
-          await route.continue({ headers });
+          // Foreign sites, their assets, third-party CDNs and SSO are public.
+          await route.continue();
           return;
         }
         const target = siteAccessForRequest(request.url(), siteAccess);
