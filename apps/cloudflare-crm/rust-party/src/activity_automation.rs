@@ -1240,13 +1240,15 @@ async fn dispatch_tenant(
             let request_id = super::native_request_id().map_err(|_| storage())?;
             match execute_claimed(
                 db,
-                tenant,
                 row,
-                principal.identity(),
-                &request_id,
-                now,
-                true,
-                "ScheduledAutomation",
+                ExecutionContext {
+                    tenant,
+                    actor: principal.identity(),
+                    request_id: &request_id,
+                    now,
+                    system_actor: true,
+                    rpc_method: "ScheduledAutomation",
+                },
             )
             .await
             {
@@ -1344,13 +1346,15 @@ async fn dispatch_tenant(
             let request_id = super::native_request_id().map_err(|_| storage())?;
             match execute_claimed(
                 db,
-                tenant,
                 row,
-                principal.identity(),
-                &request_id,
-                now,
-                true,
-                "ScheduledAutomation",
+                ExecutionContext {
+                    tenant,
+                    actor: principal.identity(),
+                    request_id: &request_id,
+                    now,
+                    system_actor: true,
+                    rpc_method: "ScheduledAutomation",
+                },
             )
             .await
             {
