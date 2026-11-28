@@ -378,7 +378,7 @@ pub(super) async fn list_rules(
     after: &str,
     limit: u32,
 ) -> Result<Vec<RuleRow>, ConnectError> {
-    bind(
+    let statement = bind(
         db,
         concat!(
             "SELECT id AS rule_id,version,trigger_kind AS trigger,enabled,task_subject,",
@@ -391,12 +391,18 @@ pub(super) async fn list_rules(
             JsValue::from_f64(limit as f64),
         ],
     )
-    .map_err(|_| storage())?
-    .all()
-    .await
-    .map_err(|_| storage())?
-    .results::<RuleRow>()
-    .map_err(|_| storage())
+    .map_err(|error| {
+        worker::console_error!("CRM_AUTOMATION_RULE_LIST_BIND_FAILED: {:?}", error);
+        storage()
+    })?;
+    let result = statement.all().await.map_err(|error| {
+        worker::console_error!("CRM_AUTOMATION_RULE_LIST_QUERY_FAILED: {:?}", error);
+        storage()
+    })?;
+    result.results::<RuleRow>().map_err(|error| {
+        worker::console_error!("CRM_AUTOMATION_RULE_LIST_DECODE_FAILED: {:?}", error);
+        storage()
+    })
 }
 async fn source(
     db: &D1Database,
