@@ -2,8 +2,11 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
 import { z } from "zod";
-import type { Env, Command, Target } from "./session";
-import { DEFAULT_BROWSER_URL, MCP_HOST, verifiedMcpControllerEmail } from "./security";
+import type { Env, Command, Target } from "./contracts";
+import { DEFAULT_BROWSER_URL } from "./browser/security";
+import { verifiedMcpControllerEmail } from "./controller-auth";
+
+const MCP_HOST = "crm-browser-mcp.crm-5bd5e1e1.workers.dev";
 import { DEVICE_TYPES } from "./browser-device";
 import { SCENARIO_OPERATIONS, isFailedVerdict } from "./browser-checks";
 import { selectWorkspaceId, workspaceObjectName } from "./browser-workspaces";

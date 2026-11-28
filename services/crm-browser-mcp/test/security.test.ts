@@ -1,6 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { browserUrl, siteCredentialsAllowed, siteRequestDisposition, siteAccessConfiguration, siteAccessTargets, siteAccessForRequest, siteAccessCredentialsReady, siteRequestDispositionForTargets, isTrustedSiteNavigationRequest, isConfiguredSiteRequest, isPermittedBrowserRequest, isAuthorizedMcpController, parseAllowedMcpControllerEmails, safePagePath, redact, verifiedMcpControllerEmail } from "../src/security.ts";
+import { browserUrl, isPermittedBrowserRequest, safePagePath, redact } from "../src/browser/security.ts";
+import {
+  siteCredentialsAllowed, siteRequestDisposition, siteAccessConfiguration, siteAccessTargets,
+  siteAccessForRequest, siteAccessCredentialsReady, siteRequestDispositionForTargets,
+  isTrustedSiteNavigationRequest, isConfiguredSiteRequest,
+} from "../src/site-access.ts";
+import {
+  isAuthorizedMcpController, parseAllowedMcpControllerEmails, verifiedMcpControllerEmail,
+} from "../src/controller-auth.ts";
 const CRM_ORIGIN = "https://crm-dev.crm-5bd5e1e1.workers.dev"; // Test-only configured site.
 
 test("site identity is configured per exact origin; ordinary browser navigation is universal", () => {
