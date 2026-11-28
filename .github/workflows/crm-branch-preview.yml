@@ -421,6 +421,8 @@ jobs:
         if: ${{ steps.gate.outputs.enabled == 'true' }}
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CRM_PREVIEW_CLOUDFLARE_API_TOKEN }}
+          PREVIEW_1_ACCESS_APP_ID: ${{ vars.CRM_PREVIEW_1_ACCESS_APP_ID }}
+          PREVIEW_2_ACCESS_APP_ID: ${{ vars.CRM_PREVIEW_2_ACCESS_APP_ID }}
           EXPECTED_PREVIEW_HOST: ${{ needs.preflight.outputs.preview_host }}
         shell: bash
         run: |
@@ -449,6 +451,25 @@ jobs:
             "the canonical dev production audience must be present");
           assert.notEqual(app.aud,process.env.PRODUCTION_ACCESS_AUDIENCE,
             "a preview must never reuse the production Access audience");
+          const otherAppId=slot==="1"?process.env.PREVIEW_2_ACCESS_APP_ID:process.env.PREVIEW_1_ACCESS_APP_ID;
+          assert.ok(otherAppId && otherAppId!==appId,"the other fixed preview Access app must be configured");
+          const otherResponse=await fetch(
+            "https://api.cloudflare.com/client/v4/accounts/"+account+"/access/apps/"+otherAppId,
+            {headers:{authorization:"Bearer "+process.env.CLOUDFLARE_API_TOKEN}}
+          );
+          const otherPayload=await otherResponse.json();
+          assert.ok(otherResponse.ok && otherPayload.success===true,"the other preview Access app must be readable");
+          const otherApp=otherPayload.result;
+          const otherHost=slot==="1"
+            ?"crm-writer-preview-2.crm-5bd5e1e1.workers.dev"
+            :"crm-writer-preview-1.crm-5bd5e1e1.workers.dev";
+          assert.equal(otherApp.type,"self_hosted");
+          assert.equal(otherApp.domain,otherHost,"the other preview Access app must retain its own fixed hostname");
+          assert.match(otherApp.aud??"",/^[0-9a-f]{64}$/);
+          assert.notEqual(otherApp.aud,process.env.PRODUCTION_ACCESS_AUDIENCE,
+            "neither preview app may reuse the production audience");
+          assert.notEqual(otherApp.aud,app.aud,
+            "the two isolated preview Access apps must never share an audience");
           assert.equal(app.policies?.length,1,"preview Access app must have exactly one policy");
           const policy=app.policies[0];
           assert.equal(policy.decision,"non_identity");
@@ -676,8 +697,10 @@ jobs:
           assert.ok(clientId && clientSecret,"selected A Service Token pair is missing");
           const url="https://"+process.env.PREVIEW_HOST+"/api/version";
           const anonymous=await fetch(url,{redirect:"manual"});
-          assert.notEqual(anonymous.headers.get("x-crm-source-sha"),process.env.SOURCE_SHA,
-            "an anonymous request must be stopped by Access before reaching the Worker");
+          assert.ok([302,401,403].includes(anonymous.status),
+            "an anonymous request must receive an Access denial, not an arbitrary application response");
+          assert.equal(anonymous.headers.get("x-crm-source-sha"),null,
+            "an anonymous request must be stopped by Access before reaching any Worker version");
           const authenticated=await fetch(url,{
             headers:{
               "CF-Access-Client-Id":clientId,
