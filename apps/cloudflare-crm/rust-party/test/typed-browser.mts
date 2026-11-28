@@ -2427,6 +2427,14 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,runS
    await mutation(page.getByRole("button",{name:"Подтвердить импорт",exact:true}),PartyCsvService.method.applyPartyImport);
    assert.equal(record((await sql("SELECT party_id FROM crm_party_source_identities WHERE tenant=? AND source_id=? AND party_id=?",
      tenantA,browserSourceId,sourceOnePartyId))[0]).party_id,sourceOnePartyId);
+   const sourceIdentityMappings=records(await sql(
+     "SELECT external_id_sha256,party_id FROM crm_party_source_identities WHERE tenant=? AND source_id=? ORDER BY external_id_sha256",
+     tenantA,browserSourceId));
+   assert.equal(sourceIdentityMappings.length,2,"both external IDs must have durable source bindings");
+   assert.equal(new Set(sourceIdentityMappings.map(row=>string(row.party_id))).size,2,
+     "the new external ID must map to a distinct Party, not overwrite the known identity");
+   assert.ok(sourceIdentityMappings.some(row=>string(row.party_id)===sourceOnePartyId),
+     "the changed-byte reimport must preserve the original Party mapping");
 
    const sourceConflictCsv="party_id,kind,display_name,resource_version\r\nbrowser-source-1,person,Browser Changed Name "+runId+",3\r\n";
    const beforeSourceConflict=number(record((await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant=?",
