@@ -964,6 +964,7 @@ async fn claim_scheduled_run(
     source_type: &str,
     source_id: &str,
     source_version: i64,
+    now: i64,
     input: activity_tasks::CreateInput,
 ) -> Result<Option<RunRow>, ConnectError> {
     let tenant = principal.tenant();
@@ -1202,6 +1203,7 @@ async fn dispatch_tenant(
             "deal_created",
             &candidate.source_id,
             candidate.source_version,
+            now,
             input,
         )
         .await?
@@ -1303,6 +1305,7 @@ async fn dispatch_tenant(
             "task_overdue",
             &candidate.source_id,
             candidate.source_version,
+            now,
             input,
         )
         .await?
