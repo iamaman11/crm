@@ -392,20 +392,20 @@ export async function verifyAutomation({dispatch,sql,accountId,contactId,dealId,
      assigneeEmail:person,dueAfterSeconds:3600n,precondition:key("deal-rule")
    });
    assert.equal(dealRule.status,200,formatRpcFailure(dealRule));
-   const dealId="automation-deal-source-"+suffix;
-   const dealInput={...dealCreationInput(dealId,accountId,contactId),
+   const newDealId="automation-deal-source-"+suffix;
+   const dealInput={...dealCreationInput(newDealId,accountId,contactId),
      name:"Automation source deal "+suffix,precondition:key("deal-create")};
    const createdDeal=await fixtureRpc(dispatch,DealService.method.createDeal,admin,dealInput);
    assert.equal(createdDeal.status,200,formatRpcFailure(createdDeal));
    const dealEvent=(await sql(
      "SELECT deal_version,action FROM crm_sales_deal_events WHERE tenant=? AND deal_id=? AND action='created'",
-     "tenant-a",dealId))[0];
+     "tenant-a",newDealId))[0];
    assert.ok(dealEvent);
    await tick();
    await tick();
    const dealRuns=await sql(
      "SELECT source_event_id,source_version,task_id,status,attempt_count FROM crm_activity_automation_runs WHERE tenant=? AND rule_id=? AND source_type='deal_created' AND source_id=?",
-     "tenant-a",dealRuleId,dealId);
+     "tenant-a",dealRuleId,newDealId);
    assert.equal(dealRuns.length,1,"repeated Cron ticks must claim one Deal source");
    const dealRun=dealRuns[0]!;
    assert.equal(dealRun.status,"committed");
@@ -417,7 +417,7 @@ export async function verifyAutomation({dispatch,sql,accountId,contactId,dealId,
    assert.equal(dealTask.accountId,accountId);
    assert.equal(dealTask.assigneeIdentity,person);
    assert.equal(dealTask.subject,"Deal-created follow-up "+suffix);
-   assert.equal(dealTask.relatedDealId,dealId);
+   assert.equal(dealTask.relatedDealId,newDealId);
    assert.equal((await sql(
      "SELECT COUNT(*) n FROM crm_activity_task_receipts WHERE tenant=? AND key=?",
      "tenant-a",dealTaskId))[0]?.n,1);
@@ -429,7 +429,7 @@ export async function verifyAutomation({dispatch,sql,accountId,contactId,dealId,
      "tenant-a",dealTaskId,"service:crm-automation"))[0]?.n,1);
    assert.equal((await sql(
      "SELECT COUNT(*) n FROM crm_activity_automation_runs WHERE tenant=? AND source_type='deal_created' AND source_id=?",
-     "tenant-b",dealId))[0]?.n,0,"tenant B must not observe or execute tenant A's source");
+     "tenant-b",newDealId))[0]?.n,0,"tenant B must not observe or execute tenant A's source");
    assert.equal((await sql(
      "SELECT COUNT(*) n FROM crm_activity_automation_runs WHERE tenant=? AND source_type='deal_created' AND source_id=?",
      "tenant-a","deal-existing"))[0]?.n,oldDealRunCount,
