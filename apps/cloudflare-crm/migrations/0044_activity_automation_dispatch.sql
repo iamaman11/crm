@@ -131,12 +131,14 @@ INSERT INTO crm_activity_automation_runs(
  cancel_digest,cancel_request_id,cancelled_by,cancelled_at_unix_millis,source_stale
 )
 SELECT seq,tenant,rule_id,rule_version,source_event_id,'interaction_created',
- interaction_id,1,interaction_id,task_id,task_intent,run_request_key,
+ interaction_id,COALESCE((SELECT source_version FROM crm_activity_automation_source_events s
+  WHERE s.tenant=old.tenant AND s.event_id=old.source_event_id),1),
+ interaction_id,task_id,task_intent,run_request_key,
  run_request_digest,status,requested_by,original_request_id,task_request_id,
  created_at_unix_millis,completed_at_unix_millis,attempt_count,lease_request_id,
  lease_actor,lease_until_unix_millis,next_attempt_at_unix_millis,cancel_key,
  cancel_digest,cancel_request_id,cancelled_by,cancelled_at_unix_millis,0
-FROM crm_activity_automation_runs_legacy;
+FROM crm_activity_automation_runs_legacy old;
 
 CREATE TABLE crm_activity_automation_run_requests (
  tenant TEXT NOT NULL,

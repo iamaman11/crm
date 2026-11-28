@@ -47,13 +47,21 @@ function runResource(ruleId:string,sourceType:AutomationTrigger,sourceId:string,
   return ruleId+"/"+sourceType+"/"+sourceId+"/"+ruleVersion.toString();
 }
 function parseRunResource(resourceId:string) {
-  const [ruleId,sourceType,sourceId,version]=resourceId.split("/");
+  const parts=resourceId.split("/");
+  if(parts.length===2&&parts[0]&&parts[1]) {
+    // Pending browser mutations created by the original Interaction-only
+    // screen remain resolvable through the backward-compatible GetRun path.
+    return {ruleId:parts[0],sourceType:AutomationTrigger.INTERACTION_CREATED,
+      sourceId:parts[1],expectedRuleVersion:0n};
+  }
+  const [ruleId,sourceType,sourceId,version]=parts;
   const parsedType=Number(sourceType);
   if(!version)throw Error("Некорректная версия запуска");
   let expectedRuleVersion:bigint;
   try { expectedRuleVersion=BigInt(version); } catch { throw Error("Некорректная версия запуска"); }
-  if(!ruleId||!sourceId||expectedRuleVersion<1n||![AutomationTrigger.INTERACTION_CREATED,
-    AutomationTrigger.DEAL_CREATED,AutomationTrigger.TASK_OVERDUE].includes(parsedType as AutomationTrigger))
+  const supportedTypes:number[]=[AutomationTrigger.INTERACTION_CREATED,
+    AutomationTrigger.DEAL_CREATED,AutomationTrigger.TASK_OVERDUE];
+  if(!ruleId||!sourceId||expectedRuleVersion<1n||!supportedTypes.includes(parsedType))
     throw Error("Некорректный исходный запуск");
   return {ruleId,sourceType:parsedType as AutomationTrigger,sourceId,expectedRuleVersion};
 }
