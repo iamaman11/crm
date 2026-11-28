@@ -294,7 +294,11 @@ jobs:
             const anon = await fetch(url + "/",options);
             assert.ok(!anon.ok,"Unauthenticated preview asset is public");
             const location = anon.headers.get("location");
-            const accessDenied = (anon.status === 302 && location?.startsWith("https://royal-limit-ea43.cloudflareaccess.com/")) ||
+            const serviceAuthDenied = anon.status === 401 &&
+              anon.headers.get("cf-access-domain") === env.PREVIEW_HOST &&
+              anon.headers.get("cf-access-aud") === config.vars.CRM_ACCESS_AUDIENCE;
+            const accessDenied = serviceAuthDenied ||
+              (anon.status === 302 && location?.startsWith("https://royal-limit-ea43.cloudflareaccess.com/")) ||
               (anon.status === 403 && !anon.headers.has("x-crm-source-sha"));
             const signed = await fetch(url + "/api/version",{...options,headers:auth});
             if (accessDenied && signed.ok && signed.headers.get("x-crm-source-sha") === env.SOURCE_SHA) {
