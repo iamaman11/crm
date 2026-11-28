@@ -180,7 +180,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: 5bd5e1e1e813f061afc259e91334262d
-        run: pnpm exec wrangler d1 migrations apply "${{ steps.preview.outputs.database_name }}" --remote --config preview-wrangler.jsonc --yes
+        run: pnpm exec wrangler d1 migrations apply "${{ steps.preview.outputs.database_name }}" --remote --config preview-wrangler.jsonc --force
       - name: Deploy exact sealed Worker and React assets without public route
         working-directory: apps/cloudflare-crm
         env:
@@ -204,12 +204,12 @@ jobs:
             echo "- Physical D1: `${{ steps.preview.outputs.database_name }}` (`${{ steps.preview.outputs.database_id }}`)"
             echo "- Host reserved: `${{ steps.preview.outputs.preview_host }}`"
             echo "- Worker remains private until the trusted coordinator adds the Access destination and enables its workers.dev subdomain."
-            echo "- Lease: 30 minutes; cleanup runs in this job even after failure/cancellation."
+            echo "- Lease: 30 minutes; Worker/D1 cleanup runs in this job even after failure/cancellation; temporary Access grant cleanup is handled separately by the trusted Cloudflare controller."
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Hold bounded preview lease for independent Browser MCP Gate B
         if: ${{ steps.preview.outcome == 'success' }}
         run: sleep 1800
-      - name: Remove temporary Access grants, Worker and physical D1
+      - name: Remove private Worker and physical D1
         if: always()
         shell: bash
         env:
@@ -233,26 +233,10 @@ jobs:
             if(!r.ok||p.success!==true)throw new Error(`Cloudflare cleanup ${method} ${path} HTTP ${r.status}: ${JSON.stringify(p.errors||[])}`);
             return p.result;
           }
-          const appId="2d57d620-2371-4454-a533-150f72e732b7";
-          const app=await cf(`/access/apps/${appId}`);
-          const destinations=(app.destinations||[]).filter(x=>x.uri!==previewHost);
-          if(destinations.length!==(app.destinations||[]).length){
-            const next={...app,destinations};
-            for(const k of ["id","uid","aud","created_at","updated_at","policies","self_hosted_domains"])delete next[k];
-            await cf(`/access/apps/${appId}`,"PUT",next);
-          }
-          const policies=await cf(`/access/apps/${appId}/policies?per_page=100`);
-          for(const p of policies||[]){
-            if(p.name===`crm-preview-${suffix}`)await cf(`/access/apps/${appId}/policies/${p.id}`,"DELETE");
-          }
-          const tokens=await cf("/access/service_tokens?per_page=100");
-          for(const t of tokens||[]){
-            if(t.name===`crm-preview-${suffix}`)await cf(`/access/service_tokens/${t.id}`,"DELETE");
-          }
           const workers=await cf("/workers/scripts?per_page=100");
           if((workers||[]).some(w=>w.id===workerName))await cf(`/workers/scripts/${workerName}`,"DELETE");
           const databases=await cf("/d1/database?per_page=100");
           const db=(databases||[]).find(x=>x.name===workerName);
           if(db)await cf(`/d1/database/${db.uuid}`,"DELETE");
-          console.log(JSON.stringify({event:"crm.branch-preview-cleanup",worker:workerName,host:previewHost,worker_deleted:true,database_deleted:!!db,access_destination_removed:true,temporary_access_grants_removed:true}));
+          console.log(JSON.stringify({event:"crm.branch-preview-cleanup",worker:workerName,worker_deleted:!!((workers||[]).some(w=>w.id===workerName)),database_deleted:!!db,access_cleanup:"handled separately by trusted Cloudflare controller"}));
           NODE
