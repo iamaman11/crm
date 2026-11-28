@@ -117,7 +117,7 @@ CREATE TABLE crm_activity_automation_runs (
  cancelled_at_unix_millis INTEGER,
  source_stale INTEGER NOT NULL DEFAULT 0 CHECK(source_stale IN (0,1)),
  UNIQUE(tenant,rule_id,source_event_id),
- UNIQUE(tenant,rule_id,source_type,source_id),
+ UNIQUE(tenant,rule_id,source_type,source_id,rule_version),
  UNIQUE(tenant,task_id),
  FOREIGN KEY(tenant,rule_id) REFERENCES crm_activity_automation_rules(tenant,id)
 );

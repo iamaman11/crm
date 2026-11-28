@@ -896,10 +896,11 @@ pub(super) struct ScheduledSummary {
 fn scheduled_event_id(
     tenant: &str,
     rule_id: &str,
+    rule_version: i64,
     source_type: &str,
     source_id: &str,
 ) -> Result<String, ConnectError> {
-    let identity = serde_json::to_vec(&(tenant, rule_id, source_type, source_id))
+    let identity = serde_json::to_vec(&(tenant, rule_id, rule_version, source_type, source_id))
         .map_err(|_| storage())?;
     Ok(format!("crm.activities.a1:{:x}", Sha256::digest(identity)))
 }
@@ -913,7 +914,7 @@ async fn claim_scheduled_run(
     source_version: i64,
     input: activity_tasks::CreateInput,
 ) -> Result<Option<RunRow>, ConnectError> {
-    let event_id = scheduled_event_id(tenant, &rule.rule_id, source_type, source_id)?;
+    let event_id = scheduled_event_id(tenant, &rule.rule_id, rule.version, source_type, source_id)?;
     let snapshot = serde_json::to_string(&input).map_err(|_| storage())?;
     let request_key_digest = format!("{:x}", Sha256::digest(event_id.as_bytes()));
     let request_key = format!("automation-scheduled-{}", &request_key_digest[..48]);
@@ -1015,7 +1016,7 @@ pub(super) async fn dispatch_scheduled(
             " AND e.occurred_at_unix_nanos>=r.published_at_unix_nanos",
             " AND NOT EXISTS(SELECT 1 FROM crm_activity_automation_runs a",
             "  WHERE a.tenant=r.tenant AND a.rule_id=r.id",
-            "   AND a.source_type='deal_created' AND a.source_id=e.deal_id)",
+            "   AND a.source_type='deal_created' AND a.source_id=e.deal_id AND a.rule_version=r.version)",
             " ORDER BY e.occurred_at_unix_nanos,e.tenant,e.deal_id LIMIT ?"
         ),
         &[JsValue::from_f64(MAX_SCHEDULED_BATCH as f64)],
@@ -1073,7 +1074,7 @@ pub(super) async fn dispatch_scheduled(
             "  WHERE made.tenant=t.tenant AND made.task_id=t.id)",
             " AND NOT EXISTS(SELECT 1 FROM crm_activity_automation_runs a",
             "  WHERE a.tenant=r.tenant AND a.rule_id=r.id",
-            "   AND a.source_type='task_overdue' AND a.source_id=t.id)",
+            "   AND a.source_type='task_overdue' AND a.source_id=t.id AND a.rule_version=r.version)",
             " ORDER BY CAST(json_extract(t.state,'$.due_at_unix_nanos') AS INTEGER),",
             " t.tenant,t.id LIMIT ?"
         ),

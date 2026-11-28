@@ -168,8 +168,9 @@ impl AutomationRule {
             }
         };
         // Length-delimited serialization prevents ambiguous concatenated IDs.
-        // A revision or source Task CAS version cannot change the identity.
-        let identity = serde_json::to_vec(&(self.rule_id.as_str(), kind.code(), source_id))
+        // A published rule version is part of source identity: each revision
+        // can consume a source once, while retries of that exact revision stay idempotent.
+        let identity = serde_json::to_vec(&(self.rule_id.as_str(), self.version, kind.code(), source_id))
             .map_err(|_| invalid("ACTIVITIES_AUTOMATION_IDENTITY_INVALID"))?;
         let digest = format!("{:x}", Sha256::digest(identity));
         let due_at_unix_nanos = self
@@ -272,8 +273,8 @@ mod tests {
             .plan(AutomationSource::InteractionCreated(&source), 25)
             .unwrap()
             .unwrap();
-        assert_eq!(plan.task_id, next.task_id);
-        assert_eq!(plan.idempotency_key, next.idempotency_key);
+        assert_ne!(plan.task_id, next.task_id);
+        assert_ne!(plan.idempotency_key, next.idempotency_key);
         assert_ne!(plan.subject, next.subject);
     }
 
