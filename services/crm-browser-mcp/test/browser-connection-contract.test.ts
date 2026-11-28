@@ -7,8 +7,8 @@ import * as ts from "typescript";
 // acquire and recovery must opt in to persistent CDP, while retaining the
 // existing browser contexts with blocked Service Workers.
 test("all production Cloudflare Browser Run connects use typed persistent session options", () => {
-  const code = readFileSync(new URL("../src/session.ts", import.meta.url), "utf8");
-  const source = ts.createSourceFile("session.ts", code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const code = readFileSync(new URL("../src/browser/lifecycle.ts", import.meta.url), "utf8");
+  const source = ts.createSourceFile("lifecycle.ts", code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   let connections = 0;
   let helperFound = false;
   function visit(node: ts.Node): void {
@@ -34,7 +34,9 @@ test("all production Cloudflare Browser Run connects use typed persistent sessio
   }
   visit(source);
   assert.ok(helperFound, "persistent connection contract helper missing");
-  assert.ok(connections >= 2, "both initial and recovery connection paths must be present");
+  assert.equal(connections, 2, "only initial and recovery connection paths must be present");
+  const session = readFileSync(new URL("../src/session.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(session, /\b(?:acquire|connect)\s*\(/, "DO delegates provider lifecycle to the single lifecycle module");
   assert.match(code, /serviceWorkers:\s*"block"/, "SSRF interception relies on blocked Service Workers");
 });
 

@@ -56,7 +56,7 @@ The target structure is intentionally small. It describes responsibilities, not 
 | `site-access.ts` | Target-site exact-origin Access configuration and request disposition | Slice A |
 | `workspaces.ts` | Controller + workspace UUID → DO identity | Existing `browser-workspaces.ts`; rename only if it improves clarity |
 | `browser-session.ts` | The single Durable Object and command orchestration | Existing `session.ts`; split in later slices |
-| `browser/lifecycle.ts` | Open, close, reconnect, recovery and epoch | Planned extraction |
+| `browser/lifecycle.ts` | Open, close, reconnect, page identity and context setup | Slice B; acts on DO-owned state |
 | `browser/navigation.ts` | Navigation and browser request policy | Planned extraction; existing `page-navigation.ts` is a small helper |
 | `browser/interactions.ts` | Locators, actions, waits, assertions and scenarios | Planned extraction |
 | `browser/inspection.ts` | Snapshot, frames, screenshots, diagnostics, performance and accessibility | Planned extraction |
@@ -70,7 +70,8 @@ Small existing pure helpers such as recovery, runtime epoch, browser checks, dev
 - Shared contracts contain types only; no environment reads, browser calls or runtime side effects.
 - Controller auth does not import target-site Access configuration.
 - Target-site Access does not authorize MCP controllers.
-- Browser feature modules receive the page/context/operation dependencies they need from the one session owner; they never acquire or reconnect a browser independently.
+- `session.ts` owns one `BrowserLifecycleState` per DO. `browser/lifecycle.ts` performs the only provider acquire/connect/close operations against that state and the supplied storage/binding; open and new-tab share one context initializer.
+- Other browser feature modules receive the page/context/operation dependencies they need from the one session owner; they never acquire or reconnect a browser independently.
 - Feature modules do not import the Worker entrypoint or MCP server.
 - No circular imports, generic plugin registry, dependency-injection framework or parallel execution path.
 - Public tool schemas remain at the MCP boundary; internal modules consume typed commands and return typed/bounded results.
