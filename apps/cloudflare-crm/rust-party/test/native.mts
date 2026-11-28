@@ -183,34 +183,43 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='te
  await verifyCustomerReadParity({dispatch:rpcFetch,sql,admin,viewer,tenantB,id,accountId,contactId,rMid,dealId,linkedTaskId});
  // SK-05: the SAME binary Connect + signed worker + original Activities D1
  // validates completed calls/meetings/notes independently of Sales stage audit.
+ const runScheduled=worker.scheduled.bind(worker);
  const {eventLater,eventEarlier,eventNote,failedId}=await verifyInteractions({
    dispatch:rpcFetch,sql,accountId,accountNextId,dealId,sourceSha,admin,viewer,tenantB,
    runScheduledProbe:async()=>{
- // Wrangler's documented native harness dispatches the compiled scheduled
- // entrypoint of THIS SAME Rust Worker. Neither cron nor a rule is enabled
- // in production: the boundary is read-only until complete run/lease acceptance.
+ // The actual scheduled entrypoint is invoked twice before any rule exists.
+ // It must be a true no-op: no Task, run, source consumption or audit write.
  const scheduledAuditBefore=(await sql(
    "SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id=?","tenant-a"))[0]?.n;
+ const scheduledTaskBefore=(await sql(
+   "SELECT COUNT(*) AS n FROM crm_activity_task_records WHERE tenant=?","tenant-a"))[0]?.n;
+ const scheduledRunBefore=(await sql(
+   "SELECT COUNT(*) AS n FROM crm_activity_automation_runs WHERE tenant=?","tenant-a"))[0]?.n;
  const logStart=testHarness.getLogs().length;
  for(let attempt=0;attempt<2;attempt++){
-   const result=await worker.scheduled({
-     cron:"*/5 * * * *",scheduledTime:new Date("2026-11-24T00:05:00.000Z")
-   });
+   const result=await runScheduled({cron:"*/5 * * * *",scheduledTime:new Date()});
    assert.equal(result.outcome,"ok","native scheduled Worker must dispatch without an exception");
    assert.equal(result.noRetry,false);
  }
- assert.ok(testHarness.getLogs().slice(logStart).some(entry=>
-   String(entry.message).includes("CRM_AUTOMATION_SCHEDULED_DISPATCH_DISABLED")),
-   "actual Rust scheduled callback must log its disabled-dispatch boundary");
+ const scheduledLogs=testHarness.getLogs().slice(logStart).map(entry=>String(entry.message));
+ assert.ok(scheduledLogs.some(message=>message.includes("CRM_AUTOMATION_SCHEDULED_DISPATCH:")),
+   "actual Rust scheduled callback must execute the durable dispatcher");
+ assert.equal(scheduledLogs.some(message=>message.includes("DISABLED")),false);
  assert.equal((await sql(
    "SELECT COUNT(*) AS n FROM crm_activity_automation_source_events WHERE tenant=?","tenant-a"))[0]?.n,3,
-   "two cron invocations cannot consume or duplicate source events");
+   "cron must not consume or duplicate Interaction source events");
+ assert.equal((await sql(
+   "SELECT COUNT(*) AS n FROM crm_activity_automation_runs WHERE tenant=?","tenant-a"))[0]?.n,
+   scheduledRunBefore,"no matching rules must not claim runs");
+ assert.equal((await sql(
+   "SELECT COUNT(*) AS n FROM crm_activity_task_records WHERE tenant=?","tenant-a"))[0]?.n,
+   scheduledTaskBefore,"no matching rules must not create Tasks");
  assert.equal((await sql(
    "SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id=?","tenant-a"))[0]?.n,
-   scheduledAuditBefore,"scheduled compatibility probe must not write audit");
+   scheduledAuditBefore,"no matching rules must not write audit");
  console.log(JSON.stringify({event:"crm.native-sk08a-scheduled-boundary",result:"PASS",
-   native_workerd_handler:true,repeat_count:2,no_cross_tenant_read:true,
-   no_task_creation:true,no_new_audit:true,production_cron_disabled:true}));
+   native_workerd_handler:true,repeat_count:2,no_matching_rule_no_effect:true,
+   no_task_creation:true,no_new_audit:true,production_cron_enabled:true}));
 
    },
    cleanupLongestInteraction:async(cleanupId,cleanupKey)=>{
@@ -232,7 +241,7 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='te
  await verifyRecentInteractions({dispatch:rpcFetch,sql,accountId,accountNextId,dealId,eventLater,eventEarlier,eventNote,failedId,sourceSha,admin,viewer,tenantB});
 
  await verifyWorkforce({dispatch:rpcFetch,sql,jwt,accountId,admin,viewer,tenantB,knownService});
- await typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,adminIdentity:"native-a@example.test"});
+ await typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,runScheduled,adminIdentity:"native-a@example.test"});
  const salesAuditBeforeFilter=number((await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0]?.n);
  const collectDeals=(pageSize:number,filter:{accountId?:string}={})=>collectFixturePages(async pageToken=>{
    const {body}=await fixtureRpc(rpcFetch,sales.listDeals,viewer,{...filter,page:{pageSize,pageToken}});
@@ -256,7 +265,8 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='te
  await verifySalesCoverage({dispatch:rpcFetch,sql,accountId,admin,viewer,tenantB});
  await verifySalesCommercial({dispatch:rpcFetch,sql,statement,batch,accountId,admin,viewer,tenantB});
  await verifyLifecycle({dispatch:rpcFetch,sql,jwt,accountId,admin,viewer,tenantB});
- await verifyAutomation({dispatch:rpcFetch,sql,accountId,admin,viewer,tenantB});
+ const automationFixture={dispatch:rpcFetch,sql,accountId,contactId,dealId,admin,viewer,tenantB,knownService,runScheduled};
+ await verifyAutomation(automationFixture);
  await verifySalesLeads({dispatch:rpcFetch,sql,admin,viewer,tenantB});
 
 });

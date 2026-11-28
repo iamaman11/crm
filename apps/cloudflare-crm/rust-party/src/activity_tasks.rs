@@ -198,8 +198,10 @@ async fn account_exists(db: &D1Database, tenant: &str, id: &str) -> Result<bool>
     .await?
     .is_some())
 }
-// ONE typed persistence boundary for Connect and historical native HTTP.
-// All invariant decisions remain in the original crm-activities Task aggregate.
+// ONE typed persistence boundary for Connect and scheduled Automation.
+// Both paths use the same original Task aggregate and receipt. Only the private
+// Automation caller may use the reserved system actor; the assignee is always
+// independently validated against the existing tenant membership registry.
 pub(super) async fn create_typed(
     input: CreateInput,
     key: &str,
@@ -207,6 +209,30 @@ pub(super) async fn create_typed(
     tenant: &str,
     actor: &str,
     trace: &str,
+) -> Result<std::result::Result<MutationOutcome, MutationFailure>> {
+    create_typed_inner(input,key,db,tenant,actor,trace,false).await
+}
+pub(super) async fn create_automation_typed(
+    input: CreateInput,
+    key: &str,
+    db: &D1Database,
+    tenant: &str,
+    actor: &str,
+    trace: &str,
+) -> Result<std::result::Result<MutationOutcome, MutationFailure>> {
+    if actor != super::activity_automation::AUTOMATION_ACTOR {
+        return Err(worker::Error::RustError("Invalid Automation system actor".into()));
+    }
+    create_typed_inner(input,key,db,tenant,actor,trace,true).await
+}
+async fn create_typed_inner(
+    input: CreateInput,
+    key: &str,
+    db: &D1Database,
+    tenant: &str,
+    actor: &str,
+    trace: &str,
+    allow_system_actor: bool,
 ) -> Result<std::result::Result<MutationOutcome, MutationFailure>> {
     if !(8..=120).contains(&key.len()) {
         return Ok(Err(MutationFailure::domain(
@@ -379,7 +405,7 @@ pub(super) async fn create_typed(
     };
     let saved = state(&task)?;
     let insert = format!(
-        "INSERT INTO crm_activity_task_records(tenant,id,account_id,state,version,idem_key,idem_digest,request_id,actor) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM crm_users WHERE tenant_id=? AND email=? AND active=1) AND (? IS NULL OR {}) ON CONFLICT(tenant,id) DO NOTHING",
+        "INSERT INTO crm_activity_task_records(tenant,id,account_id,state,version,idem_key,idem_digest,request_id,actor) SELECT ?,?,?,?,?,?,?,?,? WHERE (?=1 OR EXISTS (SELECT 1 FROM crm_users WHERE tenant_id=? AND email=? AND active=1)) AND (? IS NULL OR {}) ON CONFLICT(tenant,id) DO NOTHING",
         super::access_teams::ELIGIBLE
     );
     let r = bind(
@@ -395,6 +421,7 @@ pub(super) async fn create_typed(
             JsValue::from_str(&digest),
             JsValue::from_str(trace),
             JsValue::from_str(actor),
+            JsValue::from_f64(if allow_system_actor { 1.0 } else { 0.0 }),
             JsValue::from_str(tenant),
             JsValue::from_str(&target),
             team_id.map(JsValue::from_str).unwrap_or(JsValue::NULL),

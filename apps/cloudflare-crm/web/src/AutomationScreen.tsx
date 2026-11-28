@@ -28,9 +28,42 @@ function runDisposition(value:AutomationRunDisposition) {
       return {title:"Лимит попыток исчерпан",detail:"Новые попытки запрещены; подтверждение уже выполненной задачи может быть восстановлено.",retry:false};
     case AutomationRunDisposition.CANCELLED:
       return {title:"Запуск отменён",detail:"Новая задача по этому запуску запрещена.",retry:false};
+    case AutomationRunDisposition.SOURCE_STALE:
+      return {title:"Источник изменился",detail:"Исходная задача была завершена или перенесена до создания результата. Повтор запрещён.",retry:false};
     default:
       return {title:"Состояние неизвестно",detail:"Обновите историю перед продолжением.",retry:false};
   }
+}
+
+function triggerLabel(trigger:AutomationTrigger) {
+  switch(trigger) {
+    case AutomationTrigger.INTERACTION_CREATED: return "Взаимодействие создано";
+    case AutomationTrigger.DEAL_CREATED: return "Сделка создана";
+    case AutomationTrigger.TASK_OVERDUE: return "Задача просрочена";
+    default: return "Неизвестный источник";
+  }
+}
+function runResource(ruleId:string,sourceType:AutomationTrigger,sourceId:string,ruleVersion:bigint) {
+  return ruleId+"/"+sourceType+"/"+sourceId+"/"+ruleVersion.toString();
+}
+function parseRunResource(resourceId:string) {
+  const parts=resourceId.split("/");
+  if(parts.length===2&&parts[0]&&parts[1]) {
+    // Pending browser mutations created by the original Interaction-only
+    // screen remain resolvable through the backward-compatible GetRun path.
+    return {ruleId:parts[0],sourceType:AutomationTrigger.INTERACTION_CREATED,
+      sourceId:parts[1],expectedRuleVersion:0n};
+  }
+  const [ruleId,sourceType,sourceId,version]=parts;
+  const parsedType=Number(sourceType);
+  if(!version)throw Error("Некорректная версия запуска");
+  let expectedRuleVersion:bigint;
+  try { expectedRuleVersion=BigInt(version); } catch { throw Error("Некорректная версия запуска"); }
+  const supportedTypes:number[]=[AutomationTrigger.INTERACTION_CREATED,
+    AutomationTrigger.DEAL_CREATED,AutomationTrigger.TASK_OVERDUE];
+  if(!ruleId||!sourceId||expectedRuleVersion<1n||!supportedTypes.includes(parsedType))
+    throw Error("Некорректный исходный запуск");
+  return {ruleId,sourceType:parsedType as AutomationTrigger,sourceId,expectedRuleVersion};
 }
 
 // The screen is ONLY a generated Connect/Rust projection. No browser rule
@@ -44,6 +77,7 @@ export function AutomationScreen({initialInteractionId=""}:{initialInteractionId
   const [assignee,setAssignee]=useState("");
   const [delay,setDelay]=useState("0");
   const [enabled,setEnabled]=useState(false);
+  const [trigger,setTrigger]=useState<AutomationTrigger>(AutomationTrigger.INTERACTION_CREATED);
   const [interactionId,setInteractionId]=useState(initialInteractionId);
   const [runFilter,setRunFilter]=useState("");
   const me=useQuery(useCallback(async(signal:AbortSignal)=>
@@ -72,41 +106,35 @@ export function AutomationScreen({initialInteractionId=""}:{initialInteractionId
   const runMutation=useMutation({
     storageKey:"crm.automation.run.pending.v1",
     lookup:async({resourceId,key},signal)=>{
-      const split=resourceId.indexOf("/");
-      if(split<1)throw Error("Некорректный исходный запуск");
+      const source=parseRunResource(resourceId);
       return (await api.automations.getAutomationRun({
-        ruleId:resourceId.slice(0,split),interactionId:resourceId.slice(split+1),
-        receiptIdempotencyKey:key
+        ...source,receiptIdempotencyKey:key
       },{signal})).confirmedMutation;
     },
     refresh:async(marker)=>{
-      const separator=marker.resourceId.indexOf("/");
-      if(separator<1)throw Error("Некорректный исходный запуск");
-      const id=marker.resourceId.slice(0,separator);
-      if(runFilter===id&&runCursor==="")await runs.reload();
-      else {setRunFilter(id);setRunCursor("");}
+      const {ruleId}=parseRunResource(marker.resourceId);
+      if(runFilter===ruleId&&runCursor==="")await runs.reload();
+      else {setRunFilter(ruleId);setRunCursor("");}
     }
   });
   const cancelMutation=useMutation({
     storageKey:"crm.automation.cancel.pending.v1",
     lookup:async({resourceId,key},signal)=>{
-      const split=resourceId.indexOf("/");
-      if(split<1)throw Error("Некорректный исходный запуск");
+      const source=parseRunResource(resourceId);
       return (await api.automations.getAutomationRun({
-        ruleId:resourceId.slice(0,split),interactionId:resourceId.slice(split+1),
-        receiptIdempotencyKey:key
+        ...source,receiptIdempotencyKey:key
       },{signal})).confirmedMutation;
     },
     refresh:async()=>{await runs.reload();}
   });
   const reset=()=>{
     setEditing(undefined);setDraftId(newId());setSubject("");setAssignee("");
-    setDelay("0");setEnabled(false);ruleMutation.changed();
+    setDelay("0");setEnabled(false);setTrigger(AutomationTrigger.INTERACTION_CREATED);ruleMutation.changed();
   };
   const beginEdit=(rule:AutomationRule)=>{
     setEditing(rule);setDraftId(rule.ruleId);setSubject(rule.taskSubject);
     setAssignee(rule.assigneeEmail);setDelay(String(rule.dueAfterSeconds));
-    setEnabled(rule.enabled);ruleMutation.changed();
+    setEnabled(rule.enabled);setTrigger(rule.trigger);ruleMutation.changed();
   };
   const pending=ruleMutation.busy||ruleMutation.pending||runMutation.busy||runMutation.pending||
     cancelMutation.busy||cancelMutation.pending;
@@ -114,15 +142,14 @@ export function AutomationScreen({initialInteractionId=""}:{initialInteractionId
     runMutation.runIntent(()=>prepareMutation(api.automations.runInteractionAutomation,{
       ruleId,interactionId:sourceId,expectedRuleVersion:version,
       precondition:{idempotencyKey:runMutation.key}
-    },ruleId+"/"+sourceId),async()=>{
+    },runResource(ruleId,AutomationTrigger.INTERACTION_CREATED,sourceId,version)),async()=>{
       if(runFilter===ruleId&&runCursor==="")await runs.reload();
       else {setRunFilter(ruleId);setRunCursor("");}
     });
   return <>
     <PageHeader title="Автоматизация"
-      description="Типизированные правила Activities, подписанная публикация и восстановимая история. Источник — Rust и D1; браузер не исполняет правила."/>
-    <p>Доступно только явное исполнение администратором для записанного взаимодействия.
-      Автоматическое выполнение по расписанию ещё не включено.</p>
+      description="Типизированные правила Activities. Создание сделки и просрочка задачи обрабатываются Cron в Rust/D1 даже при закрытом браузере; Interaction сохраняет ручной сценарий."/>
+    <p>Плановый запуск выполняется каждые пять минут. История, повторы, отмена и сверка подтверждений принадлежат одному серверному журналу.</p>
     <QueryNotice query={me}/>
     <section aria-label="Правила автоматизации">
       <h2>Правила</h2>
@@ -130,15 +157,16 @@ export function AutomationScreen({initialInteractionId=""}:{initialInteractionId
       {rules.data?.rules.map(rule=><Card key={rule.ruleId} title={rule.taskSubject}>
         <p>ID: {rule.ruleId} · Версия: {rule.version.toString()} ·
           {rule.enabled?" Активно":" Отключено"}</p>
-        <p>Событие: создано взаимодействие · Ответственный: {rule.assigneeEmail} ·
+        <p>Событие: {triggerLabel(rule.trigger)} · Ответственный: {rule.assigneeEmail} ·
           Срок после запуска: {rule.dueAfterSeconds.toString()} сек.</p>
         {isAdmin&&<>
           <Button variant="secondary" disabled={pending}
             onClick={()=>beginEdit(rule)}>Редактировать</Button>{" "}
-          <Button disabled={pending||!rule.enabled||!interactionId.trim()}
-            onClick={()=>void executeRun(rule.ruleId,interactionId.trim(),rule.version)}>
-            Выполнить для взаимодействия
-          </Button>
+          {rule.trigger===AutomationTrigger.INTERACTION_CREATED&&
+            <Button disabled={pending||!rule.enabled||!interactionId.trim()}
+              onClick={()=>void executeRun(rule.ruleId,interactionId.trim(),rule.version)}>
+              Выполнить для взаимодействия
+            </Button>}
         </>}
         <p><Button variant="secondary" disabled={runs.busy} onClick={()=>{
           setRunFilter(rule.ruleId);setRunCursor("");
@@ -158,7 +186,7 @@ export function AutomationScreen({initialInteractionId=""}:{initialInteractionId
           }
           const id=editing?.ruleId??draftId;
           void ruleMutation.runIntent(()=>prepareMutation(api.automations.putAutomationRule,{
-            ruleId:id,trigger:AutomationTrigger.INTERACTION_CREATED,enabled,
+            ruleId:id,trigger,enabled,
             taskSubject:subject.trim(),assigneeEmail:assignee,
             dueAfterSeconds:BigInt(seconds),
             precondition:{idempotencyKey:ruleMutation.key,
@@ -170,8 +198,14 @@ export function AutomationScreen({initialInteractionId=""}:{initialInteractionId
           });
         }}>
           <h3>{editing?"Изменить правило":"Создать правило"}</h3>
-          <p>Только конкретное событие и действие CreateTask через оригинальный Rust owner.
+          <p>Выберите источник и сотрудника. Действие всегда создаётся исходным Rust Task owner.
             Деактивация правила запрещает новые исполнения; история сохраняется.</p>
+          <SelectField label="Событие запуска" value={String(trigger)}
+            onChange={e=>{setTrigger(Number(e.target.value) as AutomationTrigger);ruleMutation.changed();}}>
+            <option value={AutomationTrigger.INTERACTION_CREATED}>Взаимодействие создано (ручной запуск)</option>
+            <option value={AutomationTrigger.DEAL_CREATED}>Сделка создана (автоматически)</option>
+            <option value={AutomationTrigger.TASK_OVERDUE}>Задача просрочена (автоматически)</option>
+          </SelectField>
           <TextField label="Название новой задачи" value={subject} required
             onChange={e=>{setSubject(e.target.value);ruleMutation.changed();}}/>
           <SelectField label="Назначить активному сотруднику" value={assignee}
@@ -185,7 +219,7 @@ export function AutomationScreen({initialInteractionId=""}:{initialInteractionId
             onChange={e=>{setDelay(e.target.value);ruleMutation.changed();}}/>
           <p><label><input type="checkbox" checked={enabled} onChange={e=>{
             setEnabled(e.target.checked);ruleMutation.changed();
-          }}/> Разрешить ручное исполнение</label></p>
+          }}/> Активировать правило</label></p>
           <Button type="submit" disabled={pending||!subject.trim()||!assignee}>
             {editing?"Сохранить новую версию":"Опубликовать правило"}
           </Button>{" "}
@@ -215,7 +249,7 @@ export function AutomationScreen({initialInteractionId=""}:{initialInteractionId
         const state=runDisposition(run.disposition);
         return <Card key={run.ruleId+"/"+run.sourceEventId} title={state.title}>
         <p>Правило: {run.ruleId} · Версия: {run.ruleVersion.toString()}</p>
-        <p>Источник Interaction: {run.interactionId}</p>
+        <p>Источник: {triggerLabel(run.sourceType)} · ID: {run.sourceId} · версия: {run.sourceVersion.toString()}</p>
         <p>Оригинальный запрос: {run.originalRequestId}</p>
         <p>Попыток исполнения: {run.attemptCount.toString()} из {run.attemptLimit.toString()}</p>
         {run.disposition===AutomationRunDisposition.BACKOFF&&
@@ -226,16 +260,20 @@ export function AutomationScreen({initialInteractionId=""}:{initialInteractionId
           <p><a href={taskHref(run.taskId,"")}>Открыть созданную задачу</a> ·
             Task receipt: {run.taskRequestId}</p>:
           <><p>{state.detail}</p>
-            {isAdmin&&state.retry&&<Button disabled={pending}
-              onClick={()=>void executeRun(run.ruleId,run.interactionId,run.ruleVersion)}>
-              Восстановить исходный запуск
-            </Button>}
+            {isAdmin&&state.retry&&run.sourceType===AutomationTrigger.INTERACTION_CREATED&&
+              <Button disabled={pending}
+                onClick={()=>void executeRun(run.ruleId,run.sourceId,run.ruleVersion)}>
+                Восстановить исходный запуск
+              </Button>}
+            {state.retry&&run.sourceType!==AutomationTrigger.INTERACTION_CREATED&&
+              <p>Следующий такт Cron автоматически сверит исходный Task receipt и продолжит тот же запуск.</p>}
             {isAdmin&&run.canCancel&&<Button variant="secondary" disabled={pending}
               onClick={()=>void cancelMutation.runIntent(()=>prepareMutation(
                 api.automations.cancelAutomationRun,{
-                  ruleId:run.ruleId,interactionId:run.interactionId,expectedRuleVersion:run.ruleVersion,
+                  ruleId:run.ruleId,sourceType:run.sourceType,sourceId:run.sourceId,
+                  expectedRuleVersion:run.ruleVersion,
                   precondition:{idempotencyKey:cancelMutation.key}
-                },run.ruleId+"/"+run.interactionId
+                },runResource(run.ruleId,run.sourceType,run.sourceId,run.ruleVersion)
               ),async()=>{await runs.reload();})}>
               Отменить исходный запуск
             </Button>}</>}

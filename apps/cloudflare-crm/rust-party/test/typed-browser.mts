@@ -1,6 +1,7 @@
 // Real Chromium -> built React -> generated Connect client -> signed native Worker -> D1.
 import {chromium} from "playwright";
 import type {APIResponse, BrowserContext, Dialog, Locator, Page, Request, Response, Route} from "playwright";
+import type {WorkerHandle} from "wrangler";
 import type {BrowserFailurePhase, BrowserSql} from "./browser-boundaries.mts";
 import {number, record, records, string} from "../../scripts/json-boundary.mts";
 import {expect} from "playwright/test";
@@ -38,6 +39,7 @@ import {PrivacyCaseService} from "../../../../packages/client/gen/crm/customer_p
 type RpcMethod = Parameters<typeof fixtureRpcPath>[0];
 type BrowserOptions = {
  base: string; admin: string; viewer: string; tenantB: string; sql: BrowserSql; sourceSha: string;
+ runScheduled: WorkerHandle["scheduled"];
  adminIdentity: string; adminHeaders?: Record<string,string>; viewerHeaders?: Record<string,string>;
  tenantBHeaders?: Record<string,string>; tenantA?: string; features?: string[];
  beforeViewer?: () => Promise<() => Promise<void>>; directory?: string;
@@ -45,7 +47,7 @@ type BrowserOptions = {
 type Recovery = {kind: "replay" | "lookup"; original_request_id: string; subsequent_request_id: string};
 type OwnerRecovery = Recovery & {owner: string; kind: "lookup"};
 
-export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,adminIdentity,
+export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,runScheduled,adminIdentity,
  adminHeaders={"cf-access-jwt-assertion":admin},
  viewerHeaders={"cf-access-jwt-assertion":viewer},
  tenantBHeaders={"cf-access-jwt-assertion":tenantB},tenantA="tenant-a",
@@ -3301,8 +3303,9 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
 
    await verifyBrowserMobile({page,directory,newPipelineId,navigate,reloadDocument,checkpoint});
 
-   await verifyBrowserAutomation({page,sql,tenantA,dealId,laterCall,runId,navigate,
-     reloadDocument,checkpoint,assertMutation});
+   const automationScenario={page,sql,tenantA,dealId,laterCall,runId,navigate,
+     reloadDocument,checkpoint,assertMutation,runScheduled};
+   await verifyBrowserAutomation(automationScenario);
 
    await navigate("leads","Лиды");
    const leadName="Browser referral "+runId;
