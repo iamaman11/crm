@@ -112,9 +112,9 @@ def check_workflow(path: Path) -> WorkflowPolicyResult:
         return WorkflowPolicyResult(path, tuple(errors))
 
     push_section = _event_section(lines, event_start, event_end, "push")
-    # A single, explicit exception for the one CRM development release job.
+    # One CRM workflow serves writer Gate A, integration preflight and dev release.
     # All unrelated workflows retain their main-only policy.
-    expected = ["- dev", "- 'integration/parallel/**'"] if crm_dev_workflow else ["- main"]
+    expected = ["- dev", "- 'feat/parallel/**'", "- 'integration/parallel/**'"] if crm_dev_workflow else ["- main"]
     branch_lines = []
     if "    branches:" in push_section:
         for line in push_section[push_section.index("    branches:") + 1:]:
@@ -123,7 +123,7 @@ def check_workflow(path: Path) -> WorkflowPolicyResult:
             elif line.strip():
                 break
     if branch_lines != expected or "    branches-ignore:" in push_section:
-        errors.append("CRM push must be restricted to dev and integration/parallel/**"
+        errors.append("CRM push must be restricted to dev, feat/parallel/** and integration/parallel/**"
                       if crm_dev_workflow else "push must be restricted to branch main")
 
     # Fail closed on any CI workflow that treats .md documentation as a
@@ -194,7 +194,7 @@ def main() -> int:
 
     workflows = discover_workflows(args.root)
     # The former main-only product-plane workflows are not part of CRM.
-    # Only the exact-SHA dev pipeline may build, test or publish this app.
+    # One exact-SHA pipeline builds/tests writer and integration refs; only dev publishes.
     canonical = {".github/workflows/cloudflare-crm-spike.yml"}
     observed = {path.relative_to(args.root).as_posix() for path in workflows}
     if observed != canonical:
