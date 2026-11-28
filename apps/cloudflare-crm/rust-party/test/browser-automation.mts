@@ -16,7 +16,8 @@ type AutomationScenario = {
   runScheduled: (input:{cron:string;scheduledTime:Date})=>Promise<{outcome:string;noRetry:boolean}>;
 };
 type AutomationMethod = typeof AutomationService.method.putAutomationRule |
-  typeof AutomationService.method.runInteractionAutomation | typeof TaskService.method.createTask;
+  typeof AutomationService.method.runInteractionAutomation |
+  typeof AutomationService.method.cancelAutomationRun | typeof TaskService.method.createTask;
 
 export async function verifyBrowserAutomation({page,sql,tenantA,dealId,laterCall,runId,navigate,
   reloadDocument,checkpoint,assertMutation,runScheduled}: AutomationScenario) {
