@@ -5,7 +5,8 @@
   "workers_dev": false,
   "preview_urls": false,
   "vars": {
-    "CRM_CI_LOCAL_ONLY": "yes"
+    "CRM_CI_LOCAL_ONLY": "yes",
+    "CRM_ACCESS_AUDIENCE": "e0a664cf4f46f0d13d0ac0d8dd621c718c70842a377bf6738d1a24f0d16cedc7"
   },
   "assets": {
     "directory": "../dist",

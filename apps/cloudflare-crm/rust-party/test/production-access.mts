@@ -58,6 +58,8 @@ mock.method(globalThis,"fetch",async(...args: Parameters<typeof fetch>)=>{
 });
 const configPath=join(root,"wrangler.jsonc");
 const config=JSON.parse(readFileSync(configPath,"utf8"));
+assert.equal(config.vars?.CRM_ACCESS_AUDIENCE,audience,
+  "the local production-artifact harness must use the committed production Access audience");
 assert.equal(config.d1_databases.length,1);
 assert.equal(config.d1_databases[0].database_id,"00000000-0000-4000-8000-000000000001");
 assert.equal(config.main,"./build/index.js");
@@ -71,6 +73,7 @@ try{
   await worker.applyD1Migrations("DB");
   const env=await worker.getEnv();
   assert.equal(env.CRM_CI_LOCAL_ONLY,"no");
+  assert.equal(env.CRM_ACCESS_AUDIENCE,audience);
   assert.equal(env.CRM_NATIVE_CI_JWKS,undefined);
   const db=env.DB;
   assert.ok(db);
@@ -87,6 +90,7 @@ try{
   const initial=jwksRequests;
   await call("/api/session",null,401);
   await call("/api/session",token(admin,{aud:"wrong-audience"}),401);
+  await call("/api/session",token(admin,{aud:"2d60128cb04e0d2bc181457656441c8c4c778d6ff0b1533af3333c77197d331a"}),401);
   await call("/api/session",token(admin,{exp:now-1}),401);
   assert.equal(jwksRequests,initial,"invalid claims must fail before JWKS fetch");
   assert.equal((await call("/api/session",token(admin),200)).role,"admin");
