@@ -6,7 +6,7 @@ use super::d1_write::{self, Confirmation};
 use super::{access, activity_interactions, activity_tasks, bind, now_nanos};
 use connectrpc::{ConnectError, ErrorCode};
 use crm_activities::automation::{AutomationRule, AutomationSource, AutomationTrigger};
-use crm_activities::{Task, TaskOwner, TaskPriority};
+use crm_activities::{TaskOwner, TaskPriority};
 use crm_module_sdk::{ActorId, RecordId};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -281,7 +281,7 @@ pub(super) async fn put(
             "due_after_seconds,published_at_unix_nanos,idem_key,idem_digest,request_id,actor)",
             " VALUES(?,?,1,'interaction_created',?,?,?,?,?,",
             " CAST(strftime('%s','now') AS INTEGER)*1000000000+",
-            " CAST(substr(strftime('%f','now'),4,3) AS INTEGER)*1000000,?,?,?,?,?)",
+            " CAST(substr(strftime('%f','now'),4,3) AS INTEGER)*1000000,?,?,?,?)",
             " ON CONFLICT(tenant,id) DO NOTHING"
         )
     } else {
