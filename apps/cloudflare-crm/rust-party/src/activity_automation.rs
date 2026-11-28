@@ -840,7 +840,15 @@ async fn execute_claimed(
         activity_tasks::create_automation_typed(input, &row.task_id, db, context.tenant, context.actor, context.request_id)
             .await
     } else {
-        activity_tasks::create_typed(input, &row.task_id, db, tenant, actor, request_id).await
+        activity_tasks::create_typed(
+            input,
+            &row.task_id,
+            db,
+            context.tenant,
+            context.actor,
+            context.request_id,
+        )
+        .await
     };
     let outcome = match result {
         Ok(Ok(outcome)) => outcome,
