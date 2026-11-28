@@ -113,7 +113,9 @@ export async function verifyBrowserAutomation({page,sql,tenantA,dealId,laterCall
    await page.getByLabel("Воронка продаж",{exact:true}).selectOption(string(sourceDeal.pipeline_id));
    await page.getByRole("button",{name:"Новая сделка",exact:true}).click();
    await page.getByLabel("Название сделки",{exact:true}).fill(createdDealTitle);
-   await page.getByLabel("Поиск: Клиент",{exact:true}).fill(accountName);
+   const accountSearch=page.getByLabel("Поиск: Клиент",{exact:true});
+   await accountSearch.fill(accountName);
+   await accountSearch.press("Enter");
    const accountPicker=page.getByLabel("Клиент",{exact:true});
    await accountPicker.locator('option[value="'+accountId+'"]').waitFor({state:"attached"});
    await accountPicker.selectOption(accountId);
