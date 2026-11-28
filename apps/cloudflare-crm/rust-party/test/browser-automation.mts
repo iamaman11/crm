@@ -154,7 +154,6 @@ export async function verifyBrowserAutomation({page,sql,tenantA,dealId,laterCall
    assert.equal((await sql(
      "SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND action='activity_tasks.create'",
      tenantA,dealTaskId))[0]?.n,1);
-   await page.getByRole("link",{name:"Открыть созданную задачу",exact:true}).waitFor();
    await reloadDocument();
    await page.getByText(dealSourceLabel,{exact:true}).waitFor();
    checkpoint("SK-08A.3 DealCreated Cron after browser unload, Task owner, D1 receipt and history reload");

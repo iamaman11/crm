@@ -12,6 +12,12 @@ ALTER TABLE crm_activity_automation_rules
 ALTER TABLE crm_activity_automation_rules
  ADD COLUMN published_after_deal_event_rowid INTEGER NOT NULL DEFAULT 0
  CHECK(published_after_deal_event_rowid>=0);
+-- These metadata-only backfills must not be interpreted as rule mutations.
+-- Temporarily remove guards that require a version increment or an active
+-- assignee; restore the exact guards before the migration completes.
+DROP TRIGGER crm_activity_automation_rule_assignee_update;
+DROP TRIGGER crm_activity_automation_rule_version_guard;
+
 UPDATE crm_activity_automation_rules
  SET published_after_deal_event_rowid=COALESCE((
   SELECT MAX(e.rowid) FROM crm_sales_deal_events e
@@ -22,6 +28,21 @@ UPDATE crm_activity_automation_rules
    CAST(strftime('%s','now') AS INTEGER)*1000000000+
    CAST(substr(strftime('%f','now'),4,3) AS INTEGER)*1000000
  WHERE published_at_unix_nanos=0;
+
+CREATE TRIGGER crm_activity_automation_rule_assignee_update
+BEFORE UPDATE ON crm_activity_automation_rules
+WHEN NEW.enabled=1 AND NOT EXISTS(
+ SELECT 1 FROM crm_users WHERE tenant_id=NEW.tenant
+ AND email=NEW.assignee_email AND active=1 AND role IN ('admin','viewer')
+ AND email NOT LIKE 'service:%'
+)
+BEGIN SELECT RAISE(ABORT,'AUTOMATION_ASSIGNEE_NOT_ACTIVE'); END;
+
+CREATE TRIGGER crm_activity_automation_rule_version_guard
+BEFORE UPDATE ON crm_activity_automation_rules
+WHEN NEW.version<>OLD.version+1 OR NEW.id IS NOT OLD.id
+ OR NEW.tenant IS NOT OLD.tenant
+BEGIN SELECT RAISE(ABORT,'AUTOMATION_RULE_VERSION_CONFLICT'); END;
 
 DROP TRIGGER crm_activity_automation_rule_insert_receipt;
 DROP TRIGGER crm_activity_automation_rule_update_receipt;
