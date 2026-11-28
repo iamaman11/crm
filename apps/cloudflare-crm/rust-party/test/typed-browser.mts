@@ -2460,7 +2460,16 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,runS
    await expect(page.getByRole("button",{name:"Подтвердить импорт",exact:true})).toHaveCount(0);
    assert.equal(number(record((await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant=?",
      tenantA))[0]).n),beforeReloadConflict);
-   checkpoint("CSV source registry survives reload; changed-byte reimport reuses Party; known-ID conflict blocks writes");
+   // A selected source with the old two-column CSV is a schema error, not a known-ID conflict.
+   const sourceMissingIdCsv="kind,display_name\r\nperson,Missing External ID "+runId+"\r\n";
+   await page.getByLabel("CSV-файл",{exact:true}).setInputFiles({
+     name:"source-missing-id.csv",mimeType:"text/csv",buffer:Buffer.from(sourceMissingIdCsv)});
+   await page.getByRole("button",{name:"Проверить импорт",exact:true}).click();
+   await page.getByText("Для выбранного источника используйте CSV с четырьмя колонками, включая party_id.",{exact:true}).waitFor();
+   await expect(page.getByText("Обнаружены расхождения по известному ID источника. Импорт всего файла запрещён; исправьте CSV. Данные не записаны.",
+     {exact:true})).toHaveCount(0);
+   await expect(page.getByRole("button",{name:"Подтвердить импорт",exact:true})).toHaveCount(0);
+   checkpoint("CSV source registry survives reload; changed-byte reimport reuses Party; known-ID conflict blocks writes; schema errors remain distinct");
 
    const exportReply=page.waitForResponse(r=>matchesRpcPath(r,fixtureRpcPath(PartyCsvService.method.previewPartyExport)));
    const downloadPending=page.waitForEvent("download");
