@@ -554,6 +554,9 @@ export async function verifyAutomation({dispatch,sql,accountId,contactId,dealId,
      "tenant-a",overdueRuleId,staleSourceId))[0];
    assert.equal(stale?.source_stale,1);
    assert.equal((await sql(
+     "SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND action='activities.automation.run.source_stale'",
+     "tenant-a",String(staleRun.task_id)))[0]?.n,1);
+   assert.equal((await sql(
      "SELECT COUNT(*) n FROM crm_activity_task_records WHERE tenant=? AND id=?",
      "tenant-a",String(staleRun.task_id)))[0]?.n,0);
 

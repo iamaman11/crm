@@ -1081,12 +1081,19 @@ async fn dispatch_tenant(
             " EXISTS(SELECT 1 FROM crm_activity_task_receipts t",
             "  WHERE t.tenant=crm_activity_automation_runs.tenant",
             "   AND t.key=crm_activity_automation_runs.task_id)",
-            " OR (lease_until_unix_millis<=unixepoch('now')*1000",
-            " AND next_attempt_at_unix_millis<=unixepoch('now')*1000))",
+            " OR (attempt_count<? AND lease_until_unix_millis<=unixepoch('now')*1000",
+            " AND next_attempt_at_unix_millis<=unixepoch('now')*1000",
+            " AND EXISTS(SELECT 1 FROM crm_activity_automation_rules r",
+            "  WHERE r.tenant=crm_activity_automation_runs.tenant",
+            "   AND r.id=crm_activity_automation_runs.rule_id",
+            "   AND r.version=crm_activity_automation_runs.rule_version AND r.enabled=1",
+            "   AND EXISTS(SELECT 1 FROM crm_users u WHERE u.tenant_id=r.tenant",
+            "    AND u.email=r.assignee_email AND u.active=1))))",
             " ORDER BY seq LIMIT ?"
         ),
         &[
             JsValue::from_str(tenant),
+            JsValue::from_f64(MAX_ATTEMPTS as f64),
             JsValue::from_f64(MAX_SCHEDULED_BATCH as f64),
         ],
     )
