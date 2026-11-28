@@ -131,6 +131,13 @@ jobs:
             throw new Error("Isolated D1 creation failed: HTTP "+response.status+" "+JSON.stringify(payload.errors||[]));
           }
           const databaseId=payload.result.uuid;
+          writeFileSync(process.env.GITHUB_OUTPUT,[
+            \`worker_name=\${workerName}\`,
+            \`database_name=\${databaseName}\`,
+            \`database_id=\${databaseId}\`,
+            \`preview_host=\${previewHost}\`,
+            \`source_sha=\${sha}\`
+          ].join("\\n")+"\\n",{flag:"a"});
           const config={
             name:workerName,
             main:"./.release/preview/rust-party/build/index.js",
@@ -160,14 +167,6 @@ jobs:
             vars:{GIT_SHA:sha}
           };
           writeFileSync("apps/cloudflare-crm/preview-wrangler.jsonc",JSON.stringify(config,null,2)+"\n");
-          const out=[
-            `worker_name=${workerName}`,
-            `database_name=${databaseName}`,
-            `database_id=${databaseId}`,
-            `preview_host=${previewHost}`,
-            `source_sha=${sha}`
-          ].join("\n")+"\n";
-          writeFileSync(process.env.GITHUB_OUTPUT,out,{flag:"a"});
           writeFileSync(process.env.RUNNER_TEMP+"/crm-preview-lease.json",JSON.stringify({
             worker_name:workerName,database_name:databaseName,database_id:databaseId,
             preview_host:previewHost,source_sha:sha,source_run_id:run,
@@ -217,26 +216,24 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: 5bd5e1e1e813f061afc259e91334262d
           SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
           SOURCE_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          PREVIEW_DATABASE_ID: ${{ steps.preview.outputs.database_id }}
         run: |
           node --input-type=module <<'NODE'
           const account=process.env.CLOUDFLARE_ACCOUNT_ID;
           const token=process.env.CLOUDFLARE_API_TOKEN;
-          const suffix=`${process.env.SOURCE_RUN_ID}-${process.env.SOURCE_RUN_ATTEMPT}`;
-          const workerName=`crm-preview-${suffix}`;
-          const previewHost=`${workerName}.crm-5bd5e1e1.workers.dev`;
-          async function cf(path,method="GET",body){
-            const r=await fetch(`https://api.cloudflare.com/client/v4/accounts/${account}${path}`,{
-              method,headers:{authorization:`Bearer ${token}`,...(body?{"content-type":"application/json"}:{})},
-              ...(body?{body:JSON.stringify(body)}:{})
+          const suffix=\`\${process.env.SOURCE_RUN_ID}-\${process.env.SOURCE_RUN_ATTEMPT}\`;
+          const workerName=\`crm-preview-\${suffix}\`;
+          async function remove(path){
+            const r=await fetch(\`https://api.cloudflare.com/client/v4/accounts/\${account}\${path}\`,{
+              method:"DELETE",headers:{authorization:\`Bearer \${token}\`}
             });
-            const p=r.status===204?{success:true}:await r.json();
-            if(!r.ok||p.success!==true)throw new Error(`Cloudflare cleanup ${method} ${path} HTTP ${r.status}: ${JSON.stringify(p.errors||[])}`);
-            return p.result;
+            if(r.status===404)return false;
+            const p=await r.json();
+            if(!r.ok||p.success!==true)throw new Error(\`Cloudflare cleanup DELETE \${path} HTTP \${r.status}: \${JSON.stringify(p.errors||[])}\`);
+            return true;
           }
-          const workers=await cf("/workers/scripts?per_page=100");
-          if((workers||[]).some(w=>w.id===workerName))await cf(`/workers/scripts/${workerName}`,"DELETE");
-          const databases=await cf("/d1/database?per_page=100");
-          const db=(databases||[]).find(x=>x.name===workerName);
-          if(db)await cf(`/d1/database/${db.uuid}`,"DELETE");
-          console.log(JSON.stringify({event:"crm.branch-preview-cleanup",worker:workerName,worker_deleted:!!((workers||[]).some(w=>w.id===workerName)),database_deleted:!!db,access_cleanup:"handled separately by trusted Cloudflare controller"}));
+          const workerDeleted=await remove(\`/workers/scripts/\${workerName}\`);
+          const databaseId=process.env.PREVIEW_DATABASE_ID;
+          const databaseDeleted=databaseId?await remove(\`/d1/database/\${databaseId}\`):false;
+          console.log(JSON.stringify({event:"crm.branch-preview-cleanup",worker:workerName,worker_deleted:workerDeleted,database_deleted:databaseDeleted,access_cleanup:"handled separately by trusted Cloudflare controller"}));
           NODE
