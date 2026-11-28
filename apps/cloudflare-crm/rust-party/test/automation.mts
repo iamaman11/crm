@@ -401,7 +401,8 @@ export async function verifyAutomation({dispatch,sql,accountId,contactId,existin
    const publishedDealCursor=(await sql(
      "SELECT published_after_deal_event_rowid FROM crm_activity_automation_rules WHERE tenant=? AND id=?",
      "tenant-a",dealRuleId))[0];
-   assert.ok(Number(publishedDealCursor?.published_after_deal_event_rowid)>=Number(oldDealEvent.rowid),
+   assert.ok(publishedDealCursor);
+   assert.ok(Number(publishedDealCursor.published_after_deal_event_rowid)>=Number(oldDealEvent.rowid),
      "a newly published rule starts after every existing Deal event");
    const dealId="automation-deal-source-"+suffix;
    const dealInput={...dealCreationInput(dealId,accountId,contactId),
