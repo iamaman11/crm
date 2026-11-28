@@ -15,6 +15,8 @@ use wasm_bindgen::JsValue;
 use worker::D1Database;
 
 pub(super) const MAX_ATTEMPTS: i64 = 5;
+const MAX_SCHEDULED_BATCH: u32 = 50;
+pub(super) const AUTOMATION_ACTOR: &str = "service:crm-automation";
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(super) struct RuleRow {
@@ -43,6 +45,8 @@ pub(super) struct RuleSaved {
 #[derive(Deserialize)]
 struct SourceRow {
     event_id: String,
+    #[serde(default)]
+    source_version: i64,
 }
 #[derive(Clone, Deserialize)]
 pub(super) struct RunRow {
@@ -50,7 +54,12 @@ pub(super) struct RunRow {
     pub rule_id: String,
     pub rule_version: i64,
     pub source_event_id: String,
+    pub source_type: String,
+    pub source_id: String,
+    pub source_version: i64,
     pub interaction_id: String,
+    pub source_stale: i64,
+    pub last_error_code: Option<String>,
     pub task_id: String,
     pub task_intent: String,
     pub status: String,
@@ -85,6 +94,7 @@ pub(super) enum RunDisposition {
     Backoff,
     AttemptsExhausted,
     Cancelled,
+    SourceStale,
 }
 impl RunRow {
     pub(super) fn can_cancel(&self) -> bool {
@@ -92,6 +102,7 @@ impl RunRow {
             && self.cancel_request_id.is_none()
             && self.receipt_exists == 0
             && self.task_exists == 0
+            && self.source_stale == 0
     }
 
     pub(super) fn disposition(&self) -> Result<RunDisposition, ConnectError> {
@@ -99,6 +110,7 @@ impl RunRow {
             "committed" => Ok(RunDisposition::Committed),
             "pending" if self.cancel_request_id.is_some() => Ok(RunDisposition::Cancelled),
             "pending" if self.receipt_exists == 1 => Ok(RunDisposition::ReconcileReceipt),
+            "pending" if self.source_stale == 1 => Ok(RunDisposition::SourceStale),
             "pending" if self.rule_current != 1 => Ok(RunDisposition::RuleSuperseded),
             "pending" if self.assignee_active != 1 => Ok(RunDisposition::WaitingAssignee),
             "pending" if self.lease_active == 1 => Ok(RunDisposition::Executing),
@@ -134,8 +146,14 @@ pub(super) fn rule_id(value: &str) -> Result<RecordId, ConnectError> {
         .map_err(|_| invalid("ACTIVITIES_AUTOMATION_RULE_ID_INVALID"))
 }
 
-pub(super) fn check(input: &RuleInput) -> Result<AutomationRule, ConnectError> {
-    if input.trigger != "interaction_created"
+pub(super) fn check(input: &RuleInput, version: i64) -> Result<AutomationRule, ConnectError> {
+    let trigger = match input.trigger.as_str() {
+        "interaction_created" => AutomationTrigger::InteractionCreated,
+        "deal_created" => AutomationTrigger::DealCreated,
+        "task_overdue" => AutomationTrigger::TaskOverdue,
+        _ => return Err(invalid("ACTIVITIES_AUTOMATION_TRIGGER_NOT_ENABLED")),
+    };
+    if version <= 0
         || input.due_after_seconds < 0
         || input.due_after_seconds > 31_536_000
         || input.assignee_email.starts_with("service:")
@@ -149,8 +167,8 @@ pub(super) fn check(input: &RuleInput) -> Result<AutomationRule, ConnectError> {
     );
     let value = AutomationRule {
         rule_id: rule_id(&input.rule_id)?,
-        version: 1,
-        trigger: AutomationTrigger::InteractionCreated,
+        version,
+        trigger,
         task_subject: input.task_subject.clone(),
         target: owner,
         priority: TaskPriority::High,
@@ -216,7 +234,7 @@ pub(super) async fn get(
     bind(
         db,
         concat!(
-            "SELECT id AS rule_id,version,trigger,enabled,task_subject,",
+            "SELECT id AS rule_id,version,trigger_kind AS trigger,enabled,task_subject,",
             "assignee_email,due_after_seconds FROM crm_activity_automation_rules",
             " WHERE tenant=? AND id=?"
         ),
@@ -243,7 +261,13 @@ pub(super) async fn put(
     request_id: &str,
 ) -> Result<RuleSaved, ConnectError> {
     let tenant = &principal.tenant;
-    let _checked = check(&input)?;
+    let next_version = match expected {
+        Some(current) => current.checked_add(1),
+        None => Some(1),
+    }
+    .filter(|version| *version > 0)
+    .ok_or_else(|| invalid("ACTIVITIES_AUTOMATION_RULE_VERSION_INVALID"))?;
+    let _checked = check(&input, next_version)?;
     let hash = digest(&input, expected)?;
     if let Some(prior) = receipt(db, tenant, key).await.map_err(|_| storage())? {
         return saved_receipt(prior, &hash, &input.rule_id, true);
@@ -259,15 +283,24 @@ pub(super) async fn put(
     let sql = if insert {
         concat!(
             "INSERT INTO crm_activity_automation_rules",
-            "(tenant,id,version,trigger,enabled,task_subject,assignee_email,",
-            "due_after_seconds,idem_key,idem_digest,request_id,actor)",
-            " VALUES(?,?,1,?,?,?,?,?,?,?,?,?) ON CONFLICT(tenant,id) DO NOTHING"
+            "(tenant,id,version,trigger,trigger_kind,enabled,task_subject,assignee_email,",
+            "due_after_seconds,published_at_unix_nanos,published_after_deal_event_rowid,",
+            "idem_key,idem_digest,request_id,actor)",
+            " VALUES(?,?,1,'interaction_created',?,?,?,?,?,",
+            " CAST(strftime('%s','now') AS INTEGER)*1000000000+",
+            " CAST(substr(strftime('%f','now'),4,3) AS INTEGER)*1000000,",
+            " COALESCE((SELECT MAX(rowid) FROM crm_sales_deal_events WHERE tenant=?),0),?,?,?,?)",
+            " ON CONFLICT(tenant,id) DO NOTHING"
         )
     } else {
         concat!(
             "UPDATE crm_activity_automation_rules SET version=version+1,",
-            "trigger=?,enabled=?,task_subject=?,assignee_email=?,",
-            "due_after_seconds=?,idem_key=?,idem_digest=?,request_id=?,actor=?",
+            "trigger='interaction_created',trigger_kind=?,enabled=?,task_subject=?,assignee_email=?,",
+            "due_after_seconds=?,published_at_unix_nanos=",
+            "CAST(strftime('%s','now') AS INTEGER)*1000000000+",
+            "CAST(substr(strftime('%f','now'),4,3) AS INTEGER)*1000000,",
+            "published_after_deal_event_rowid=COALESCE((SELECT MAX(rowid) FROM crm_sales_deal_events WHERE tenant=?),0),",
+            "idem_key=?,idem_digest=?,request_id=?,actor=?",
             " WHERE tenant=? AND id=? AND version=?"
         )
     };
@@ -280,6 +313,7 @@ pub(super) async fn put(
             JsValue::from_str(&input.task_subject),
             JsValue::from_str(&input.assignee_email),
             JsValue::from_f64(input.due_after_seconds as f64),
+            JsValue::from_str(tenant),
             JsValue::from_str(key),
             JsValue::from_str(&hash),
             JsValue::from_str(request_id),
@@ -292,6 +326,7 @@ pub(super) async fn put(
             JsValue::from_str(&input.task_subject),
             JsValue::from_str(&input.assignee_email),
             JsValue::from_f64(input.due_after_seconds as f64),
+            JsValue::from_str(tenant),
             JsValue::from_str(key),
             JsValue::from_str(&hash),
             JsValue::from_str(request_id),
@@ -334,7 +369,7 @@ pub(super) async fn list_rules(
     bind(
         db,
         concat!(
-            "SELECT id AS rule_id,version,trigger,enabled,task_subject,",
+            "SELECT id AS rule_id,version,trigger_kind AS trigger,enabled,task_subject,",
             "assignee_email,due_after_seconds FROM crm_activity_automation_rules",
             " WHERE tenant=? AND id>? ORDER BY id LIMIT ?"
         ),
@@ -359,7 +394,7 @@ async fn source(
     bind(
         db,
         concat!(
-            "SELECT event_id FROM crm_activity_automation_source_events",
+            "SELECT event_id,source_version FROM crm_activity_automation_source_events",
             " WHERE tenant=? AND source_id=?",
             " AND event_type='crm.activities.interaction_created.v1'"
         ),
@@ -375,8 +410,10 @@ async fn source(
 // A receipt candidate takes precedence over revoked authority; only the
 // original Task owner may validate its digest and reconcile the actual commit.
 const RUN_SELECT: &str = concat!(
-    "SELECT a.seq,a.rule_id,a.rule_version,a.source_event_id,a.interaction_id,a.task_id,",
-    "a.task_intent,a.status,a.requested_by,a.original_request_id,a.task_request_id,",
+    "SELECT a.seq,a.rule_id,a.rule_version,a.source_event_id,a.source_type,a.source_id,",
+    "a.source_version,COALESCE(a.interaction_id,'') AS interaction_id,a.source_stale,",
+    "a.last_error_code,a.task_id,a.task_intent,a.status,a.requested_by,",
+    "a.original_request_id,a.task_request_id,",
     "a.created_at_unix_millis,a.completed_at_unix_millis,",
     "EXISTS(SELECT 1 FROM crm_activity_task_receipts t WHERE t.tenant=a.tenant",
     " AND t.key=a.task_id) AS receipt_exists,",
@@ -529,7 +566,7 @@ pub(super) async fn execute_interaction(
                 "AUTOMATION_RULE_NOT_ENABLED_OR_STALE",
             ));
         }
-        let domain = check(&wire_input(&rule))?;
+        let domain = check(&wire_input(&rule), rule.version)?;
         let original = activity_interactions::get(db, tenant, interaction_id)
             .await
             .map_err(|_| storage())?
@@ -560,10 +597,10 @@ pub(super) async fn execute_interaction(
             db,
             concat!(
                 "INSERT INTO crm_activity_automation_runs",
-                "(tenant,rule_id,rule_version,source_event_id,interaction_id,task_id,",
+                "(tenant,rule_id,rule_version,source_event_id,source_type,source_id,source_version,interaction_id,task_id,",
                 "task_intent,run_request_key,run_request_digest,status,",
                 "requested_by,original_request_id,created_at_unix_millis)",
-                " SELECT ?,r.id,r.version,s.event_id,s.source_id,?,?,?,? ,'pending',?,?,?",
+                " SELECT ?,r.id,r.version,s.event_id,'interaction_created',s.source_id,s.source_version,s.source_id,?,?,?,?,'pending',?,?,?",
                 " FROM crm_activity_automation_rules r",
                 " JOIN crm_activity_automation_source_events s ON s.tenant=r.tenant",
                 " WHERE r.tenant=? AND r.id=? AND r.version=? AND r.enabled=1",
@@ -656,6 +693,37 @@ pub(super) async fn execute_interaction(
             ));
         }
     }
+    execute_claimed(
+        db,
+        row,
+        ExecutionContext {
+            tenant,
+            actor: &principal.identity,
+            request_id,
+            now: super::now_nanos(),
+            system_actor: false,
+            rpc_method: "RunInteractionAutomation",
+        },
+    )
+    .await
+}
+
+struct ExecutionContext<'a> {
+    tenant: &'a str,
+    actor: &'a str,
+    request_id: &'a str,
+    now: i64,
+    system_actor: bool,
+    rpc_method: &'static str,
+}
+
+// One execution path owns both manual Interaction and autonomous sources.
+// The only difference is the trusted actor supplied to the original Task owner.
+async fn execute_claimed(
+    db: &D1Database,
+    row: RunRow,
+    context: ExecutionContext<'_>,
+) -> Result<RunSaved, ConnectError> {
     match row.disposition()? {
         RunDisposition::Committed => {
             return Ok(RunSaved {
@@ -690,6 +758,9 @@ pub(super) async fn execute_interaction(
                 "AUTOMATION_RUN_CANCELLED",
             ));
         }
+        RunDisposition::SourceStale => {
+            return Err(ConnectError::failed_precondition("AUTOMATION_SOURCE_STALE"));
+        }
         RunDisposition::RetryReady | RunDisposition::ReconcileReceipt => {}
     }
     let input: activity_tasks::CreateInput =
@@ -699,12 +770,13 @@ pub(super) async fn execute_interaction(
             "ACTIVITIES_AUTOMATION_INTENT_MISMATCH",
         ));
     }
-    // A disabled/revoked rule cannot trigger a NEW task. A proven original
-    // receipt may still be reconciled after disable/revocation.
     let has_receipt = bind(
         db,
         "SELECT key FROM crm_activity_task_receipts WHERE tenant=? AND key=?",
-        &[JsValue::from_str(tenant), JsValue::from_str(&row.task_id)],
+        &[
+            JsValue::from_str(context.tenant),
+            JsValue::from_str(&row.task_id),
+        ],
     )
     .map_err(|_| storage())?
     .first::<serde_json::Value>(None)
@@ -712,7 +784,96 @@ pub(super) async fn execute_interaction(
     .map_err(|_| storage())?
     .is_some();
     if !has_receipt {
-        let current = get(db, tenant, rule_id.as_str())
+        if row.source_type == "task_overdue" {
+            // Preserve the full nanosecond timestamp and fence against a concurrent
+            // worker. The request id belongs to the new attempt, not the expired
+            // lease recorded on this durable run.
+            let now = context.now.to_string();
+            let current = bind(
+                db,
+                concat!(
+                    "SELECT id FROM crm_activity_task_records WHERE tenant=? AND id=? AND version=?",
+                    " AND json_extract(state,'$.status')='open'",
+                    " AND json_type(state,'$.due_at_unix_nanos')='integer'",
+                    " AND CAST(json_extract(state,'$.due_at_unix_nanos') AS INTEGER)<=CAST(? AS INTEGER)"
+                ),
+                &[
+                    JsValue::from_str(context.tenant),
+                    JsValue::from_str(&row.source_id),
+                    JsValue::from_f64(row.source_version as f64),
+                    JsValue::from_str(&now),
+                ],
+            )
+            .map_err(|_| storage())?
+            .first::<serde_json::Value>(None)
+            .await
+            .map_err(|_| storage())?
+            .is_some();
+            if !current {
+                // A failed previous attempt leaves its old lease_request_id on the
+                // run. Compare against that observed lease, not this retry's new
+                // request id, and only stale the run after the lease has expired.
+                let _write = bind(
+                    db,
+                    concat!(
+                        "UPDATE crm_activity_automation_runs SET source_stale=1,",
+                        "last_error_code='AUTOMATION_TASK_SOURCE_STALE'",
+                        " WHERE tenant=? AND rule_id=? AND source_event_id=?",
+                        " AND status='pending' AND source_type='task_overdue'",
+                        " AND source_stale=0 AND cancel_request_id IS NULL",
+                        " AND lease_request_id IS ? AND lease_until_unix_millis=?",
+                        " AND attempt_count=? AND next_attempt_at_unix_millis=?",
+                        " AND lease_until_unix_millis<=unixepoch('now')*1000",
+                        " AND next_attempt_at_unix_millis<=unixepoch('now')*1000",
+                        " AND NOT EXISTS(SELECT 1 FROM crm_activity_task_receipts r",
+                        " WHERE r.tenant=crm_activity_automation_runs.tenant",
+                        " AND r.key=crm_activity_automation_runs.task_id)",
+                        " AND NOT EXISTS(",
+                        " SELECT 1 FROM crm_activity_task_records t WHERE t.tenant=?",
+                        " AND t.id=? AND t.version=? AND json_extract(t.state,'$.status')='open'",
+                        " AND json_type(t.state,'$.due_at_unix_nanos')='integer'",
+                        " AND CAST(json_extract(t.state,'$.due_at_unix_nanos') AS INTEGER)<=CAST(? AS INTEGER))"
+                    ),
+                    &[
+                        JsValue::from_str(context.tenant),
+                        JsValue::from_str(&row.rule_id),
+                        JsValue::from_str(&row.source_event_id),
+                        row.lease_request_id.as_deref().map(JsValue::from_str).unwrap_or(JsValue::NULL),
+                        JsValue::from_f64(row.lease_until_unix_millis as f64),
+                        JsValue::from_f64(row.attempt_count as f64),
+                        JsValue::from_f64(row.next_attempt_at_unix_millis as f64),
+                        JsValue::from_str(context.tenant),
+                        JsValue::from_str(&row.source_id),
+                        JsValue::from_f64(row.source_version as f64),
+                        JsValue::from_str(&now),
+                    ],
+                )
+                .map_err(|_| storage())?
+                .run()
+                .await;
+                let stale = read_run(db, context.tenant, &row.rule_id, &row.source_event_id)
+                    .await?
+                    .ok_or_else(storage)?;
+                if stale.source_stale != 1 {
+                    // A concurrent cancellation or successful commit is already
+                    // a terminal outcome. Any other fence loss must be retried.
+                    if stale.status == "committed" || stale.cancel_request_id.is_some() {
+                        return Ok(RunSaved {
+                            original_request_id: stale.task_request_id.clone(),
+                            replayed: stale.status == "committed",
+                            run: stale,
+                        });
+                    }
+                    return Err(ConnectError::aborted("AUTOMATION_SOURCE_STALE_FENCE_LOST"));
+                }
+                return Ok(RunSaved {
+                    run: stale,
+                    replayed: false,
+                    original_request_id: None,
+                });
+            }
+        }
+        let current = get(db, context.tenant, &row.rule_id)
             .await?
             .ok_or_else(|| ConnectError::failed_precondition("AUTOMATION_RULE_DISABLED"))?;
         if current.enabled != 1 || current.version != row.rule_version {
@@ -720,31 +881,50 @@ pub(super) async fn execute_interaction(
                 "AUTOMATION_RULE_DISABLED",
             ));
         }
+        acquire_attempt(db, context.tenant, &row, context.actor, context.request_id).await?;
     }
-    // Only new Task creation spends an attempt. Receipt reconciliation is
-    // allowed after expiry, exhaustion or rule revision and writes no new Task.
-    if !has_receipt {
-        acquire_attempt(db, tenant, &row, &principal.identity, request_id).await?;
-    }
-    let result = activity_tasks::create_typed(
-        input,
-        &row.task_id,
-        db,
-        tenant,
-        &principal.identity,
-        request_id,
-    )
-    .await;
+    let result = if context.system_actor {
+        activity_tasks::create_automation_typed(
+            input,
+            &row.task_id,
+            db,
+            context.tenant,
+            context.actor,
+            context.request_id,
+        )
+        .await
+    } else {
+        activity_tasks::create_typed(
+            input,
+            &row.task_id,
+            db,
+            context.tenant,
+            context.actor,
+            context.request_id,
+        )
+        .await
+    };
     let outcome = match result {
         Ok(Ok(outcome)) => outcome,
-        other => {
+        Ok(Err(error)) => {
             if !has_receipt {
-                release_attempt(db, tenant, &row, request_id).await?;
+                let code = task_failure_code(&error);
+                release_attempt(db, context.tenant, &row, context.request_id, &code).await?;
             }
-            return Err(match other {
-                Ok(Err(error)) => error.connect("RunInteractionAutomation", request_id),
-                _ => storage(),
-            });
+            return Err(error.connect(context.rpc_method, context.request_id));
+        }
+        Err(_) => {
+            if !has_receipt {
+                release_attempt(
+                    db,
+                    context.tenant,
+                    &row,
+                    context.request_id,
+                    "AUTOMATION_TASK_OWNER_UNAVAILABLE",
+                )
+                .await?;
+            }
+            return Err(storage());
         }
     };
     if outcome.task.task_id().as_str() != row.task_id {
@@ -758,9 +938,9 @@ pub(super) async fn execute_interaction(
         concat!(
             "UPDATE crm_activity_automation_runs SET status='committed',",
             "task_request_id=?,completed_at_unix_millis=?,lease_until_unix_millis=0,",
-            "next_attempt_at_unix_millis=0 WHERE tenant=?",
+            "next_attempt_at_unix_millis=0,last_error_code=NULL WHERE tenant=?",
             " AND rule_id=? AND source_event_id=? AND status='pending'",
-            " AND cancel_request_id IS NULL"
+            " AND cancel_request_id IS NULL AND source_stale=0 AND (?=1 OR lease_request_id=?)"
         ),
         &[
             task_trace
@@ -768,15 +948,17 @@ pub(super) async fn execute_interaction(
                 .map(JsValue::from_str)
                 .unwrap_or(JsValue::NULL),
             JsValue::from_f64(js_sys::Date::now()),
-            JsValue::from_str(tenant),
-            JsValue::from_str(rule_id.as_str()),
-            JsValue::from_str(&source.event_id),
+            JsValue::from_str(context.tenant),
+            JsValue::from_str(&row.rule_id),
+            JsValue::from_str(&row.source_event_id),
+            JsValue::from_f64(if has_receipt { 1.0 } else { 0.0 }),
+            JsValue::from_str(context.request_id),
         ],
     )
     .map_err(|_| storage())?
     .run()
     .await;
-    let completed = read_run(db, tenant, rule_id.as_str(), &source.event_id)
+    let completed = read_run(db, context.tenant, &row.rule_id, &row.source_event_id)
         .await?
         .ok_or_else(storage)?;
     if completed.status != "committed" {
@@ -792,7 +974,473 @@ pub(super) async fn execute_interaction(
     })
 }
 
-// The D1 clock and exact request id fence the original Task INSERT. A
+#[derive(Deserialize)]
+struct TenantRef {
+    id: String,
+}
+#[derive(Deserialize)]
+struct ScheduledRunRef {
+    rule_id: String,
+    source_event_id: String,
+}
+#[derive(Deserialize)]
+struct ScheduledDealSource {
+    rule_id: String,
+    rule_version: i64,
+    source_id: String,
+    source_version: i64,
+    account_id: String,
+}
+#[derive(Deserialize)]
+struct ScheduledTaskSource {
+    rule_id: String,
+    rule_version: i64,
+    source_id: String,
+    source_version: i64,
+    state: String,
+}
+#[derive(Default, Debug)]
+pub(super) struct ScheduledSource<'a> {
+    source_type: &'a str,
+    source_id: &'a str,
+    source_version: i64,
+    checked_at_unix_nanos: i64,
+}
+
+#[derive(Default, Debug)]
+pub(super) struct ScheduledSummary {
+    pub recovered: u32,
+    pub deals_created: u32,
+    pub tasks_overdue: u32,
+    pub failed: u32,
+}
+
+// A scheduled invocation has no caller JWT. Instead it first reads only the
+// tenant directory, then creates one private system principal per tenant.
+// Every business-data query below is bound to that single tenant. This is
+// deliberately distinct from a user/Access Actor and cannot be supplied by RPC.
+struct AutomationSystemActor {
+    tenant: String,
+}
+impl AutomationSystemActor {
+    fn for_tenant(tenant: String) -> Self {
+        Self { tenant }
+    }
+    fn tenant(&self) -> &str {
+        &self.tenant
+    }
+    fn identity(&self) -> &'static str {
+        AUTOMATION_ACTOR
+    }
+}
+
+fn scheduled_event_id(
+    tenant: &str,
+    rule_id: &str,
+    rule_version: i64,
+    source_type: &str,
+    source_id: &str,
+) -> Result<String, ConnectError> {
+    let identity = serde_json::to_vec(&(tenant, rule_id, rule_version, source_type, source_id))
+        .map_err(|_| storage())?;
+    Ok(format!("crm.activities.a1:{:x}", Sha256::digest(identity)))
+}
+
+async fn claim_scheduled_run(
+    db: &D1Database,
+    principal: &AutomationSystemActor,
+    rule: &RuleRow,
+    source: ScheduledSource<'_>,
+    input: activity_tasks::CreateInput,
+) -> Result<Option<RunRow>, ConnectError> {
+    let ScheduledSource {
+        source_type,
+        source_id,
+        source_version,
+        checked_at_unix_nanos: now,
+    } = source;
+    let tenant = principal.tenant();
+    let event_id = scheduled_event_id(tenant, &rule.rule_id, rule.version, source_type, source_id)?;
+    let snapshot = serde_json::to_string(&input).map_err(|_| storage())?;
+    let request_key_digest = format!("{:x}", Sha256::digest(event_id.as_bytes()));
+    let request_key = format!("automation-scheduled-{}", &request_key_digest[..48]);
+    let request_digest = format!(
+        "{:x}",
+        Sha256::digest(
+            serde_json::to_vec(&(
+                rule.rule_id.as_str(),
+                rule.version,
+                source_type,
+                source_id,
+                source_version,
+                snapshot.as_str()
+            ))
+            .map_err(|_| storage())?
+        )
+    );
+    let original_request_id = super::native_request_id().map_err(|_| storage())?;
+    let write = bind(
+        db,
+        concat!(
+            "INSERT INTO crm_activity_automation_runs",
+            "(tenant,rule_id,rule_version,source_event_id,source_type,source_id,source_version,",
+            "source_checked_at_unix_nanos,interaction_id,task_id,task_intent,run_request_key,run_request_digest,status,",
+            "requested_by,original_request_id,created_at_unix_millis)",
+            " SELECT ?,r.id,r.version,?,?,?,?,CAST(? AS INTEGER),NULL,?,?,?,?,'pending',?,?,?",
+            " FROM crm_activity_automation_rules r WHERE r.tenant=? AND r.id=?",
+            " AND r.version=? AND r.trigger_kind=? AND r.enabled=1 ON CONFLICT DO NOTHING"
+        ),
+        &[
+            JsValue::from_str(tenant),
+            JsValue::from_str(&event_id),
+            JsValue::from_str(source_type),
+            JsValue::from_str(source_id),
+            JsValue::from_f64(source_version as f64),
+            JsValue::from_str(&now.to_string()),
+            JsValue::from_str(&input.id),
+            JsValue::from_str(&snapshot),
+            JsValue::from_str(&request_key),
+            JsValue::from_str(&request_digest),
+            JsValue::from_str(principal.identity()),
+            JsValue::from_str(&original_request_id),
+            JsValue::from_f64(js_sys::Date::now()),
+            JsValue::from_str(tenant),
+            JsValue::from_str(&rule.rule_id),
+            JsValue::from_f64(rule.version as f64),
+            JsValue::from_str(source_type),
+        ],
+    )
+    .map_err(|_| storage())?
+    .run()
+    .await;
+    let row = read_run(db, tenant, &rule.rule_id, &event_id).await?;
+    if row.is_none() {
+        return match write {
+            Ok(result) if result.success() => Ok(None),
+            _ => Err(ConnectError::unavailable(
+                "AUTOMATION_SCHEDULED_CLAIM_UNCONFIRMED",
+            )),
+        };
+    }
+    let row = row.ok_or_else(storage)?;
+    if row.source_type != source_type || row.source_id != source_id {
+        return Err(ConnectError::unavailable(
+            "AUTOMATION_SCHEDULED_SOURCE_IDENTITY_MISMATCH",
+        ));
+    }
+    Ok(Some(row))
+}
+
+pub(super) async fn dispatch_scheduled(
+    db: &D1Database,
+    now: i64,
+) -> Result<ScheduledSummary, ConnectError> {
+    let tenants = bind(db, "SELECT id FROM crm_tenants ORDER BY id", &[])
+        .map_err(|_| storage())?
+        .all()
+        .await
+        .map_err(|_| storage())?
+        .results::<TenantRef>()
+        .map_err(|_| storage())?;
+    let mut total = ScheduledSummary::default();
+    for tenant in tenants {
+        let principal = AutomationSystemActor::for_tenant(tenant.id);
+        match dispatch_tenant(db, &principal, now).await {
+            Ok(summary) => {
+                total.recovered += summary.recovered;
+                total.deals_created += summary.deals_created;
+                total.tasks_overdue += summary.tasks_overdue;
+                total.failed += summary.failed;
+            }
+            Err(_) => total.failed += 1,
+        }
+    }
+    Ok(total)
+}
+
+async fn dispatch_tenant(
+    db: &D1Database,
+    principal: &AutomationSystemActor,
+    now: i64,
+) -> Result<ScheduledSummary, ConnectError> {
+    let tenant = principal.tenant();
+    let mut summary = ScheduledSummary::default();
+    // Recover durable pending runs before discovering new sources. A Task
+    // receipt takes priority over lease expiry so a lost acknowledgement is
+    // reconciled immediately without incrementing attempts or making a Task.
+    let pending = bind(
+        db,
+        concat!(
+            "SELECT rule_id,source_event_id FROM crm_activity_automation_runs",
+            " WHERE tenant=? AND source_type IN ('deal_created','task_overdue')",
+            " AND status='pending' AND source_stale=0 AND cancel_request_id IS NULL AND (",
+            " EXISTS(SELECT 1 FROM crm_activity_task_receipts t",
+            "  WHERE t.tenant=crm_activity_automation_runs.tenant",
+            "   AND t.key=crm_activity_automation_runs.task_id)",
+            " OR (attempt_count<? AND lease_until_unix_millis<=unixepoch('now')*1000",
+            " AND next_attempt_at_unix_millis<=unixepoch('now')*1000",
+            " AND EXISTS(SELECT 1 FROM crm_activity_automation_rules r",
+            "  WHERE r.tenant=crm_activity_automation_runs.tenant",
+            "   AND r.id=crm_activity_automation_runs.rule_id",
+            "   AND r.version=crm_activity_automation_runs.rule_version AND r.enabled=1",
+            "   AND EXISTS(SELECT 1 FROM crm_users u WHERE u.tenant_id=r.tenant",
+            "    AND u.email=r.assignee_email AND u.active=1))))",
+            " ORDER BY seq LIMIT ?"
+        ),
+        &[
+            JsValue::from_str(tenant),
+            JsValue::from_f64(MAX_ATTEMPTS as f64),
+            JsValue::from_f64(MAX_SCHEDULED_BATCH as f64),
+        ],
+    )
+    .map_err(|_| storage())?
+    .all()
+    .await
+    .map_err(|_| storage())?
+    .results::<ScheduledRunRef>()
+    .map_err(|_| storage())?;
+    for pending_run in pending {
+        let Some(row) = read_run(
+            db,
+            tenant,
+            &pending_run.rule_id,
+            &pending_run.source_event_id,
+        )
+        .await?
+        else {
+            continue;
+        };
+        let request_id = super::native_request_id().map_err(|_| storage())?;
+        match execute_claimed(
+            db,
+            row,
+            ExecutionContext {
+                tenant,
+                actor: principal.identity(),
+                request_id: &request_id,
+                now,
+                system_actor: true,
+                rpc_method: "ScheduledAutomation",
+            },
+        )
+        .await
+        {
+            Ok(_) => summary.recovered += 1,
+            Err(_) => summary.failed += 1,
+        }
+    }
+
+    // Deal lifecycle events are immutable and transactionally coupled to the
+    // original Deal create. The rule publication boundary prevents backfill.
+    let deals = bind(
+        db,
+        concat!(
+            "SELECT r.id AS rule_id,r.version AS rule_version,",
+            " e.deal_id AS source_id,e.deal_version AS source_version,d.account_id",
+            " FROM crm_activity_automation_rules r",
+            " JOIN crm_sales_deal_events e ON e.tenant=r.tenant",
+            " JOIN crm_sales_deal_records d ON d.tenant=e.tenant AND d.id=e.deal_id",
+            " WHERE r.tenant=? AND r.trigger_kind='deal_created' AND r.enabled=1",
+            " AND e.action='created' AND e.rowid>r.published_after_deal_event_rowid",
+            " AND NOT EXISTS(SELECT 1 FROM crm_activity_automation_runs a",
+            "  WHERE a.tenant=r.tenant AND a.rule_id=r.id AND a.source_type='deal_created'",
+            "   AND a.source_id=e.deal_id AND a.rule_version=r.version)",
+            " ORDER BY e.rowid LIMIT ?"
+        ),
+        &[
+            JsValue::from_str(tenant),
+            JsValue::from_f64(MAX_SCHEDULED_BATCH as f64),
+        ],
+    )
+    .map_err(|_| storage())?
+    .all()
+    .await
+    .map_err(|_| storage())?
+    .results::<ScheduledDealSource>()
+    .map_err(|_| storage())?;
+    for candidate in deals {
+        let Some(rule) = get(db, tenant, &candidate.rule_id).await? else {
+            continue;
+        };
+        if rule.version != candidate.rule_version
+            || rule.trigger != "deal_created"
+            || rule.enabled != 1
+        {
+            continue;
+        }
+        let domain = check(&wire_input(&rule), rule.version)?;
+        let plan = domain
+            .plan(
+                AutomationSource::DealCreated {
+                    deal_id: &candidate.source_id,
+                    account_id: &candidate.account_id,
+                    source_version: candidate.source_version,
+                },
+                now,
+            )
+            .map_err(|_| invalid("ACTIVITIES_AUTOMATION_SOURCE_INVALID"))?;
+        let Some(plan) = plan else {
+            continue;
+        };
+        let input = activity_tasks::CreateInput {
+            id: plan.task_id.as_str().to_owned(),
+            subject: plan.subject,
+            description: Some(format!(
+                "Автоматически создано из сделки {}",
+                candidate.source_id
+            )),
+            account_id: plan.account_id,
+            deal_id: plan.deal_id,
+            assignee_email: Some(rule.assignee_email.clone()),
+            owner_team_id: None,
+            priority: activity_tasks::Priority::High,
+            due_at_unix_nanos: plan.due_at_unix_nanos,
+            reminder_at_unix_nanos: None,
+        };
+        if let Some(row) = claim_scheduled_run(
+            db,
+            principal,
+            &rule,
+            ScheduledSource {
+                source_type: "deal_created",
+                source_id: &candidate.source_id,
+                source_version: candidate.source_version,
+                checked_at_unix_nanos: now,
+            },
+            input,
+        )
+        .await?
+        {
+            let request_id = super::native_request_id().map_err(|_| storage())?;
+            match execute_claimed(
+                db,
+                row,
+                ExecutionContext {
+                    tenant,
+                    actor: principal.identity(),
+                    request_id: &request_id,
+                    now,
+                    system_actor: true,
+                    rpc_method: "ScheduledAutomation",
+                },
+            )
+            .await
+            {
+                Ok(_) => summary.deals_created += 1,
+                Err(_) => summary.failed += 1,
+            }
+        }
+    }
+
+    // A Task is a due timer only while the exact current version remains open
+    // and overdue. Generated Tasks are excluded by their original run receipt.
+    let overdue = bind(
+        db,
+        concat!(
+            "SELECT r.id AS rule_id,r.version AS rule_version,",
+            " t.id AS source_id,t.version AS source_version,t.state",
+            " FROM crm_activity_automation_rules r",
+            " JOIN crm_activity_task_records t ON t.tenant=r.tenant",
+            " WHERE r.tenant=? AND r.trigger_kind='task_overdue' AND r.enabled=1",
+            " AND json_extract(t.state,'$.status')='open'",
+            " AND json_type(t.state,'$.due_at_unix_nanos')='integer'",
+            " AND CAST(json_extract(t.state,'$.due_at_unix_nanos') AS INTEGER)<=CAST(? AS INTEGER)",
+            " AND NOT EXISTS(SELECT 1 FROM crm_activity_automation_runs made",
+            "  WHERE made.tenant=t.tenant AND made.task_id=t.id)",
+            " AND NOT EXISTS(SELECT 1 FROM crm_activity_automation_runs a",
+            "  WHERE a.tenant=r.tenant AND a.rule_id=r.id AND a.source_type='task_overdue'",
+            "   AND a.source_id=t.id AND a.rule_version=r.version)",
+            " ORDER BY CAST(json_extract(t.state,'$.due_at_unix_nanos') AS INTEGER),t.id LIMIT ?"
+        ),
+        &[
+            JsValue::from_str(tenant),
+            JsValue::from_str(&now.to_string()),
+            JsValue::from_f64(MAX_SCHEDULED_BATCH as f64),
+        ],
+    )
+    .map_err(|_| storage())?
+    .all()
+    .await
+    .map_err(|_| storage())?
+    .results::<ScheduledTaskSource>()
+    .map_err(|_| storage())?;
+    for candidate in overdue {
+        let Some(rule) = get(db, tenant, &candidate.rule_id).await? else {
+            continue;
+        };
+        if rule.version != candidate.rule_version
+            || rule.trigger != "task_overdue"
+            || rule.enabled != 1
+        {
+            continue;
+        }
+        let task = activity_tasks::decode(&candidate.state).map_err(|_| storage())?;
+        let domain = check(&wire_input(&rule), rule.version)?;
+        let plan = domain
+            .plan(
+                AutomationSource::TaskOverdue {
+                    task: &task,
+                    generated_by_automation: false,
+                },
+                now,
+            )
+            .map_err(|_| invalid("ACTIVITIES_AUTOMATION_SOURCE_INVALID"))?;
+        let Some(plan) = plan else {
+            continue;
+        };
+        let input = activity_tasks::CreateInput {
+            id: plan.task_id.as_str().to_owned(),
+            subject: plan.subject,
+            description: Some(format!(
+                "Автоматически создано из просроченной задачи {}",
+                candidate.source_id
+            )),
+            account_id: plan.account_id,
+            deal_id: plan.deal_id,
+            assignee_email: Some(rule.assignee_email.clone()),
+            owner_team_id: None,
+            priority: activity_tasks::Priority::High,
+            due_at_unix_nanos: plan.due_at_unix_nanos,
+            reminder_at_unix_nanos: None,
+        };
+        if let Some(row) = claim_scheduled_run(
+            db,
+            principal,
+            &rule,
+            ScheduledSource {
+                source_type: "task_overdue",
+                source_id: &candidate.source_id,
+                source_version: candidate.source_version,
+                checked_at_unix_nanos: now,
+            },
+            input,
+        )
+        .await?
+        {
+            let request_id = super::native_request_id().map_err(|_| storage())?;
+            match execute_claimed(
+                db,
+                row,
+                ExecutionContext {
+                    tenant,
+                    actor: principal.identity(),
+                    request_id: &request_id,
+                    now,
+                    system_actor: true,
+                    rpc_method: "ScheduledAutomation",
+                },
+            )
+            .await
+            {
+                Ok(_) => summary.tasks_overdue += 1,
+                Err(_) => summary.failed += 1,
+            }
+        }
+    }
+    Ok(summary)
+}
+
+// The D1 clock and exact request id fence the original Task INSERT.// The D1 clock and exact request id fence the original Task INSERT. A
 // crashed worker leaves a bounded lease; a later attempt cannot be written
 // by the expired worker even if its asynchronous D1 call resumes.
 async fn acquire_attempt(
@@ -811,7 +1459,7 @@ async fn acquire_attempt(
             " WHERE tenant=? AND rule_id=? AND source_event_id=? AND status='pending'",
             " AND cancel_request_id IS NULL AND attempt_count<?",
             " AND lease_until_unix_millis<=unixepoch('now')*1000",
-            " AND next_attempt_at_unix_millis<=unixepoch('now')*1000",
+            " AND next_attempt_at_unix_millis<=unixepoch('now')*1000 AND source_stale=0",
             " AND NOT EXISTS(SELECT 1 FROM crm_activity_task_receipts t",
             " WHERE t.tenant=crm_activity_automation_runs.tenant",
             " AND t.key=crm_activity_automation_runs.task_id)"
@@ -846,6 +1494,7 @@ async fn release_attempt(
     tenant: &str,
     row: &RunRow,
     request_id: &str,
+    error_code: &str,
 ) -> Result<(), ConnectError> {
     // A failed release leaves the original expiration + backoff intact.
     // Never undo another attempt or mark a receipt-bearing run as failed.
@@ -853,7 +1502,7 @@ async fn release_attempt(
         db,
         concat!(
             "UPDATE crm_activity_automation_runs SET lease_until_unix_millis=0,",
-            "next_attempt_at_unix_millis=unixepoch('now')*1000+(5000<<(attempt_count-1))",
+            "last_error_code=?,next_attempt_at_unix_millis=unixepoch('now')*1000+(5000<<(attempt_count-1))",
             " WHERE tenant=? AND rule_id=? AND source_event_id=? AND status='pending'",
             " AND lease_request_id=? AND cancel_request_id IS NULL",
             " AND NOT EXISTS(SELECT 1 FROM crm_activity_task_receipts t",
@@ -861,6 +1510,7 @@ async fn release_attempt(
             " AND t.key=crm_activity_automation_runs.task_id)"
         ),
         &[
+            JsValue::from_str(error_code),
             JsValue::from_str(tenant),
             JsValue::from_str(&row.rule_id),
             JsValue::from_str(&row.source_event_id),
@@ -873,30 +1523,58 @@ async fn release_attempt(
     Ok(())
 }
 
+fn task_failure_code(error: &activity_tasks::MutationFailure) -> String {
+    match error {
+        activity_tasks::MutationFailure::Domain { code, .. } => code.clone(),
+        activity_tasks::MutationFailure::Write(super::diagnostics::MutationFailure::Rejected(
+            error,
+        )) => error.code.to_string(),
+        activity_tasks::MutationFailure::Write(
+            super::diagnostics::MutationFailure::CommitUnconfirmed { code, .. },
+        ) => (*code).to_owned(),
+    }
+}
+
+pub(super) struct RunIdentity<'a> {
+    pub(super) rule_id: &'a str,
+    pub(super) source_type: &'a str,
+    pub(super) source_id: &'a str,
+    pub(super) rule_version: i64,
+}
+
 pub(super) async fn cancel(
     db: &D1Database,
     principal: &access::Actor,
-    rule: &str,
-    interaction: &str,
-    expected_version: i64,
+    identity: RunIdentity<'_>,
     key: &str,
     request_id: &str,
 ) -> Result<RunSaved, ConnectError> {
+    let RunIdentity {
+        rule_id: rule,
+        source_type,
+        source_id,
+        rule_version: expected_version,
+    } = identity;
     let tenant = &principal.tenant;
-    let row = get_run(db, tenant, rule, interaction)
+    let row = get_run(db, tenant, rule, source_type, source_id, expected_version)
         .await?
         .ok_or_else(|| ConnectError::not_found("ACTIVITIES_AUTOMATION_RUN_NOT_FOUND"))?;
+    // Preserve the historical Interaction idempotency digest exactly;
+    // new autonomous source kinds bind both their type and source id.
+    let identity = if source_type == "interaction_created" {
+        json!(["cancel_automation_run", rule, source_id, expected_version])
+    } else {
+        json!([
+            "cancel_automation_run",
+            rule,
+            source_type,
+            source_id,
+            expected_version
+        ])
+    };
     let digest = format!(
         "{:x}",
-        Sha256::digest(
-            serde_json::to_vec(&json!([
-                "cancel_automation_run",
-                rule,
-                interaction,
-                expected_version
-            ]))
-            .map_err(|_| storage())?
-        )
+        Sha256::digest(serde_json::to_vec(&identity).map_err(|_| storage())?)
     );
     let replayed = verify_run_request(db, tenant, key, rule, &row.source_event_id, &digest).await?;
     if replayed && row.cancel_key.as_deref() == Some(key) {
@@ -966,15 +1644,25 @@ pub(super) async fn get_run(
     db: &D1Database,
     tenant: &str,
     rule: &str,
-    interaction: &str,
+    source_type: &str,
+    source_id: &str,
+    expected_version: i64,
 ) -> Result<Option<RunRow>, ConnectError> {
     rule_id(rule)?;
-    crm_activities::interactions::validate_identifier(interaction)
+    if !matches!(
+        source_type,
+        "interaction_created" | "deal_created" | "task_overdue"
+    ) {
+        return Err(invalid("ACTIVITIES_AUTOMATION_SOURCE_TYPE_INVALID"));
+    }
+    RecordId::try_new(source_id.to_owned())
         .map_err(|_| invalid("ACTIVITIES_AUTOMATION_SOURCE_ID_INVALID"))?;
     let Some(event) = bind(
         db,
-        "SELECT event_id FROM crm_activity_automation_source_events WHERE tenant=? AND source_id=?",
-        &[JsValue::from_str(tenant), JsValue::from_str(interaction)],
+        "SELECT source_event_id AS event_id FROM crm_activity_automation_runs WHERE tenant=? AND rule_id=? AND source_type=? AND source_id=? AND (?=0 OR rule_version=?) ORDER BY rule_version DESC LIMIT 1",
+        &[JsValue::from_str(tenant), JsValue::from_str(rule),
+          JsValue::from_str(source_type), JsValue::from_str(source_id),
+          JsValue::from_f64(expected_version as f64),JsValue::from_f64(expected_version as f64)],
     )
     .map_err(|_| storage())?
     .first::<SourceRow>(None)
