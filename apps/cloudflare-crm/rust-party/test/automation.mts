@@ -13,10 +13,10 @@ import { formatRpcFailure } from "../../scripts/rpc-error-response.mts";
 type AutomationFixture = {
  dispatch: RpcDispatch;
  sql: (statement: string, ...bindings: (string | number)[]) => Promise<ReadonlyArray<Record<string, unknown>>>;
- accountId: string; contactId: string; dealId: string; admin: string; viewer: string; tenantB: string; knownService: string;
+ accountId: string; contactId: string; existingDealId: string; admin: string; viewer: string; tenantB: string; knownService: string;
  runScheduled: (input:{cron:string;scheduledTime:Date})=>Promise<{outcome:string;noRetry:boolean}>;
 };
-export async function verifyAutomation({dispatch,sql,accountId,contactId,dealId,admin,viewer,tenantB,knownService,runScheduled}: AutomationFixture) {
+export async function verifyAutomation({dispatch,sql,accountId,contactId,existingDealId,admin,viewer,tenantB,knownService,runScheduled}: AutomationFixture) {
  const automation=AutomationService.method;
  const interaction=InteractionService.method;
  const tasks=TaskService.method;
@@ -385,7 +385,7 @@ export async function verifyAutomation({dispatch,sql,accountId,contactId,dealId,
    // discovered from the immutable Sales lifecycle event after publication.
    const oldDealRunCount=(await sql(
      "SELECT COUNT(*) n FROM crm_activity_automation_runs WHERE tenant=? AND source_type='deal_created' AND source_id=?",
-     "tenant-a",dealId)).at(0)?.n;
+     "tenant-a",existingDealId)).at(0)?.n;
    const dealRuleId="automation-deal-rule-"+suffix;
    const dealRule=await fixtureRpc(dispatch,automation.putAutomationRule,admin,{
      ruleId:dealRuleId,trigger:3,enabled:true,taskSubject:"Deal-created follow-up "+suffix,
