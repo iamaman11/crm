@@ -347,7 +347,7 @@ export async function verifyPartyCsv({dispatch,rpcFetch,sql,partySnapshot,admin,
  const matchedOnlyPreview=await fixtureRpc(dispatch,methods.previewPartyImport,admin,{csv:sourceCsv2,sourceId});
  assert.equal(matchedOnlyPreview.body.newCount,0);
  assert.equal(matchedOnlyPreview.body.matchedCount,3);
- const applyAuditBefore=await count("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant='tenant-a' AND action='customer_data.csv_import.apply'");
+ const applyAuditBefore=await count("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' AND action='customer_data.csv_import.apply'");
  const matchedOnlyInput={csv:sourceCsv2,sourceId,
    expectedSha256Hex:matchedOnlyPreview.body.csvSha256Hex,
    expectedPreviewFingerprint:matchedOnlyPreview.body.previewFingerprint,
@@ -359,14 +359,14 @@ export async function verifyPartyCsv({dispatch,rpcFetch,sql,partySnapshot,admin,
  assert.equal(matchedOnlyApply.body.receipt?.replayed,false);
  const matchedOnlyRequestId=matchedOnlyApply.headers.get("x-request-id");
  assert.ok(matchedOnlyRequestId);
- assert.deepEqual(await sql("SELECT action,subject_id,actor,request_id FROM crm_audit WHERE tenant=? AND request_id=?",
+ assert.deepEqual(await sql("SELECT action,subject_id,actor,request_id FROM crm_audit WHERE tenant_id=? AND request_id=?",
    "tenant-a",matchedOnlyRequestId),[{
      action:"customer_data.csv_import.apply",subject_id:sourceId,
      actor:"native-a@example.test",request_id:matchedOnlyRequestId
    }]);
  const matchedOnlyReplay=await fixtureRpc(dispatch,methods.applyPartyImport,knownService,matchedOnlyInput);
  assert.equal(matchedOnlyReplay.body.receipt?.replayed,true);
- assert.equal(await count("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant='tenant-a' AND action='customer_data.csv_import.apply'"),
+ assert.equal(await count("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' AND action='customer_data.csv_import.apply'"),
    applyAuditBefore+1);
 
  // A changed known ID is a visible, non-committable preview; it never silently updates Party.
