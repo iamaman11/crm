@@ -9,11 +9,38 @@ ALTER TABLE crm_activity_automation_rules
 ALTER TABLE crm_activity_automation_rules
  ADD COLUMN published_at_unix_nanos INTEGER NOT NULL DEFAULT 0
  CHECK(published_at_unix_nanos>=0);
+ALTER TABLE crm_activity_automation_rules
+ ADD COLUMN published_after_deal_event_rowid INTEGER NOT NULL DEFAULT 0
+ CHECK(published_after_deal_event_rowid>=0);
+
+-- Metadata backfill must not be interpreted as a user rule mutation.
+DROP TRIGGER crm_activity_automation_rule_assignee_update;
+DROP TRIGGER crm_activity_automation_rule_version_guard;
+UPDATE crm_activity_automation_rules
+ SET published_after_deal_event_rowid=COALESCE((
+  SELECT MAX(e.rowid) FROM crm_sales_deal_events e
+  WHERE e.tenant=crm_activity_automation_rules.tenant
+ ),0);
 UPDATE crm_activity_automation_rules
  SET published_at_unix_nanos=
    CAST(strftime('%s','now') AS INTEGER)*1000000000+
    CAST(substr(strftime('%f','now'),4,3) AS INTEGER)*1000000
  WHERE published_at_unix_nanos=0;
+
+CREATE TRIGGER crm_activity_automation_rule_assignee_update
+BEFORE UPDATE ON crm_activity_automation_rules
+WHEN NEW.enabled=1 AND NOT EXISTS(
+ SELECT 1 FROM crm_users WHERE tenant_id=NEW.tenant
+ AND email=NEW.assignee_email AND active=1 AND role IN ('admin','viewer')
+ AND email NOT LIKE 'service:%'
+)
+BEGIN SELECT RAISE(ABORT,'AUTOMATION_ASSIGNEE_NOT_ACTIVE'); END;
+
+CREATE TRIGGER crm_activity_automation_rule_version_guard
+BEFORE UPDATE ON crm_activity_automation_rules
+WHEN NEW.version<>OLD.version+1 OR NEW.id IS NOT OLD.id
+ OR NEW.tenant IS NOT OLD.tenant
+BEGIN SELECT RAISE(ABORT,'AUTOMATION_RULE_VERSION_CONFLICT'); END;
 
 DROP TRIGGER crm_activity_automation_rule_insert_receipt;
 DROP TRIGGER crm_activity_automation_rule_update_receipt;
@@ -26,14 +53,16 @@ BEGIN
   json_object('rule_id',NEW.id,'version',NEW.version,'trigger',NEW.trigger_kind,
    'enabled',NEW.enabled,'task_subject',NEW.task_subject,
    'assignee_email',NEW.assignee_email,'due_after_seconds',NEW.due_after_seconds,
-   'published_at_unix_nanos',NEW.published_at_unix_nanos),
+   'published_at_unix_nanos',NEW.published_at_unix_nanos,
+    'published_after_deal_event_rowid',NEW.published_after_deal_event_rowid),
   NEW.actor,NEW.request_id);
  INSERT INTO crm_activity_automation_rule_receipts(tenant,key,digest,state,original_request_id)
  VALUES(NEW.tenant,NEW.idem_key,NEW.idem_digest,
   json_object('rule_id',NEW.id,'version',NEW.version,'trigger',NEW.trigger_kind,
    'enabled',NEW.enabled,'task_subject',NEW.task_subject,
    'assignee_email',NEW.assignee_email,'due_after_seconds',NEW.due_after_seconds,
-   'published_at_unix_nanos',NEW.published_at_unix_nanos),NEW.request_id);
+   'published_at_unix_nanos',NEW.published_at_unix_nanos,
+    'published_after_deal_event_rowid',NEW.published_after_deal_event_rowid),NEW.request_id);
  INSERT INTO crm_audit(id,tenant_id,action,subject_id,created_at,request_id,actor)
  VALUES(lower(hex(randomblob(16))),NEW.tenant,
   'activities.automation.rule.create',NEW.id,datetime('now'),NEW.request_id,NEW.actor);
@@ -49,14 +78,16 @@ BEGIN
   json_object('rule_id',NEW.id,'version',NEW.version,'trigger',NEW.trigger_kind,
    'enabled',NEW.enabled,'task_subject',NEW.task_subject,
    'assignee_email',NEW.assignee_email,'due_after_seconds',NEW.due_after_seconds,
-   'published_at_unix_nanos',NEW.published_at_unix_nanos),
+   'published_at_unix_nanos',NEW.published_at_unix_nanos,
+    'published_after_deal_event_rowid',NEW.published_after_deal_event_rowid),
   NEW.actor,NEW.request_id);
  INSERT INTO crm_activity_automation_rule_receipts(tenant,key,digest,state,original_request_id)
  VALUES(NEW.tenant,NEW.idem_key,NEW.idem_digest,
   json_object('rule_id',NEW.id,'version',NEW.version,'trigger',NEW.trigger_kind,
    'enabled',NEW.enabled,'task_subject',NEW.task_subject,
    'assignee_email',NEW.assignee_email,'due_after_seconds',NEW.due_after_seconds,
-   'published_at_unix_nanos',NEW.published_at_unix_nanos),NEW.request_id);
+   'published_at_unix_nanos',NEW.published_at_unix_nanos,
+    'published_after_deal_event_rowid',NEW.published_after_deal_event_rowid),NEW.request_id);
  INSERT INTO crm_audit(id,tenant_id,action,subject_id,created_at,request_id,actor)
  VALUES(lower(hex(randomblob(16))),NEW.tenant,
   'activities.automation.rule.update',NEW.id,datetime('now'),NEW.request_id,NEW.actor);

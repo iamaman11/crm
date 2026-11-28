@@ -388,21 +388,32 @@ export async function verifyAutomation({dispatch,sql,accountId,contactId,existin
    const oldDealRunCount=(await sql(
      "SELECT COUNT(*) n FROM crm_activity_automation_runs WHERE tenant=? AND source_type='deal_created' AND source_id=?",
      "tenant-a",existingDealId)).at(0)?.n;
+   const oldDealEvent=(await sql(
+     "SELECT rowid FROM crm_sales_deal_events WHERE tenant=? AND deal_id=? AND action='created'",
+     "tenant-a",existingDealId))[0];
+   assert.ok(oldDealEvent);
    const dealRuleId="automation-deal-rule-"+suffix;
    const dealRule=await fixtureRpc(dispatch,automation.putAutomationRule,admin,{
      ruleId:dealRuleId,trigger:3,enabled:true,taskSubject:"Deal-created follow-up "+suffix,
      assigneeEmail:person,dueAfterSeconds:3600n,precondition:key("deal-rule")
    });
    assert.equal(dealRule.status,200,formatRpcFailure(dealRule));
+   const publishedDealCursor=(await sql(
+     "SELECT published_after_deal_event_rowid FROM crm_activity_automation_rules WHERE tenant=? AND id=?",
+     "tenant-a",dealRuleId))[0];
+   assert.ok(Number(publishedDealCursor?.published_after_deal_event_rowid)>=Number(oldDealEvent.rowid),
+     "a newly published rule starts after every existing Deal event");
    const dealId="automation-deal-source-"+suffix;
    const dealInput={...dealCreationInput(dealId,accountId,contactId),
      name:"Automation source deal "+suffix,precondition:key("deal-create")};
    const createdDeal=await fixtureRpc(dispatch,DealService.method.createDeal,admin,dealInput);
    assert.equal(createdDeal.status,200,formatRpcFailure(createdDeal));
    const dealEvent=(await sql(
-     "SELECT deal_version,action FROM crm_sales_deal_events WHERE tenant=? AND deal_id=? AND action='created'",
+     "SELECT rowid,deal_version,action FROM crm_sales_deal_events WHERE tenant=? AND deal_id=? AND action='created'",
      "tenant-a",dealId))[0];
    assert.ok(dealEvent);
+   assert.ok(Number(dealEvent.rowid)>Number(publishedDealCursor.published_after_deal_event_rowid),
+     "a Deal created after publication must be beyond the durable rowid cursor");
    await tick();
    await tick();
    const dealRuns=await sql(

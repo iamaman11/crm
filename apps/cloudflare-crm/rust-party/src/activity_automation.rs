@@ -27,8 +27,6 @@ pub(super) struct RuleRow {
     pub task_subject: String,
     pub assignee_email: String,
     pub due_after_seconds: i64,
-    #[serde(default)]
-    pub published_at_unix_nanos: i64,
 }
 #[derive(Clone, Serialize)]
 pub(super) struct RuleInput {
@@ -235,7 +233,7 @@ pub(super) async fn get(
         db,
         concat!(
             "SELECT id AS rule_id,version,trigger_kind AS trigger,enabled,task_subject,",
-            "assignee_email,due_after_seconds,published_at_unix_nanos FROM crm_activity_automation_rules",
+            "assignee_email,due_after_seconds FROM crm_activity_automation_rules",
             " WHERE tenant=? AND id=?"
         ),
         &[JsValue::from_str(tenant), JsValue::from_str(id)],
@@ -278,10 +276,12 @@ pub(super) async fn put(
         concat!(
             "INSERT INTO crm_activity_automation_rules",
             "(tenant,id,version,trigger,trigger_kind,enabled,task_subject,assignee_email,",
-            "due_after_seconds,published_at_unix_nanos,idem_key,idem_digest,request_id,actor)",
+            "due_after_seconds,published_at_unix_nanos,published_after_deal_event_rowid,",
+            "idem_key,idem_digest,request_id,actor)",
             " VALUES(?,?,1,'interaction_created',?,?,?,?,?,",
             " CAST(strftime('%s','now') AS INTEGER)*1000000000+",
-            " CAST(substr(strftime('%f','now'),4,3) AS INTEGER)*1000000,?,?,?,?)",
+            " CAST(substr(strftime('%f','now'),4,3) AS INTEGER)*1000000,",
+            " COALESCE((SELECT MAX(rowid) FROM crm_sales_deal_events WHERE tenant=?),0),?,?,?,?)",
             " ON CONFLICT(tenant,id) DO NOTHING"
         )
     } else {
@@ -291,6 +291,7 @@ pub(super) async fn put(
             "due_after_seconds=?,published_at_unix_nanos=",
             "CAST(strftime('%s','now') AS INTEGER)*1000000000+",
             "CAST(substr(strftime('%f','now'),4,3) AS INTEGER)*1000000,",
+            "published_after_deal_event_rowid=COALESCE((SELECT MAX(rowid) FROM crm_sales_deal_events WHERE tenant=?),0),",
             "idem_key=?,idem_digest=?,request_id=?,actor=?",
             " WHERE tenant=? AND id=? AND version=?"
         )
@@ -304,6 +305,7 @@ pub(super) async fn put(
             JsValue::from_str(&input.task_subject),
             JsValue::from_str(&input.assignee_email),
             JsValue::from_f64(input.due_after_seconds as f64),
+            JsValue::from_str(tenant),
             JsValue::from_str(key),
             JsValue::from_str(&hash),
             JsValue::from_str(request_id),
@@ -316,6 +318,7 @@ pub(super) async fn put(
             JsValue::from_str(&input.task_subject),
             JsValue::from_str(&input.assignee_email),
             JsValue::from_f64(input.due_after_seconds as f64),
+            JsValue::from_str(tenant),
             JsValue::from_str(key),
             JsValue::from_str(&hash),
             JsValue::from_str(request_id),
@@ -359,7 +362,7 @@ pub(super) async fn list_rules(
         db,
         concat!(
             "SELECT id AS rule_id,version,trigger_kind AS trigger,enabled,task_subject,",
-            "assignee_email,due_after_seconds,published_at_unix_nanos FROM crm_activity_automation_rules",
+            "assignee_email,due_after_seconds FROM crm_activity_automation_rules",
             " WHERE tenant=? AND id>? ORDER BY id LIMIT ?"
         ),
         &[
@@ -1177,11 +1180,11 @@ async fn dispatch_tenant(
             " JOIN crm_sales_deal_events e ON e.tenant=r.tenant",
             " JOIN crm_sales_deal_records d ON d.tenant=e.tenant AND d.id=e.deal_id",
             " WHERE r.tenant=? AND r.trigger_kind='deal_created' AND r.enabled=1",
-            " AND e.action='created' AND e.occurred_at_unix_nanos>=r.published_at_unix_nanos",
+            " AND e.action='created' AND e.rowid>r.published_after_deal_event_rowid",
             " AND NOT EXISTS(SELECT 1 FROM crm_activity_automation_runs a",
             "  WHERE a.tenant=r.tenant AND a.rule_id=r.id AND a.source_type='deal_created'",
             "   AND a.source_id=e.deal_id AND a.rule_version=r.version)",
-            " ORDER BY e.occurred_at_unix_nanos,e.deal_id LIMIT ?"
+            " ORDER BY e.rowid LIMIT ?"
         ),
         &[
             JsValue::from_str(tenant),
