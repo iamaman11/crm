@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import { AutomationService } from "../../../../packages/client/gen/crm/activities/v2/automation_pb.js";
 import { InteractionService } from "../../../../packages/client/gen/crm/activities/v2/interaction_pb.js";
 import { TaskService } from "../../../../packages/client/gen/crm/activities/v2/task_pb.js";
+import { DealService } from "../../../../packages/client/gen/crm/sales/v2/deal_pb.js";
+import { dealCreationInput } from "../../../../packages/client/test/cloudflare-deal-fixture.ts";
 import { MemberService } from "../../../../packages/client/gen/crm/access/v2/member_pb.js";
 import { fixtureRpc, fixtureRpcError, fixtureRpcRace } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
 import type { RpcDispatch } from "../../../../packages/client/test/cloudflare-rpc-fixture.ts";
@@ -11,9 +13,10 @@ import { formatRpcFailure } from "../../scripts/rpc-error-response.mts";
 type AutomationFixture = {
  dispatch: RpcDispatch;
  sql: (statement: string, ...bindings: (string | number)[]) => Promise<ReadonlyArray<Record<string, unknown>>>;
- accountId: string; admin: string; viewer: string; tenantB: string;
+ accountId: string; contactId: string; admin: string; viewer: string; tenantB: string;
+ runScheduled: (input:{cron:string;scheduledTime:Date})=>Promise<{outcome:string;noRetry:boolean}>;
 };
-export async function verifyAutomation({dispatch,sql,accountId,admin,viewer,tenantB}: AutomationFixture) {
+export async function verifyAutomation({dispatch,sql,accountId,contactId,admin,viewer,tenantB,runScheduled}: AutomationFixture) {
  const automation=AutomationService.method;
  const interaction=InteractionService.method;
  const tasks=TaskService.method;
@@ -35,7 +38,7 @@ export async function verifyAutomation({dispatch,sql,accountId,admin,viewer,tena
      dueAfterSeconds:3600n,precondition:rkey("rule")};
    assert.equal((await fixtureRpcError(dispatch,automation.putAutomationRule,viewer,put)).status,403);
    assert.equal((await fixtureRpcError(dispatch,automation.putAutomationRule,admin,{
-     ...put,trigger:2,precondition:rkey("unsupported")
+     ...put,trigger:0,precondition:rkey("unsupported")
    })).status,400);
    const created=await fixtureRpc(dispatch,automation.putAutomationRule,admin,put);
    assert.equal(created.status,200,formatRpcFailure(created));
@@ -363,4 +366,218 @@ export async function verifyAutomation({dispatch,sql,accountId,admin,viewer,tena
      cancellation_receipt:true,cancelled_task_fence:true,concurrent_lease:true,
      expired_lease_readiness:true,stale_writer_fence:true,production_cron_disabled:true}));
  }
+ // SK-08A.3: the same native Worker Cron dispatches immutable Deal-created
+ // events and overdue original Tasks. No browser, HTTP route or second Task
+ // writer participates. Repeated ticks and recovery preserve one Task receipt.
+ {
+   const suffix=randomUUID();
+   const key=(label:string)=>({idempotencyKey:"automation-scheduled-"+label+"-"+suffix});
+   const person="automation-scheduled-"+suffix+"@example.test";
+   assert.equal((await fixtureRpc(dispatch,member.provisionMember,admin,{
+     email:person,role:1,precondition:key("member")
+   })).status,200);
+   const tick=async()=>{
+     const result=await runScheduled({cron:"*/5 * * * *",scheduledTime:new Date()});
+     assert.equal(result.outcome,"ok","native Cron callback must return without throwing");
+     assert.equal(result.noRetry,false);
+   };
+
+   // A deal created before publication is not backfilled. A new deal is
+   // discovered from the immutable Sales lifecycle event after publication.
+   const oldDealRunCount=(await sql(
+     "SELECT COUNT(*) n FROM crm_activity_automation_runs WHERE tenant=? AND source_type='deal_created' AND source_id=?",
+     "tenant-a","deal-existing")).at(0)?.n;
+   const dealRuleId="automation-deal-rule-"+suffix;
+   const dealRule=await fixtureRpc(dispatch,automation.putAutomationRule,admin,{
+     ruleId:dealRuleId,trigger:3,enabled:true,taskSubject:"Deal-created follow-up "+suffix,
+     assigneeEmail:person,dueAfterSeconds:3600n,precondition:key("deal-rule")
+   });
+   assert.equal(dealRule.status,200,formatRpcFailure(dealRule));
+   const dealId="automation-deal-source-"+suffix;
+   const dealInput={...dealCreationInput(dealId,accountId,contactId),
+     name:"Automation source deal "+suffix,precondition:key("deal-create")};
+   const createdDeal=await fixtureRpc(dispatch,DealService.method.createDeal,admin,dealInput);
+   assert.equal(createdDeal.status,200,formatRpcFailure(createdDeal));
+   const dealEvent=(await sql(
+     "SELECT deal_version,action FROM crm_sales_deal_events WHERE tenant=? AND deal_id=? AND action='created'",
+     "tenant-a",dealId))[0];
+   assert.ok(dealEvent);
+   await tick();
+   await tick();
+   const dealRuns=await sql(
+     "SELECT source_event_id,source_version,task_id,status,attempt_count FROM crm_activity_automation_runs WHERE tenant=? AND rule_id=? AND source_type='deal_created' AND source_id=?",
+     "tenant-a",dealRuleId,dealId);
+   assert.equal(dealRuns.length,1,"repeated Cron ticks must claim one Deal source");
+   const dealRun=dealRuns[0]!;
+   assert.equal(dealRun.status,"committed");
+   assert.equal(dealRun.source_version,dealEvent.deal_version);
+   assert.equal(dealRun.attempt_count,1);
+   const dealTaskId=String(dealRun.task_id);
+   const dealTask=(await fixtureRpc(dispatch,tasks.getTask,viewer,{taskId:dealTaskId})).body.task;
+   assert.ok(dealTask);
+   assert.equal(dealTask.accountId,accountId);
+   assert.equal(dealTask.owner?.owner.value,person);
+   assert.equal(dealTask.subject,"Deal-created follow-up "+suffix);
+   assert.equal(dealTask.relatedResources.some(value=>value.resourceId===dealId),true);
+   assert.equal((await sql(
+     "SELECT COUNT(*) n FROM crm_activity_task_receipts WHERE tenant=? AND key=?",
+     "tenant-a",dealTaskId))[0]?.n,1);
+   assert.equal((await sql(
+     "SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND action='activity_tasks.create'",
+     "tenant-a",dealTaskId))[0]?.n,1);
+   assert.equal((await sql(
+     "SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND action='activity_tasks.create' AND actor=?",
+     "tenant-a",dealTaskId,"service:crm-automation"))[0]?.n,1);
+   assert.equal((await sql(
+     "SELECT COUNT(*) n FROM crm_activity_automation_runs WHERE tenant=? AND source_type='deal_created' AND source_id=?",
+     "tenant-b",dealId))[0]?.n,0,"tenant B must not observe or execute tenant A's source");
+   assert.equal((await sql(
+     "SELECT COUNT(*) n FROM crm_activity_automation_runs WHERE tenant=? AND source_type='deal_created' AND source_id=?",
+     "tenant-a","deal-existing"))[0]?.n,oldDealRunCount,
+     "publishing a Deal rule must not replay old lifecycle events");
+
+   // Task-overdue is a timer over the current open Task version. A completed
+   // or rescheduled source before a tick is never dispatched.
+   const overdueRuleId="automation-overdue-rule-"+suffix;
+   const overdueRule=await fixtureRpc(dispatch,automation.putAutomationRule,admin,{
+     ruleId:overdueRuleId,trigger:2,enabled:true,taskSubject:"Overdue follow-up "+suffix,
+     assigneeEmail:person,dueAfterSeconds:0n,precondition:key("overdue-rule")
+   });
+   assert.equal(overdueRule.status,200,formatRpcFailure(overdueRule));
+   const overdueSourceId="automation-overdue-source-"+suffix;
+   const overdueSource=await fixtureRpc(dispatch,tasks.createTask,admin,{
+     taskId:overdueSourceId,accountId,subject:"Original overdue task "+suffix,priority:2,
+     dueAt:{seconds:1700000000n,nanos:0},precondition:key("overdue-source")
+   });
+   assert.equal(overdueSource.status,200,formatRpcFailure(overdueSource));
+   await tick();
+   await tick();
+   const overdueRuns=await sql(
+     "SELECT source_version,task_id,status,attempt_count FROM crm_activity_automation_runs WHERE tenant=? AND rule_id=? AND source_type='task_overdue' AND source_id=?",
+     "tenant-a",overdueRuleId,overdueSourceId);
+   assert.equal(overdueRuns.length,1,"a Task source is consumed once across Cron ticks");
+   const overdueRun=overdueRuns[0]!;
+   assert.equal(overdueRun.status,"committed");
+   assert.equal(overdueRun.source_version,1);
+   assert.equal(overdueRun.attempt_count,1);
+   const overdueTaskId=String(overdueRun.task_id);
+   assert.notEqual(overdueTaskId,overdueSourceId);
+   assert.equal((await fixtureRpc(dispatch,tasks.getTask,viewer,{taskId:overdueTaskId}))
+     .body.task?.subject,"Overdue follow-up "+suffix);
+   assert.equal((await sql(
+     "SELECT COUNT(*) n FROM crm_activity_task_receipts WHERE tenant=? AND key=?",
+     "tenant-a",overdueTaskId))[0]?.n,1);
+
+   // Lost acknowledgement after the original Task receipt is durable:
+   // recovery replays that exact receipt, never creates a second Task.
+   const reconcileSourceId="automation-overdue-reconcile-"+suffix;
+   assert.equal((await fixtureRpc(dispatch,tasks.createTask,admin,{
+     taskId:reconcileSourceId,accountId,subject:"Overdue reconcile source",priority:2,
+     dueAt:{seconds:1700000000n,nanos:0},precondition:key("reconcile-source")
+   })).status,200);
+   await sql("CREATE TRIGGER fixture_fail_scheduled_automation_commit BEFORE INSERT ON crm_audit "+
+     "WHEN NEW.action='activities.automation.run.committed' "+
+     "BEGIN SELECT RAISE(ABORT,'fixture scheduled run finalization rollback'); END;");
+   try { await tick(); } finally { await sql("DROP TRIGGER fixture_fail_scheduled_automation_commit"); }
+   const pendingReconcile=(await sql(
+     "SELECT task_id,status,attempt_count FROM crm_activity_automation_runs WHERE tenant=? AND rule_id=? AND source_type='task_overdue' AND source_id=?",
+     "tenant-a",overdueRuleId,reconcileSourceId))[0];
+   assert.ok(pendingReconcile);
+   assert.equal(pendingReconcile.status,"pending");
+   const reconciledTaskId=String(pendingReconcile.task_id);
+   assert.equal((await sql(
+     "SELECT COUNT(*) n FROM crm_activity_task_receipts WHERE tenant=? AND key=?",
+     "tenant-a",reconciledTaskId))[0]?.n,1,"Task receipt survives a failed run acknowledgement");
+   await tick();
+   const recovered=(await sql(
+     "SELECT status,attempt_count FROM crm_activity_automation_runs WHERE tenant=? AND rule_id=? AND source_type='task_overdue' AND source_id=?",
+     "tenant-a",overdueRuleId,reconcileSourceId))[0];
+   assert.equal(recovered?.status,"committed");
+   assert.equal(recovered?.attempt_count,1,"receipt reconciliation does not create another attempt");
+   assert.equal((await sql(
+     "SELECT COUNT(*) n FROM crm_activity_task_records WHERE tenant=? AND id=?",
+     "tenant-a",reconciledTaskId))[0]?.n,1);
+   assert.equal((await sql(
+     "SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND action='activity_tasks.create'",
+     "tenant-a",reconciledTaskId))[0]?.n,1);
+
+   // Operator cancellation fences a pending run before Task commit.
+   const cancelSourceId="automation-overdue-cancel-"+suffix;
+   assert.equal((await fixtureRpc(dispatch,tasks.createTask,admin,{
+     taskId:cancelSourceId,accountId,subject:"Overdue cancellation source",priority:2,
+     dueAt:{seconds:1700000000n,nanos:0},precondition:key("cancel-source")
+   })).status,200);
+   await sql("CREATE TRIGGER fixture_fail_scheduled_automation_task BEFORE INSERT ON crm_activity_task_records "+
+     "WHEN NEW.id LIKE 'automation-%' BEGIN SELECT RAISE(ABORT,'fixture scheduled Task blocked'); END;");
+   try { await tick(); } finally { await sql("DROP TRIGGER fixture_fail_scheduled_automation_task"); }
+   const cancelRun=(await sql(
+     "SELECT task_id FROM crm_activity_automation_runs WHERE tenant=? AND rule_id=? AND source_type='task_overdue' AND source_id=?",
+     "tenant-a",overdueRuleId,cancelSourceId))[0];
+   assert.ok(cancelRun);
+   const cancelled=await fixtureRpc(dispatch,automation.cancelAutomationRun,admin,{
+     ruleId:overdueRuleId,sourceType:2,sourceId:cancelSourceId,expectedRuleVersion:1n,
+     precondition:key("cancel-scheduled")
+   });
+   assert.equal(cancelled.status,200,formatRpcFailure(cancelled));
+   assert.equal(cancelled.body.run?.status,3);
+   assert.equal(cancelled.body.run?.disposition,9);
+   await tick();
+   assert.equal((await sql(
+     "SELECT COUNT(*) n FROM crm_activity_task_records WHERE tenant=? AND id=?",
+     "tenant-a",String(cancelRun.task_id)))[0]?.n,0,"cancelled scheduled intent cannot create a Task");
+   assert.equal((await sql(
+     "SELECT COUNT(*) n FROM crm_activity_automation_runs WHERE tenant=? AND rule_id=? AND source_type='task_overdue' AND source_id=? AND cancel_request_id IS NOT NULL",
+     "tenant-a",overdueRuleId,cancelSourceId))[0]?.n,1);
+
+   // If the source is completed while a failed run is waiting for backoff,
+   // the exact source version is marked stale and cannot create a follow-up.
+   const staleSourceId="automation-overdue-stale-"+suffix;
+   assert.equal((await fixtureRpc(dispatch,tasks.createTask,admin,{
+     taskId:staleSourceId,accountId,subject:"Overdue stale source",priority:2,
+     dueAt:{seconds:1700000000n,nanos:0},precondition:key("stale-source")
+   })).status,200);
+   await sql("CREATE TRIGGER fixture_fail_scheduled_stale_task BEFORE INSERT ON crm_activity_task_records "+
+     "WHEN NEW.id LIKE 'automation-%' BEGIN SELECT RAISE(ABORT,'fixture stale Task blocked'); END;");
+   try { await tick(); } finally { await sql("DROP TRIGGER fixture_fail_scheduled_stale_task"); }
+   const staleRun=(await sql(
+     "SELECT task_id FROM crm_activity_automation_runs WHERE tenant=? AND rule_id=? AND source_type='task_overdue' AND source_id=?",
+     "tenant-a",overdueRuleId,staleSourceId))[0];
+   assert.ok(staleRun);
+   assert.equal((await fixtureRpc(dispatch,tasks.completeTask,admin,{
+     taskId:staleSourceId,precondition:{expectedVersion:1n,idempotencyKey:"automation-complete-stale-"+suffix}
+   })).status,200);
+   await sql("UPDATE crm_activity_automation_runs SET next_attempt_at_unix_millis=0 "+
+     "WHERE tenant=? AND rule_id=? AND source_type='task_overdue' AND source_id=?",
+     "tenant-a",overdueRuleId,staleSourceId);
+   await tick();
+   const stale=(await sql(
+     "SELECT source_stale FROM crm_activity_automation_runs WHERE tenant=? AND rule_id=? AND source_type='task_overdue' AND source_id=?",
+     "tenant-a",overdueRuleId,staleSourceId))[0];
+   assert.equal(stale?.source_stale,1);
+   assert.equal((await sql(
+     "SELECT COUNT(*) n FROM crm_activity_task_records WHERE tenant=? AND id=?",
+     "tenant-a",String(staleRun.task_id)))[0]?.n,0);
+
+   // A task rescheduled before its first due scan is not an overdue source.
+   const rescheduledSourceId="automation-overdue-rescheduled-"+suffix;
+   assert.equal((await fixtureRpc(dispatch,tasks.createTask,admin,{
+     taskId:rescheduledSourceId,accountId,subject:"Overdue rescheduled source",priority:2,
+     dueAt:{seconds:1700000000n,nanos:0},precondition:key("rescheduled-source")
+   })).status,200);
+   assert.equal((await fixtureRpc(dispatch,tasks.updateTask,admin,{
+     taskId:rescheduledSourceId,dueAt:{operation:{case:"set",value:{
+       seconds:1900000000n,nanos:0
+     }}},precondition:{expectedVersion:1n,idempotencyKey:"automation-reschedule-"+suffix}
+   })).status,200);
+   await tick();
+   assert.equal((await sql(
+     "SELECT COUNT(*) n FROM crm_activity_automation_runs WHERE tenant=? AND rule_id=? AND source_type='task_overdue' AND source_id=?",
+     "tenant-a",overdueRuleId,rescheduledSourceId))[0]?.n,0);
+   console.log(JSON.stringify({event:"crm.native-sk08a-autonomous-dispatch",result:"PASS",
+     real_worker_scheduled:true,deal_created:true,task_overdue:true,closed_browser_independent:true,
+     bounded_catch_up:true,tenant_isolation:true,duplicate_source_fenced:true,
+     original_task_owner:true,system_actor_audited:true,receipt_recovery:true,
+     operator_cancellation:true,stale_source_fenced:true,rescheduled_source_ignored:true}));
+ }
+
 }
