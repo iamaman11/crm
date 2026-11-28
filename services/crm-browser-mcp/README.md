@@ -50,10 +50,15 @@ disabling ordinary public-site browsing.
 
 Use the **existing protected mcp release workflow** to publish reviewed code
 and public origins. Do not patch the deployed Worker directly or reuse CI
-credentials. The existing `crm-dev` secret bindings must remain unchanged.
-The route owner injects credentials only for the exact matching origin, fetches
-one redirect hop at a time, and lets Chromium handle each redirect as a fresh
-request; injected credentials are never forwarded to another origin.
+credentials. The existing `crm-dev` secret bindings must remain unchanged. The current
+Cloudflare Browser Run provider requires native `route.continue({headers})` to
+preserve the actual upstream response headers and MIME; its `route.fetch`
+response has previously returned zero headers, and `route.fulfill` cannot
+restore them. Playwright may propagate overridden Access headers across
+redirects. This residual risk is explicitly accepted **only for isolated test
+CRM data** and must not be reused for production or real customer data. A
+production-safe native redirect-scoped transport remains a separate
+prerequisite tracked in issue #357.
 
 After release, accept access by a real Browser MCP /api/session check and
 owner-tenant React→Connect→Rust→D1 UI E2E. A green CI check alone does not
@@ -148,9 +153,12 @@ bindings. The two branch previews use `SITE_ACCESS_PREVIEW_1_ORIGIN` and
 Worker secrets. Preview origins require credentials and fail closed if their
 pair is incomplete; the general-purpose browser remains usable for unrelated
 public sites. Credentials are injected only into the exact configured origin,
-never accepted as browser parameters, and are not forwarded across redirects.
-No browser tool accepts arbitrary credentials, and there are no CRM-specific
-business API or D1 operations inside Browser MCP.
+never accepted as browser parameters. The accepted test-only native
+`route.continue` transport may propagate overridden headers across redirects;
+do not enable these bindings for production or real customer data until issue
+#357's native redirect-scoped transport is proven live. No browser tool accepts
+arbitrary credentials, and there are no CRM-specific business API or D1
+operations inside Browser MCP.
 
 The **CRM CI already owns** signed Access test identities, native Rust/Connect/D1
 and React Chromium E2E. Preserve that fast, reproducible GitHub workflow for

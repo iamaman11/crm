@@ -38,22 +38,21 @@ test("all production Cloudflare Browser Run connects use typed persistent sessio
   assert.match(code, /serviceWorkers:\s*"block"/, "SSRF interception relies on blocked Service Workers");
 });
 
-test("site Access uses one-hop scoped fetches and never forwards credentials across redirects", () => {
+test("preview Access uses exact target credentials with the accepted native test-CRM transport", () => {
   const code = readFileSync(new URL("../src/session.ts", import.meta.url), "utf8");
-  assert.ok(code.includes("await route.fetch({"),
-    "the exact configured origin receives one privileged upstream request");
-  assert.ok(code.includes("maxRedirects: 0"),
-    "the privileged fetch must stop before following any redirect");
-  assert.ok(code.includes("await route.fulfill({"),
-    "Chromium receives the upstream status, headers and body and owns redirect handling");
+  assert.ok(code.includes("await route.continue({\\n          headers:"),
+    "Browser Run must preserve Chromium's original response headers and MIME");
   assert.ok(code.includes('"CF-Access-Client-Id": target.clientId'));
   assert.ok(code.includes('"CF-Access-Client-Secret": target.clientSecret'));
   assert.ok(code.includes("siteRequestDispositionForTargets("),
     "each request is authorized against its exact configured origin");
   assert.ok(code.includes("isTrustedSiteNavigationRequest("),
     "controller trust is scoped to the exact origin originally requested");
-  assert.ok(!code.includes("await route.continue({\\n          headers:"),
-    "injected service headers are never delegated to Chromium redirect handling");
+  assert.ok(code.includes("MUST NOT be reused for production or"));
+  assert.ok(!code.includes("route.fetch("),
+    "route.fetch loses response headers in this Browser Run provider");
+  assert.ok(!code.includes("route.fulfill("),
+    "route.fulfill cannot restore upstream headers the provider did not return");
   assert.ok(code.includes("await route.continue();"),
     "unrelated public sites remain native Chromium requests");
 });

@@ -332,29 +332,20 @@ export class CrmBrowserSession extends DurableObject<Env> {
           await route.abort("blockedbyclient");
           return;
         }
-        // Never use route.continue with injected headers: Chromium may forward
-        // overridden headers across a redirect. Fetch only the exact first hop,
-        // then let Chromium handle each Location as a fresh intercepted request.
-        // The next hop receives credentials only if it independently matches
-        // this same exact origin and initiator policy.
-        try {
-          const response = await route.fetch({
-            headers: {
-              ...request.headers(),
-              "CF-Access-Client-Id": target.clientId,
-              "CF-Access-Client-Secret": target.clientSecret,
-            },
-            maxRedirects: 0,
-          });
-          await route.fulfill({
-            status: response.status(),
-            headers: response.headers(),
-            body: await response.body(),
-          });
-        } catch {
-          // A failed privileged fetch must never fall back to an unscoped request.
-          await route.abort("failed");
-        }
+        // Accepted native Browser Run transport for this TEST CRM: route.fetch →
+        // route.fulfill loses upstream response headers/MIME in this provider,
+        // so Chromium must continue the original request. Playwright may forward
+        // overridden headers across redirects; this residual risk is accepted
+        // only for isolated test data and MUST NOT be reused for production or
+        // real customer data. A production-safe redirect-scoped native transport
+        // remains a separate prerequisite (see issue #357).
+        await route.continue({
+          headers: {
+            ...request.headers(),
+            "CF-Access-Client-Id": target.clientId,
+            "CF-Access-Client-Secret": target.clientSecret,
+          },
+        });
       });
   }
 
