@@ -804,7 +804,7 @@ async fn execute_claimed(
                         JsValue::from_str(tenant),
                         JsValue::from_str(&row.source_id),
                         JsValue::from_f64(row.source_version as f64),
-                        JsValue::from_f64(now_nanos() as f64),
+                        JsValue::from_f64(now as f64),
                     ],
                 )
                 .map_err(|_| storage())?
