@@ -1435,7 +1435,7 @@ fn task_failure_code(error: &activity_tasks::MutationFailure) -> String {
         activity_tasks::MutationFailure::Domain { code, .. } => code.clone(),
         activity_tasks::MutationFailure::Write(super::diagnostics::MutationFailure::Rejected(
             error,
-        )) => error.code.clone(),
+        )) => error.code.to_string(),
         activity_tasks::MutationFailure::Write(
             super::diagnostics::MutationFailure::CommitUnconfirmed { code, .. },
         ) => (*code).to_owned(),
