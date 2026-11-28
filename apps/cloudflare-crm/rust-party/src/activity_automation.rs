@@ -795,7 +795,7 @@ async fn execute_claimed(
                         " SELECT 1 FROM crm_activity_task_records t WHERE t.tenant=?",
                         " AND t.id=? AND t.version=? AND json_extract(t.state,'$.status')='open'",
                         " AND json_type(t.state,'$.due_at_unix_nanos')='integer'",
-                        " AND CAST(json_extract(t.state,'$.due_at_unix_nanos') AS INTEGER)<=?)"
+                        " AND CAST(json_extract(t.state,'$.due_at_unix_nanos') AS INTEGER)<=CAST(? AS INTEGER))"
                     ),
                     &[
                         JsValue::from_str(tenant),
