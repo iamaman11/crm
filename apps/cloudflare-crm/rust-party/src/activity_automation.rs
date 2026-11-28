@@ -866,9 +866,7 @@ async fn execute_claimed(
                             run: stale,
                         });
                     }
-                    return Err(ConnectError::aborted(
-                        "AUTOMATION_SOURCE_STALE_FENCE_LOST",
-                    ));
+                    return Err(ConnectError::aborted("AUTOMATION_SOURCE_STALE_FENCE_LOST"));
                 }
                 return Ok(RunSaved {
                     run: stale,
