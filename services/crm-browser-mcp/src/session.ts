@@ -28,7 +28,7 @@ export interface Env {
   SITE_ACCESS_PREVIEW_2_ORIGIN?: string; // Exact Access origin for isolated Writer #491.
   SITE_ACCESS_PREVIEW_2_CLIENT_ID?: string; // Separate protected Worker secret.
   SITE_ACCESS_PREVIEW_2_CLIENT_SECRET?: string; // Separate protected Worker secret.
-  CRM_MCP_OWNER_EMAIL: string;
+  CRM_MCP_ALLOWED_EMAILS: string; // Comma/newline-separated allowlist of human MCP controllers.
   CRM_MCP_ACCESS_AUD: string;
   CF_BROWSER_ACCOUNT_ID: string;
   CF_BROWSER_RECORDING_READ_TOKEN?: string; // Worker secret: Browser Run REST recording read only.

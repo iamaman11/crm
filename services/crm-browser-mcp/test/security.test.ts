@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { browserUrl, siteCredentialsAllowed, siteRequestDisposition, siteAccessConfiguration, siteAccessTargets, siteAccessForRequest, siteAccessCredentialsReady, siteRequestDispositionForTargets, isTrustedSiteNavigationRequest, isConfiguredSiteRequest, isPermittedBrowserRequest, isAuthorizedMcpOwner, safePagePath, redact, verifiedMcpOwnerEmail } from "../src/security.ts";
+import { browserUrl, siteCredentialsAllowed, siteRequestDisposition, siteAccessConfiguration, siteAccessTargets, siteAccessForRequest, siteAccessCredentialsReady, siteRequestDispositionForTargets, isTrustedSiteNavigationRequest, isConfiguredSiteRequest, isPermittedBrowserRequest, isAuthorizedMcpController, parseAllowedMcpControllerEmails, safePagePath, redact, verifiedMcpControllerEmail } from "../src/security.ts";
 const CRM_ORIGIN = "https://crm-dev.crm-5bd5e1e1.workers.dev"; // Test-only configured site.
 
 test("site identity is configured per exact origin; ordinary browser navigation is universal", () => {
@@ -134,18 +134,30 @@ test("all browser requests, including page-initiated redirects and links, reject
   ]) assert.equal(isPermittedBrowserRequest(url), true, url);
 });
 
-test("only the exact CRM Browser MCP Access application owner can call control tools", () => {
+test("only explicitly allowlisted human controllers for the exact Access app can call control tools", () => {
   const audience = "8d0515ac0f3dc33e9a39bebe5e4530f70056e6ddf3d4cb910df80e7ba5f6b67c";
-  assert.equal(isAuthorizedMcpOwner(audience, audience, "User@Example.test", "user@example.test"), true);
+  const allowlist = "user@example.test,\nsecond@example.test";
+  assert.deepEqual(parseAllowedMcpControllerEmails(allowlist), [
+    "user@example.test", "second@example.test",
+  ]);
+  assert.deepEqual(parseAllowedMcpControllerEmails("USER@example.test,user@example.test"),
+    ["user@example.test"]);
+  assert.deepEqual(parseAllowedMcpControllerEmails("user@example.test,not-an-email"), [],
+    "a malformed allowlist fails closed as a whole");
+  assert.deepEqual(parseAllowedMcpControllerEmails(undefined), []);
+
+  assert.equal(isAuthorizedMcpController(audience, audience, "User@Example.test", allowlist), true);
+  assert.equal(isAuthorizedMcpController(audience, audience, "SECOND@example.test", allowlist), true);
   for (const invalid of [
-    { aud: "different-app", actual: "user@example.test", expected: "user@example.test" },
-    { aud: audience, actual: "other@example.test", expected: "user@example.test" },
-    { aud: audience, actual: undefined, expected: "user@example.test" },
-    { aud: undefined, actual: "user@example.test", expected: "user@example.test" },
-    { aud: audience, actual: "user@example.test", expected: "" },
+    { aud: "different-app", actual: "user@example.test", allowed: allowlist },
+    { aud: audience, actual: "other@example.test", allowed: allowlist },
+    { aud: audience, actual: undefined, allowed: allowlist },
+    { aud: undefined, actual: "user@example.test", allowed: allowlist },
+    { aud: audience, actual: "user@example.test", allowed: "" },
+    { aud: audience, actual: "user@example.test", allowed: "malformed" },
   ]) {
     assert.equal(
-      isAuthorizedMcpOwner(invalid.aud, audience, invalid.actual, invalid.expected),
+      isAuthorizedMcpController(invalid.aud, audience, invalid.actual, invalid.allowed),
       false,
       JSON.stringify(invalid),
     );
@@ -218,22 +230,24 @@ test("site Access credentials are optional, exact-origin and fail closed when pa
   }
 });
 
-test("Managed OAuth/Access controller evidence denies missing, wrong, and broken identities", async () => {
+test("Managed OAuth/Access controller evidence resolves each allowlisted identity and fails closed", async () => {
   const aud = "exact-app-audience";
-  const owner = "owner@example.test";
-  const valid = { aud, getIdentity: async () => ({ email: "OWNER@example.test" }) };
-  assert.equal(await verifiedMcpOwnerEmail(valid, aud, owner), owner);
-  assert.equal(await verifiedMcpOwnerEmail(undefined, aud, owner), null);
-  assert.equal(await verifiedMcpOwnerEmail(valid, "other-audience", owner), null);
-  assert.equal(await verifiedMcpOwnerEmail(valid, aud, undefined), null);
-  assert.equal(await verifiedMcpOwnerEmail(
-    { aud, getIdentity: async () => ({ email: "other@example.test" }) }, aud, owner,
+  const allowlist = "owner@example.test,operator@example.test";
+  const owner = { aud, getIdentity: async () => ({ email: "OWNER@example.test" }) };
+  const operator = { aud, getIdentity: async () => ({ email: "Operator@Example.test" }) };
+  assert.equal(await verifiedMcpControllerEmail(owner, aud, allowlist), "owner@example.test");
+  assert.equal(await verifiedMcpControllerEmail(operator, aud, allowlist), "operator@example.test");
+  assert.equal(await verifiedMcpControllerEmail(undefined, aud, allowlist), null);
+  assert.equal(await verifiedMcpControllerEmail(owner, "other-audience", allowlist), null);
+  assert.equal(await verifiedMcpControllerEmail(owner, aud, undefined), null);
+  assert.equal(await verifiedMcpControllerEmail(
+    { aud, getIdentity: async () => ({ email: "other@example.test" }) }, aud, allowlist,
   ), null);
-  assert.equal(await verifiedMcpOwnerEmail(
-    { aud, getIdentity: async () => null }, aud, owner,
+  assert.equal(await verifiedMcpControllerEmail(
+    { aud, getIdentity: async () => null }, aud, allowlist,
   ), null);
-  assert.equal(await verifiedMcpOwnerEmail(
-    { aud, getIdentity: async () => { throw new Error("expired JWT"); } }, aud, owner,
+  assert.equal(await verifiedMcpControllerEmail(
+    { aud, getIdentity: async () => { throw new Error("expired JWT"); } }, aud, allowlist,
   ), null);
 });
 
