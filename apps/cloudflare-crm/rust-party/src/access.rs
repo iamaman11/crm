@@ -12,7 +12,25 @@ use web_sys::{Crypto, CryptoKey};
 use worker::{D1Database, Date, Env, Fetch, Request, Result};
 
 const ISSUER: &str = "https://royal-limit-ea43.cloudflareaccess.com";
-const AUDIENCE: &str = "e0a664cf4f46f0d13d0ac0d8dd621c718c70842a377bf6738d1a24f0d16cedc7";
+
+// Each Worker receives exactly one trusted Access application audience at deploy
+// time. Production and branch previews share the verifier but never share aud.
+fn valid_access_audience(value: &str) -> bool {
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit())
+}
+
+fn audience_matches(claims: &Value, expected_audience: &str) -> bool {
+    match claims.get("aud") {
+        Some(Value::String(value)) => value == expected_audience,
+        Some(Value::Array(values)) => values
+            .iter()
+            .any(|value| value.as_str() == Some(expected_audience)),
+        _ => false,
+    }
+}
 
 // Access rotates signing keys on a multi-week schedule and retains the previous
 // key for seven days. Cache only public key material; unknown kid forces refresh.
@@ -254,15 +272,10 @@ fn identity_key(claims: &Value) -> Option<String> {
     }
 }
 
-fn valid_claims(claims: &Value) -> bool {
+fn valid_claims(claims: &Value, expected_audience: &str) -> bool {
     let now = (Date::now().as_millis() / 1000) as i64;
-    let aud_ok = match claims.get("aud") {
-        Some(Value::String(s)) => s == AUDIENCE,
-        Some(Value::Array(items)) => items.iter().any(|x| x.as_str() == Some(AUDIENCE)),
-        _ => false,
-    };
     claims.get("iss").and_then(Value::as_str) == Some(ISSUER)
-        && aud_ok
+        && audience_matches(claims, expected_audience)
         && claims.get("exp").and_then(Value::as_i64).is_some_and(|exp| exp > now)
         && claims.get("nbf").and_then(Value::as_i64).is_none_or(|nbf| nbf <= now)
         && claims.get("iat").and_then(Value::as_i64).is_none_or(|iat| iat <= now + 60)
@@ -272,17 +285,12 @@ fn valid_claims(claims: &Value) -> bool {
 }
 
 // Report only a fixed rejection category; never emit JWT claims or credentials.
-fn invalid_claim_reason(claims: &Value) -> &'static str {
+fn invalid_claim_reason(claims: &Value, expected_audience: &str) -> &'static str {
     let now = (Date::now().as_millis() / 1000) as i64;
     if claims.get("iss").and_then(Value::as_str) != Some(ISSUER) {
         return "jwt_issuer_invalid";
     }
-    let aud_ok = match claims.get("aud") {
-        Some(Value::String(s)) => s == AUDIENCE,
-        Some(Value::Array(items)) => items.iter().any(|x| x.as_str() == Some(AUDIENCE)),
-        _ => false,
-    };
-    if !aud_ok {
+    if !audience_matches(claims, expected_audience) {
         return "jwt_audience_invalid";
     }
     if !claims
@@ -332,7 +340,7 @@ fn invalid_claim_reason(claims: &Value) -> &'static str {
     "jwt_claims_invalid_other"
 }
 
-async fn verify(req: &Request, _env: &Env) -> Result<Option<String>> {
+async fn verify(req: &Request, env: &Env) -> Result<Option<String>> {
     // Only the release version probe emits a safe, static rejection category.
     // Never log or expose Access assertions, service credentials, or claims.
     let reject = |reason: &'static str| -> Result<Option<String>> {
@@ -346,6 +354,13 @@ async fn verify(req: &Request, _env: &Env) -> Result<Option<String>> {
         }
         Ok(None)
     };
+    let expected_audience = match env.var("CRM_ACCESS_AUDIENCE") {
+        Ok(value) => value.to_string(),
+        Err(_) => return reject("jwt_audience_unconfigured"),
+    };
+    if !valid_access_audience(&expected_audience) {
+        return reject("jwt_audience_config_invalid");
+    }
     let token = match req.headers().get("cf-access-jwt-assertion")? {
         Some(t) if t.len() <= 16_384 => t,
         _ => return reject("jwt_header_absent_or_oversize"),
@@ -368,8 +383,8 @@ async fn verify(req: &Request, _env: &Env) -> Result<Option<String>> {
     if header.get("alg").and_then(Value::as_str) != Some("RS256") {
         return reject("jwt_alg_invalid");
     }
-    if !valid_claims(&claims) {
-        return reject(invalid_claim_reason(&claims));
+    if !valid_claims(&claims, &expected_audience) {
+        return reject(invalid_claim_reason(&claims, &expected_audience));
     }
     let Some(kid) = header
         .get("kid")
@@ -387,7 +402,7 @@ async fn verify(req: &Request, _env: &Env) -> Result<Option<String>> {
         if host != "localhost" && host != "127.0.0.1" {
             return reject("ci_host_invalid");
         }
-        if _env.var("CRM_CI_LOCAL_ONLY")?.to_string() != "yes" {
+        if env.var("CRM_CI_LOCAL_ONLY")?.to_string() != "yes" {
             return reject("ci_fixture_missing");
         }
     }
@@ -509,8 +524,25 @@ pub async fn actor(req: &Request, env: &Env) -> Result<Option<Actor>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{access_jwks_cache_is_fresh, identity_key};
+    use super::{access_jwks_cache_is_fresh, audience_matches, identity_key, valid_access_audience};
     use serde_json::json;
+
+    #[test]
+    fn access_audience_is_runtime_scoped_and_exact() {
+        let production = "e0a664cf4f46f0d13d0ac0d8dd621c718c70842a377bf6738d1a24f0d16cedc7";
+        let preview_one = "2d60128cb04e0d2bc181457656441c8c4c778d6ff0b1533af3333c77197d331a";
+        let preview_two = "dadc74da03ff0fe6122af5bd640dd0b63ab33760b589d5f6829e8fff54978ddb";
+
+        assert!(valid_access_audience(production));
+        assert!(valid_access_audience(preview_one));
+        assert!(valid_access_audience(preview_two));
+        assert!(audience_matches(&json!({"aud": production}), production));
+        assert!(audience_matches(&json!({"aud": [preview_one, "other"]}), preview_one));
+        assert!(!audience_matches(&json!({"aud": preview_one}), production));
+        assert!(!audience_matches(&json!({"aud": preview_two}), preview_one));
+        assert!(!audience_matches(&json!({"aud": ["production", "preview"]}), preview_one));
+        assert!(!valid_access_audience("wrong-audience"));
+    }
 
     #[test]
     fn service_assertion_without_sub_requires_signed_client_identity() {

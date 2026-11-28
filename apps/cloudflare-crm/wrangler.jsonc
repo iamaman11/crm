@@ -5,6 +5,9 @@
   "preview_urls": false,
   "account_id": "5bd5e1e1e813f061afc259e91334262d",
   "compatibility_date": "2026-11-07",
+  "vars": {
+    "CRM_ACCESS_AUDIENCE": "e0a664cf4f46f0d13d0ac0d8dd621c718c70842a377bf6738d1a24f0d16cedc7"
+  },
   "d1_databases": [
     {
       "binding": "DB",
