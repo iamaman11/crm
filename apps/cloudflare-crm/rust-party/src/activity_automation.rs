@@ -792,7 +792,8 @@ async fn execute_claimed(
                         "last_error_code='AUTOMATION_TASK_SOURCE_STALE'",
                         " WHERE tenant=? AND rule_id=? AND source_event_id=?",
                         " AND status='pending' AND source_type='task_overdue'",
-                        " AND source_stale=0 AND NOT EXISTS(",
+                        " AND source_stale=0 AND cancel_request_id IS NULL AND lease_request_id=?",
+                        " AND NOT EXISTS(",
                         " SELECT 1 FROM crm_activity_task_records t WHERE t.tenant=?",
                         " AND t.id=? AND t.version=? AND json_extract(t.state,'$.status')='open'",
                         " AND json_type(t.state,'$.due_at_unix_nanos')='integer'",
@@ -802,6 +803,7 @@ async fn execute_claimed(
                         JsValue::from_str(tenant),
                         JsValue::from_str(&row.rule_id),
                         JsValue::from_str(&row.source_event_id),
+                        JsValue::from_str(request_id),
                         JsValue::from_str(tenant),
                         JsValue::from_str(&row.source_id),
                         JsValue::from_f64(row.source_version as f64),
@@ -873,7 +875,7 @@ async fn execute_claimed(
             "task_request_id=?,completed_at_unix_millis=?,lease_until_unix_millis=0,",
             "next_attempt_at_unix_millis=0,last_error_code=NULL WHERE tenant=?",
             " AND rule_id=? AND source_event_id=? AND status='pending'",
-            " AND cancel_request_id IS NULL AND source_stale=0"
+            " AND cancel_request_id IS NULL AND source_stale=0 AND lease_request_id=?"
         ),
         &[
             task_trace
@@ -884,6 +886,7 @@ async fn execute_claimed(
             JsValue::from_str(tenant),
             JsValue::from_str(&row.rule_id),
             JsValue::from_str(&row.source_event_id),
+            JsValue::from_str(request_id),
         ],
     )
     .map_err(|_| storage())?
