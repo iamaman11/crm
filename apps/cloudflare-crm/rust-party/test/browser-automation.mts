@@ -173,6 +173,7 @@ export async function verifyBrowserAutomation({page,sql,tenantA,dealId,laterCall
    await page.getByRole("heading",{name:"Автоматизация",exact:true}).waitFor();
    await page.getByText("Источник: Задача просрочена · ID: "+cancelSourceId+" · версия: 1",
      {exact:true}).waitFor();
+   await page.getByText(/Причина последней попытки:/).waitFor();
    const cancelButton=page.getByRole("button",{name:"Отменить исходный запуск",exact:true});
    await expect(cancelButton).toHaveCount(1);
    await mutation(cancelButton,AutomationService.method.cancelAutomationRun);

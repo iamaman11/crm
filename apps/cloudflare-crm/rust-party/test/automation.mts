@@ -533,9 +533,10 @@ export async function verifyAutomation({dispatch,sql,accountId,contactId,dealId,
      "WHEN NEW.id LIKE 'automation-%' BEGIN SELECT RAISE(ABORT,'fixture scheduled Task blocked'); END;");
    try { await tick(); } finally { await sql("DROP TRIGGER fixture_fail_scheduled_automation_task"); }
    const cancelRun=(await sql(
-     "SELECT task_id FROM crm_activity_automation_runs WHERE tenant=? AND rule_id=? AND source_type='task_overdue' AND source_id=?",
+     "SELECT task_id,last_error_code FROM crm_activity_automation_runs WHERE tenant=? AND rule_id=? AND source_type='task_overdue' AND source_id=?",
      "tenant-a",overdueRuleId,cancelSourceId))[0];
    assert.ok(cancelRun);
+   assert.ok(cancelRun.last_error_code,"the run journal retains the typed failure reason");
    const cancelled=await fixtureRpc(dispatch,automation.cancelAutomationRun,admin,{
      ruleId:overdueRuleId,sourceType:2,sourceId:cancelSourceId,expectedRuleVersion:2n,
      precondition:key("cancel-scheduled")
@@ -573,9 +574,10 @@ export async function verifyAutomation({dispatch,sql,accountId,contactId,dealId,
      "tenant-a",overdueRuleId,staleSourceId);
    await tick();
    const stale=(await sql(
-     "SELECT source_stale FROM crm_activity_automation_runs WHERE tenant=? AND rule_id=? AND source_type='task_overdue' AND source_id=?",
+     "SELECT source_stale,last_error_code FROM crm_activity_automation_runs WHERE tenant=? AND rule_id=? AND source_type='task_overdue' AND source_id=?",
      "tenant-a",overdueRuleId,staleSourceId))[0];
    assert.equal(stale?.source_stale,1);
+   assert.equal(stale?.last_error_code,"AUTOMATION_TASK_SOURCE_STALE");
    assert.equal((await sql(
      "SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND action='activities.automation.run.source_stale'",
      "tenant-a",String(staleRun.task_id)))[0]?.n,1);
