@@ -37,16 +37,23 @@ React UI, JSON /api/session, owner-tenant UI actions, and Close/provider 0.
 ---
 ## 15.11.2026 — canonical SITE_ACCESS_ORIGIN configuration (#357)
 
-The optional Cloudflare Access service identity has two independently
-installed Worker secrets: `SITE_ACCESS_CLIENT_ID` and
-`SITE_ACCESS_CLIENT_SECRET`. The public non-secret
-`SITE_ACCESS_ORIGIN=https://crm-dev.crm-5bd5e1e1.workers.dev` is declared
-**only in this application's** `wrangler.jsonc` `vars` as a repeatable
-configuration value. It does not belong in Vault and must not be delivered as
-a secret. Use the **existing protected mcp release workflow**, which
-deploys the reviewed Worker bundle with these vars, never a second direct
-Cloudflare patch or a reused CI secret. Check the existing secret bindings
-before and after release; neither credential value goes in GitHub.
+The optional Cloudflare Access service identity is bound per exact HTTPS
+origin. The existing `SITE_ACCESS_ORIGIN` + `SITE_ACCESS_CLIENT_ID` /
+`SITE_ACCESS_CLIENT_SECRET` pair remains dedicated to `crm-dev`. Isolated
+writer previews use independent `SITE_ACCESS_PREVIEW_1_*` and
+`SITE_ACCESS_PREVIEW_2_*` pairs; only their public origins are committed in
+this application's `wrangler.jsonc` `vars`. The four preview credentials are
+separate protected Worker secrets, never GitHub variables, source, logs, or
+browser tool parameters. Preview origins require their complete credential
+pair before navigation; an absent pair fails closed for that preview without
+disabling ordinary public-site browsing.
+
+Use the **existing protected mcp release workflow** to publish reviewed code
+and public origins. Do not patch the deployed Worker directly or reuse CI
+credentials. The existing `crm-dev` secret bindings must remain unchanged.
+The route owner injects credentials only for the exact matching origin, fetches
+one redirect hop at a time, and lets Chromium handle each redirect as a fresh
+request; injected credentials are never forwarded to another origin.
 
 After release, accept access by a real Browser MCP /api/session check and
 owner-tenant React→Connect→Rust→D1 UI E2E. A green CI check alone does not
@@ -132,16 +139,18 @@ interactive steps. The existing owner OAuth controls MCP; it does not impersonat
 an application user. `browser_session` reads the current site's optional
 `/api/session` convention and reports its real status.
 
-For unattended CRM or another Cloudflare Access site, the Worker may **optionally**
-be configured with `SITE_ACCESS_ORIGIN=https://exact-host` (nonsecret) and the
-Worker secrets `SITE_ACCESS_CLIENT_ID` / `SITE_ACCESS_CLIENT_SECRET` (both
-required together). A configured origin without secrets still uses ordinary
-interactive login. A partial credential pair or missing origin fails before
-browser acquisition. On a complete pair, credentials only accompany requests
-to the exact origin from that site itself or explicit controller navigation;
-foreign-site requests are rejected, and redirects never forward injected
-credentials. No browser tool accepts arbitrary credentials, and there are no
-CRM-specific business API or D1 operations inside Browser MCP.
+For unattended access to multiple Cloudflare Access sites, each exact origin
+has its own Worker-side credential pair. `crm-dev` keeps the original
+`SITE_ACCESS_ORIGIN` / `SITE_ACCESS_CLIENT_ID` / `SITE_ACCESS_CLIENT_SECRET`
+bindings. The two branch previews use `SITE_ACCESS_PREVIEW_1_ORIGIN` and
+`SITE_ACCESS_PREVIEW_2_ORIGIN`, each paired with its own
+`SITE_ACCESS_PREVIEW_n_CLIENT_ID` and `SITE_ACCESS_PREVIEW_n_CLIENT_SECRET`
+Worker secrets. Preview origins require credentials and fail closed if their
+pair is incomplete; the general-purpose browser remains usable for unrelated
+public sites. Credentials are injected only into the exact configured origin,
+never accepted as browser parameters, and are not forwarded across redirects.
+No browser tool accepts arbitrary credentials, and there are no CRM-specific
+business API or D1 operations inside Browser MCP.
 
 The **CRM CI already owns** signed Access test identities, native Rust/Connect/D1
 and React Chromium E2E. Preserve that fast, reproducible GitHub workflow for
