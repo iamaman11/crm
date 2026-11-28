@@ -238,31 +238,34 @@ pub(super) async fn register_import_source(
         results.len() == statement_count && results.iter().all(|result| result.success())
     });
     if !acknowledged {
-        if let Some(old) = import_source_receipt(db, tenant, operation_key).await? {
-            if old.source_id != source_id {
-                return Ok(Err(MutationFailure::domain(
-                    "IDEMPOTENCY_CONFLICT",
-                    ErrorCode::Aborted,
-                )));
-            }
-            let source = import_source_by_id(db, tenant, source_id)
-                .await?
-                .ok_or_else(|| {
-                    worker::Error::RustError("CSV source receipt target missing".into())
-                })?;
-            return Ok(Ok((
-                source,
-                ImportSaved {
-                    created: 0,
-                    replayed: 1,
-                    operation_replayed: true,
-                    original_request_id: old.request_id,
-                },
+        let old = match super::d1_write::require_receipt(
+            import_source_receipt(db, tenant, operation_key),
+            "IMPORT_SOURCE_REGISTER_UNCONFIRMED",
+        )
+        .await
+        {
+            Ok(old) => old,
+            Err(failure) => return Ok(Err(failure)),
+        };
+        if old.source_id != source_id {
+            return Ok(Err(MutationFailure::domain(
+                "IDEMPOTENCY_CONFLICT",
+                ErrorCode::Aborted,
             )));
         }
-        return Ok(Err(MutationFailure::domain(
-            "IMPORT_SOURCE_REGISTER_UNCONFIRMED",
-            ErrorCode::Unavailable,
+        let source = import_source_by_id(db, tenant, source_id)
+            .await?
+            .ok_or_else(|| {
+                worker::Error::RustError("CSV source receipt target missing".into())
+            })?;
+        return Ok(Ok((
+            source,
+            ImportSaved {
+                created: 0,
+                replayed: 1,
+                operation_replayed: true,
+                original_request_id: old.request_id,
+            },
         )));
     }
 

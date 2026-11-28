@@ -56,6 +56,9 @@ export function DataScreen() {
     });
     return ()=>{active=false;};
   },[]);
+  const knownIdentityConflict=preview?.rowIssues.some(issue=>
+    issue.code==="IMPORT_SOURCE_IDENTITY_CONFLICT"||
+    issue.code==="IMPORT_SOURCE_IDENTITY_TARGET_MISSING")??false;
   const exported=useReadAction<Awaited<ReturnType<typeof api.csv.previewPartyExport>>>();
   const clearSelection=async()=>{
     fileRevision.current++;
@@ -153,7 +156,7 @@ export function DataScreen() {
         {sourceId
           ?<p>{fileName}: записей {preview.count}; новых участников {preview.newCount}, найдено по внешнему ID {preview.matchedCount}.</p>
           :<p>{fileName}: записей {preview.count}, ранее импортировано {preview.previouslyImported}.</p>}
-        {sourceId&&preview.rowIssues.length>0&&<p role="status">Обнаружены расхождения по известному ID источника. Импорт всего файла запрещён; исправьте CSV. Данные не записаны.</p>}
+        {sourceId&&knownIdentityConflict&&<p role="status">Обнаружены расхождения по известному ID источника. Импорт всего файла запрещён; исправьте CSV. Данные не записаны.</p>}
         {preview.rowIssues.length>0?<section aria-label="Ошибки CSV">
           <p role="status">Найдено ошибок: {preview.rowIssues.length}. Импорт всего файла запрещён. Исправьте CSV и проверьте повторно; участники не созданы.</p>
           <ol>{preview.rowIssues.map((issue,index)=><li key={issue.rowPosition+"-"+issue.field+"-"+index}>
