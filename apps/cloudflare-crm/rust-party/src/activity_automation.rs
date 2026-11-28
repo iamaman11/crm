@@ -41,6 +41,15 @@ pub(super) struct RuleInput {
     pub assignee_email: String,
     pub due_after_seconds: i64,
 }
+#[derive(Clone, Copy)]
+pub(super) struct CancelInput<'a> {
+    pub rule_id: &'a str,
+    pub source_type: &'a str,
+    pub source_id: &'a str,
+    pub expected_version: i64,
+    pub idempotency_key: &'a str,
+    pub request_id: &'a str,
+}
 pub(super) struct RuleSaved {
     pub rule: RuleRow,
     pub replayed: bool,
@@ -1458,25 +1467,28 @@ fn task_failure_code(error: &activity_tasks::MutationFailure) -> String {
 pub(super) async fn cancel(
     db: &D1Database,
     principal: &access::Actor,
-    rule: &str,
-    source_type: &str,
-    source_id: &str,
-    expected_version: i64,
-    key: &str,
-    request_id: &str,
+    input: CancelInput<'_>,
 ) -> Result<RunSaved, ConnectError> {
+    let CancelInput {
+        rule_id,
+        source_type,
+        source_id,
+        expected_version,
+        idempotency_key,
+        request_id,
+    } = input;
     let tenant = &principal.tenant;
-    let row = get_run(db, tenant, rule, source_type, source_id, expected_version)
+    let row = get_run(db, tenant, rule_id, source_type, source_id, expected_version)
         .await?
         .ok_or_else(|| ConnectError::not_found("ACTIVITIES_AUTOMATION_RUN_NOT_FOUND"))?;
     // Preserve the historical Interaction idempotency digest exactly;
     // new autonomous source kinds bind both their type and source id.
     let identity = if source_type == "interaction_created" {
-        json!(["cancel_automation_run", rule, source_id, expected_version])
+        json!(["cancel_automation_run", rule_id, source_id, expected_version])
     } else {
         json!([
             "cancel_automation_run",
-            rule,
+            rule_id,
             source_type,
             source_id,
             expected_version
@@ -1486,8 +1498,8 @@ pub(super) async fn cancel(
         "{:x}",
         Sha256::digest(serde_json::to_vec(&identity).map_err(|_| storage())?)
     );
-    let replayed = verify_run_request(db, tenant, key, rule, &row.source_event_id, &digest).await?;
-    if replayed && row.cancel_key.as_deref() == Some(key) {
+    let replayed = verify_run_request(db, tenant, idempotency_key, rule_id, &row.source_event_id, &digest).await?;
+    if replayed && row.cancel_key.as_deref() == Some(idempotency_key) {
         return Ok(RunSaved {
             original_request_id: row.cancel_request_id.clone(),
             run: row,
@@ -1512,15 +1524,15 @@ pub(super) async fn cancel(
             " AND t.id=crm_activity_automation_runs.task_id)",
             " AND NOT EXISTS(SELECT 1 FROM crm_activity_task_receipts t",
             " WHERE t.tenant=crm_activity_automation_runs.tenant",
-            " AND t.key=crm_activity_automation_runs.task_id)"
+            " AND t.idempotency_key=crm_activity_automation_runs.task_id)"
         ),
         &[
-            JsValue::from_str(key),
+            JsValue::from_str(idempotency_key),
             JsValue::from_str(&digest),
             JsValue::from_str(request_id),
             JsValue::from_str(&principal.identity),
             JsValue::from_str(tenant),
-            JsValue::from_str(rule),
+            JsValue::from_str(rule_id),
             JsValue::from_str(&row.source_event_id),
             JsValue::from_f64(expected_version as f64),
         ],
@@ -1528,11 +1540,11 @@ pub(super) async fn cancel(
     .map_err(|_| storage())?
     .run()
     .await;
-    let fresh = read_run(db, tenant, rule, &row.source_event_id)
+    let fresh = read_run(db, tenant, rule_id, &row.source_event_id)
         .await?
         .ok_or_else(storage)?;
-    let bound = verify_run_request(db, tenant, key, rule, &row.source_event_id, &digest).await?;
-    if bound && fresh.cancel_key.as_deref() == Some(key) {
+    let bound = verify_run_request(db, tenant, idempotency_key, rule_id, &row.source_event_id, &digest).await?;
+    if bound && fresh.cancel_key.as_deref() == Some(idempotency_key) {
         let original = fresh.cancel_request_id.clone().ok_or_else(storage)?;
         return Ok(RunSaved {
             replayed: original != request_id,

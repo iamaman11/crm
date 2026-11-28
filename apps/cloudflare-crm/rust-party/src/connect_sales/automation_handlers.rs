@@ -185,12 +185,14 @@ impl auto_wire::AutomationService for AutomationV2Service {
         let saved = automation::cancel(
             &self.d1()?,
             &self.actor,
-            &input.rule_id,
-            &source_type,
-            &source_id,
-            input.expected_rule_version,
-            &key,
-            &self.request_id,
+            automation::CancelInput {
+                rule_id: &input.rule_id,
+                source_type: &source_type,
+                source_id: &source_id,
+                expected_version: input.expected_rule_version,
+                idempotency_key: &key,
+                request_id: &self.request_id,
+            },
         )
         .await?;
         RpcResponse::ok(auto_wire::CancelAutomationRunResponse {
