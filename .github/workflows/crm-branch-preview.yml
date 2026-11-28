@@ -117,6 +117,14 @@ jobs:
           assert.equal(run.repository?.full_name, repo);
           assert.equal(run.head_repository?.full_name, repo,
             "fork-originated runs are never eligible for preview credentials");
+          const branchResponse = await fetch(
+            "https://api.github.com/repos/" + repo + "/branches/" + encodeURIComponent(branch),
+            {headers},
+          );
+          const branchInfo = await branchResponse.json();
+          assert.ok(branchResponse.ok, "GitHub could not read the selected source branch");
+          assert.equal(branchInfo.commit?.sha, sha,
+            "the selected Gate A SHA is stale because the source branch has advanced");
           const artifactName = "crm-native-bundle-" + sha + "-attempt-" + attempt;
           const artifactResponse = await fetch(
             "https://api.github.com/repos/" + repo + "/actions/runs/" + runId + "/artifacts?per_page=100",
@@ -126,6 +134,8 @@ jobs:
           assert.ok(artifactResponse.ok, "GitHub could not read Gate A artifacts");
           const artifact = (artifacts.artifacts ?? []).find(item => item.name === artifactName);
           assert.ok(artifact, "the exact sealed Gate A artifact is absent");
+          assert.equal(artifact.workflow_run?.id, Number(runId),
+            "the artifact must belong to this exact Gate A run");
           assert.equal(artifact.expired, false, "the exact sealed Gate A artifact has expired");
           assert.ok(artifact.size_in_bytes > 0, "the exact sealed Gate A artifact is empty");
           const output = [
@@ -539,7 +549,7 @@ jobs:
         run: sleep 1800
 
       - name: Remove only the selected preview Worker and physical D1
-        if: ${{ always() && steps.gate.outputs.enabled == 'true' }}
+        if: ${{ always() && steps.d1.outcome == 'success' }}
         shell: bash
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CRM_PREVIEW_CLOUDFLARE_API_TOKEN }}
