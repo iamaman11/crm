@@ -415,7 +415,7 @@ export async function verifyAutomation({dispatch,sql,accountId,contactId,dealId,
    const dealTask=(await fixtureRpc(dispatch,tasks.getTask,viewer,{taskId:dealTaskId})).body.task;
    assert.ok(dealTask);
    assert.equal(dealTask.accountId,accountId);
-   assert.equal(dealTask.owner?.owner.value,person);
+   assert.equal(dealTask.assigneeIdentity,person);
    assert.equal(dealTask.subject,"Deal-created follow-up "+suffix);
    assert.equal(dealTask.relatedDealId,dealId);
    assert.equal((await sql(
@@ -563,7 +563,7 @@ export async function verifyAutomation({dispatch,sql,accountId,contactId,dealId,
      taskId:rescheduledSourceId,accountId,subject:"Overdue rescheduled source",priority:2,
      dueAt:{seconds:1700000000n,nanos:0},precondition:key("rescheduled-source")
    })).status,200);
-   assert.equal((await fixtureRpc(dispatch,tasks.updateTask,admin,{
+   assert.equal((await fixtureRpc(dispatch,tasks.updateTask,knownService,{
      taskId:rescheduledSourceId,dueAt:{operation:{case:"set",value:{
        seconds:1900000000n,nanos:0
      }}},precondition:{expectedVersion:1n,idempotencyKey:"automation-reschedule-"+suffix}

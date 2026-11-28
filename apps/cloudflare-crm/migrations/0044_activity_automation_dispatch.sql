@@ -271,7 +271,7 @@ WHEN EXISTS(
    AND json_extract(source.state,'$.status')='open'
    AND json_type(source.state,'$.due_at_unix_nanos')='integer'
    AND CAST(json_extract(source.state,'$.due_at_unix_nanos') AS INTEGER)
-       <= unixepoch('now')*1000000000
+       <= (CAST(strftime('%s','now') AS INTEGER)*1000000000+CAST(substr(strftime('%f','now'),4,3) AS INTEGER)*1000000)
  )
 )
 BEGIN SELECT RAISE(ABORT,'AUTOMATION_TASK_SOURCE_STALE'); END;

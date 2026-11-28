@@ -176,7 +176,7 @@ export async function verifyBrowserAutomation({page,sql,tenantA,dealId,laterCall
    const cancelButton=page.getByRole("button",{name:"Отменить исходный запуск",exact:true});
    await expect(cancelButton).toHaveCount(1);
    await mutation(cancelButton,AutomationService.method.cancelAutomationRun);
-   await page.getByRole("heading",{name:"Запуск отменён",exact:true}).waitFor();
+   await page.getByText("Запуск отменён",{exact:true}).waitFor();
    await page.goto("about:blank");
    await runScheduled({cron:"*/5 * * * *",scheduledTime:new Date()});
    const cancelledSourceRun=(await sql(

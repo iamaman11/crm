@@ -13,6 +13,6 @@ pub(super) async fn scheduled(_event: ScheduledEvent, env: Env, _ctx: ScheduleCo
     .await;
     match result {
         Ok(summary) => console_log!("CRM_AUTOMATION_SCHEDULED_DISPATCH: {:?}", summary),
-        Err(error) => console_error!("CRM_AUTOMATION_SCHEDULED_DISPATCH_FAILED: {error}"),
+        Err(error) => console_error!("CRM_AUTOMATION_SCHEDULED_DISPATCH_FAILED: {:?}", error),
     }
 }
