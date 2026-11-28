@@ -43,6 +43,18 @@ function triggerLabel(trigger:AutomationTrigger) {
     default: return "Неизвестный источник";
   }
 }
+function automationErrorLabel(code:string) {
+  switch(code) {
+    case "AUTOMATION_TASK_SOURCE_STALE":
+      return "Исходная задача завершена или перенесена до создания результата.";
+    case "AUTOMATION_TASK_OWNER_UNAVAILABLE":
+      return "Сервис создания задач временно недоступен. Запуск будет повторён.";
+    case "ACTIVITIES_ASSIGNEE_NOT_ENROLLED":
+      return "Исполнитель больше не активен или не имеет доступа.";
+    default:
+      return code;
+  }
+}
 function runResource(ruleId:string,sourceType:AutomationTrigger,sourceId:string,ruleVersion:bigint) {
   return ruleId+"/"+sourceType+"/"+sourceId+"/"+ruleVersion.toString();
 }
@@ -252,6 +264,7 @@ export function AutomationScreen({initialInteractionId=""}:{initialInteractionId
         <p>Источник: {triggerLabel(run.sourceType)} · ID: {run.sourceId} · версия: {run.sourceVersion.toString()}</p>
         <p>Оригинальный запрос: {run.originalRequestId}</p>
         <p>Попыток исполнения: {run.attemptCount.toString()} из {run.attemptLimit.toString()}</p>
+        {run.lastErrorCode&&<p>Причина последней попытки: {automationErrorLabel(run.lastErrorCode)}</p>}
         {run.disposition===AutomationRunDisposition.BACKOFF&&
           <p>Следующая попытка: {new Date(Number(run.nextAttemptAtUnixMillis)).toLocaleString("ru-RU")}</p>}
         {run.status===AutomationRunStatus.CANCELLED&&

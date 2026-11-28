@@ -404,6 +404,17 @@ export async function verifyAutomation({dispatch,sql,accountId,contactId,existin
    assert.ok(publishedDealCursor);
    assert.ok(Number(publishedDealCursor.published_after_deal_event_rowid)>=Number(oldDealEvent.rowid),
      "a newly published rule starts after every existing Deal event");
+   const revisedDealRule=await fixtureRpc(dispatch,automation.putAutomationRule,admin,{
+     ruleId:dealRuleId,trigger:3,enabled:true,taskSubject:"Deal-created follow-up "+suffix,
+     assigneeEmail:person,dueAfterSeconds:3600n,
+     precondition:{expectedVersion:1n,idempotencyKey:"automation-deal-rule-v2-"+suffix}
+   });
+   assert.equal(revisedDealRule.status,200,formatRpcFailure(revisedDealRule));
+   const revisedCursor=(await sql(
+     "SELECT version,published_after_deal_event_rowid FROM crm_activity_automation_rules WHERE tenant=? AND id=?",
+     "tenant-a",dealRuleId))[0];
+   assert.equal(revisedCursor?.version,2);
+   assert.ok(Number(revisedCursor?.published_after_deal_event_rowid)>=Number(oldDealEvent.rowid));
    const dealId="automation-deal-source-"+suffix;
    const dealInput={...dealCreationInput(dealId,accountId,contactId),
      name:"Automation source deal "+suffix,precondition:key("deal-create")};
@@ -413,16 +424,17 @@ export async function verifyAutomation({dispatch,sql,accountId,contactId,existin
      "SELECT rowid,deal_version,action FROM crm_sales_deal_events WHERE tenant=? AND deal_id=? AND action='created'",
      "tenant-a",dealId))[0];
    assert.ok(dealEvent);
-   assert.ok(Number(dealEvent.rowid)>Number(publishedDealCursor.published_after_deal_event_rowid),
+   assert.ok(Number(dealEvent.rowid)>Number(revisedCursor?.published_after_deal_event_rowid),
      "a Deal created after publication must be beyond the durable rowid cursor");
-   await tick();
+   await Promise.all([tick(),tick()]);
    await tick();
    const dealRuns=await sql(
-     "SELECT source_event_id,source_version,task_id,status,attempt_count FROM crm_activity_automation_runs WHERE tenant=? AND rule_id=? AND source_type='deal_created' AND source_id=?",
+     "SELECT source_event_id,rule_version,source_version,task_id,status,attempt_count FROM crm_activity_automation_runs WHERE tenant=? AND rule_id=? AND source_type='deal_created' AND source_id=?",
      "tenant-a",dealRuleId,dealId);
    assert.equal(dealRuns.length,1,"repeated Cron ticks must claim one Deal source");
    const dealRun=dealRuns[0]!;
    assert.equal(dealRun.status,"committed");
+   assert.equal(dealRun.rule_version,2);
    assert.equal(dealRun.source_version,dealEvent.deal_version);
    assert.equal(dealRun.attempt_count,1);
    const dealTaskId=String(dealRun.task_id);
@@ -446,7 +458,7 @@ export async function verifyAutomation({dispatch,sql,accountId,contactId,existin
      "tenant-b",dealId))[0]?.n,0,"tenant B must not observe or execute tenant A's source");
    assert.equal((await sql(
      "SELECT COUNT(*) n FROM crm_activity_automation_runs WHERE tenant=? AND source_type='deal_created' AND source_id=?",
-     "tenant-a","deal-existing"))[0]?.n,oldDealRunCount,
+     "tenant-a",existingDealId))[0]?.n,oldDealRunCount,
      "publishing a Deal rule must not replay old lifecycle events");
 
    // Task-overdue is a timer over the current open Task version. A completed
@@ -553,9 +565,15 @@ export async function verifyAutomation({dispatch,sql,accountId,contactId,existin
      "WHEN NEW.id LIKE 'automation-%' BEGIN SELECT RAISE(ABORT,'fixture scheduled Task blocked'); END;");
    try { await tick(); } finally { await sql("DROP TRIGGER fixture_fail_scheduled_automation_task"); }
    const cancelRun=(await sql(
-     "SELECT task_id FROM crm_activity_automation_runs WHERE tenant=? AND rule_id=? AND source_type='task_overdue' AND source_id=?",
+     "SELECT task_id,last_error_code FROM crm_activity_automation_runs WHERE tenant=? AND rule_id=? AND source_type='task_overdue' AND source_id=?",
      "tenant-a",overdueRuleId,cancelSourceId))[0];
    assert.ok(cancelRun);
+   assert.ok(cancelRun.last_error_code,"run journal records the safe failure code");
+   const failureView=await fixtureRpc(dispatch,automation.getAutomationRun,viewer,{
+     ruleId:overdueRuleId,sourceType:2,sourceId:cancelSourceId,expectedRuleVersion:1n
+   });
+   assert.equal(failureView.status,200,formatRpcFailure(failureView));
+   assert.equal(failureView.body.run?.lastErrorCode,cancelRun.last_error_code);
    const cancelled=await fixtureRpc(dispatch,automation.cancelAutomationRun,admin,{
      ruleId:overdueRuleId,sourceType:2,sourceId:cancelSourceId,expectedRuleVersion:1n,
      precondition:key("cancel-scheduled")
@@ -649,11 +667,35 @@ export async function verifyAutomation({dispatch,sql,accountId,contactId,existin
    assert.equal((await sql(
      "SELECT COUNT(*) n FROM crm_activity_automation_runs WHERE tenant=? AND rule_id=? AND source_type='task_overdue' AND source_id=?",
      "tenant-a",overdueRuleId,rescheduledSourceId))[0]?.n,0);
+   // A new published rule version is a distinct source identity. The same
+   // still-overdue Task may be consumed once by that new version, but repeated
+   // ticks of either version remain idempotent.
+   const revisedRule=await fixtureRpc(dispatch,automation.putAutomationRule,admin,{
+     ruleId:overdueRuleId,trigger:2,enabled:true,
+     taskSubject:"Overdue follow-up revision "+suffix,assigneeEmail:person,
+     dueAfterSeconds:0n,
+     precondition:{expectedVersion:1n,idempotencyKey:"automation-overdue-rule-v2-"+suffix}
+   });
+   assert.equal(revisedRule.status,200,formatRpcFailure(revisedRule));
+   await tick();
+   await tick();
+   const versionedRuns=await sql(
+     "SELECT rule_version,task_id,status FROM crm_activity_automation_runs WHERE tenant=? AND rule_id=? AND source_type='task_overdue' AND source_id=? ORDER BY rule_version",
+     "tenant-a",overdueRuleId,overdueSourceId);
+   assert.equal(versionedRuns.length,2,"each published rule version may consume a Task source once");
+   assert.deepEqual(versionedRuns.map(row=>row.rule_version),[1,2]);
+   assert.equal(versionedRuns[1]?.status,"committed");
+   assert.notEqual(versionedRuns[0]?.task_id,versionedRuns[1]?.task_id);
+   assert.equal((await sql(
+     "SELECT COUNT(*) n FROM crm_activity_task_receipts WHERE tenant=? AND key=?",
+     "tenant-a",String(versionedRuns[1]?.task_id)))[0]?.n,1);
+
    console.log(JSON.stringify({event:"crm.native-sk08a-autonomous-dispatch",result:"PASS",
      real_worker_scheduled:true,deal_created:true,task_overdue:true,closed_browser_independent:true,
      bounded_catch_up:true,tenant_isolation:true,duplicate_source_fenced:true,
      original_task_owner:true,system_actor_audited:true,receipt_recovery:true,
-     operator_cancellation:true,stale_source_fenced:true,rescheduled_source_ignored:true}));
+     operator_cancellation:true,stale_source_fenced:true,rescheduled_source_ignored:true,
+     concurrent_cron:true,late_scheduled_time_catch_up:true,versioned_rule_identity:true,journal_error_code:true}));
  }
 
 }

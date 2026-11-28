@@ -148,6 +148,7 @@ CREATE TABLE crm_activity_automation_runs (
  cancelled_by TEXT,
  cancelled_at_unix_millis INTEGER,
  source_stale INTEGER NOT NULL DEFAULT 0 CHECK(source_stale IN (0,1)),
+ last_error_code TEXT CHECK(last_error_code IS NULL OR length(last_error_code) BETWEEN 1 AND 120),
  UNIQUE(tenant,rule_id,source_event_id),
  UNIQUE(tenant,rule_id,source_type,source_id,rule_version),
  UNIQUE(tenant,task_id),
@@ -160,7 +161,7 @@ INSERT INTO crm_activity_automation_runs(
  run_request_digest,status,requested_by,original_request_id,task_request_id,
  created_at_unix_millis,completed_at_unix_millis,attempt_count,lease_request_id,
  lease_actor,lease_until_unix_millis,next_attempt_at_unix_millis,cancel_key,
- cancel_digest,cancel_request_id,cancelled_by,cancelled_at_unix_millis,source_stale
+ cancel_digest,cancel_request_id,cancelled_by,cancelled_at_unix_millis,source_stale,last_error_code
 )
 SELECT seq,tenant,rule_id,rule_version,source_event_id,'interaction_created',
  interaction_id,COALESCE((SELECT source_version FROM crm_activity_automation_source_events s
@@ -169,7 +170,7 @@ SELECT seq,tenant,rule_id,rule_version,source_event_id,'interaction_created',
  run_request_digest,status,requested_by,original_request_id,task_request_id,
  created_at_unix_millis,completed_at_unix_millis,attempt_count,lease_request_id,
  lease_actor,lease_until_unix_millis,next_attempt_at_unix_millis,cancel_key,
- cancel_digest,cancel_request_id,cancelled_by,cancelled_at_unix_millis,0
+ cancel_digest,cancel_request_id,cancelled_by,cancelled_at_unix_millis,0,NULL
 FROM crm_activity_automation_runs_legacy old;
 
 CREATE TABLE crm_activity_automation_run_requests (
@@ -222,6 +223,7 @@ BEGIN
   OR NEW.source_version IS NOT OLD.source_version
   OR NEW.source_checked_at_unix_nanos IS NOT OLD.source_checked_at_unix_nanos
   OR NEW.source_stale<>0
+  OR NEW.last_error_code IS NOT NULL
   OR NEW.rule_version IS NOT OLD.rule_version
   OR NEW.source_event_id IS NOT OLD.source_event_id
   OR NEW.task_request_id IS NULL

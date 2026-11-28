@@ -59,6 +59,7 @@ pub(super) struct RunRow {
     pub source_version: i64,
     pub interaction_id: String,
     pub source_stale: i64,
+    pub last_error_code: Option<String>,
     pub task_id: String,
     pub task_intent: String,
     pub status: String,
@@ -145,14 +146,15 @@ pub(super) fn rule_id(value: &str) -> Result<RecordId, ConnectError> {
         .map_err(|_| invalid("ACTIVITIES_AUTOMATION_RULE_ID_INVALID"))
 }
 
-pub(super) fn check(input: &RuleInput) -> Result<AutomationRule, ConnectError> {
+pub(super) fn check(input: &RuleInput, version: i64) -> Result<AutomationRule, ConnectError> {
     let trigger = match input.trigger.as_str() {
         "interaction_created" => AutomationTrigger::InteractionCreated,
         "deal_created" => AutomationTrigger::DealCreated,
         "task_overdue" => AutomationTrigger::TaskOverdue,
         _ => return Err(invalid("ACTIVITIES_AUTOMATION_TRIGGER_NOT_ENABLED")),
     };
-    if input.due_after_seconds < 0
+    if version <= 0
+        || input.due_after_seconds < 0
         || input.due_after_seconds > 31_536_000
         || input.assignee_email.starts_with("service:")
         || input.assignee_email.trim() != input.assignee_email
@@ -165,7 +167,7 @@ pub(super) fn check(input: &RuleInput) -> Result<AutomationRule, ConnectError> {
     );
     let value = AutomationRule {
         rule_id: rule_id(&input.rule_id)?,
-        version: 1,
+        version,
         trigger,
         task_subject: input.task_subject.clone(),
         target: owner,
@@ -259,7 +261,13 @@ pub(super) async fn put(
     request_id: &str,
 ) -> Result<RuleSaved, ConnectError> {
     let tenant = &principal.tenant;
-    let _checked = check(&input)?;
+    let next_version = match expected {
+        Some(current) => current.checked_add(1),
+        None => Some(1),
+    }
+    .filter(|version| *version > 0)
+    .ok_or_else(|| invalid("ACTIVITIES_AUTOMATION_RULE_VERSION_INVALID"))?;
+    let _checked = check(&input, next_version)?;
     let hash = digest(&input, expected)?;
     if let Some(prior) = receipt(db, tenant, key).await.map_err(|_| storage())? {
         return saved_receipt(prior, &hash, &input.rule_id, true);
@@ -403,8 +411,9 @@ async fn source(
 // original Task owner may validate its digest and reconcile the actual commit.
 const RUN_SELECT: &str = concat!(
     "SELECT a.seq,a.rule_id,a.rule_version,a.source_event_id,a.source_type,a.source_id,",
-    "a.source_version,COALESCE(a.interaction_id,'') AS interaction_id,a.source_stale,a.task_id,",
-    "a.task_intent,a.status,a.requested_by,a.original_request_id,a.task_request_id,",
+    "a.source_version,COALESCE(a.interaction_id,'') AS interaction_id,a.source_stale,",
+    "a.last_error_code,a.task_id,a.task_intent,a.status,a.requested_by,",
+    "a.original_request_id,a.task_request_id,",
     "a.created_at_unix_millis,a.completed_at_unix_millis,",
     "EXISTS(SELECT 1 FROM crm_activity_task_receipts t WHERE t.tenant=a.tenant",
     " AND t.key=a.task_id) AS receipt_exists,",
@@ -557,7 +566,7 @@ pub(super) async fn execute_interaction(
                 "AUTOMATION_RULE_NOT_ENABLED_OR_STALE",
             ));
         }
-        let domain = check(&wire_input(&rule))?;
+        let domain = check(&wire_input(&rule), rule.version)?;
         let original = activity_interactions::get(db, tenant, interaction_id)
             .await
             .map_err(|_| storage())?
@@ -816,6 +825,9 @@ async fn execute_claimed(
                         " AND attempt_count=? AND next_attempt_at_unix_millis=?",
                         " AND lease_until_unix_millis<=unixepoch('now')*1000",
                         " AND next_attempt_at_unix_millis<=unixepoch('now')*1000",
+                        " AND NOT EXISTS(SELECT 1 FROM crm_activity_task_receipts r",
+                        " WHERE r.tenant=crm_activity_automation_runs.tenant",
+                        " AND r.key=crm_activity_automation_runs.task_id)",
                         " AND NOT EXISTS(",
                         " SELECT 1 FROM crm_activity_task_records t WHERE t.tenant=?",
                         " AND t.id=? AND t.version=? AND json_extract(t.state,'$.status')='open'",
@@ -894,14 +906,25 @@ async fn execute_claimed(
     };
     let outcome = match result {
         Ok(Ok(outcome)) => outcome,
-        other => {
+        Ok(Err(error)) => {
             if !has_receipt {
-                release_attempt(db, context.tenant, &row, context.request_id).await?;
+                let code = task_failure_code(&error);
+                release_attempt(db, context.tenant, &row, context.request_id, &code).await?;
             }
-            return Err(match other {
-                Ok(Err(error)) => error.connect(context.rpc_method, context.request_id),
-                _ => storage(),
-            });
+            return Err(error.connect(context.rpc_method, context.request_id));
+        }
+        Err(_) => {
+            if !has_receipt {
+                release_attempt(
+                    db,
+                    context.tenant,
+                    &row,
+                    context.request_id,
+                    "AUTOMATION_TASK_OWNER_UNAVAILABLE",
+                )
+                .await?;
+            }
+            return Err(storage());
         }
     };
     if outcome.task.task_id().as_str() != row.task_id {
@@ -915,9 +938,9 @@ async fn execute_claimed(
         concat!(
             "UPDATE crm_activity_automation_runs SET status='committed',",
             "task_request_id=?,completed_at_unix_millis=?,lease_until_unix_millis=0,",
-            "next_attempt_at_unix_millis=0 WHERE tenant=?",
+            "next_attempt_at_unix_millis=0,last_error_code=NULL WHERE tenant=?",
             " AND rule_id=? AND source_event_id=? AND status='pending'",
-            " AND cancel_request_id IS NULL AND source_stale=0"
+            " AND cancel_request_id IS NULL AND source_stale=0 AND (?=1 OR lease_request_id=?)"
         ),
         &[
             task_trace
@@ -928,6 +951,8 @@ async fn execute_claimed(
             JsValue::from_str(context.tenant),
             JsValue::from_str(&row.rule_id),
             JsValue::from_str(&row.source_event_id),
+            JsValue::from_f64(if has_receipt { 1.0 } else { 0.0 }),
+            JsValue::from_str(context.request_id),
         ],
     )
     .map_err(|_| storage())?
@@ -1152,12 +1177,19 @@ async fn dispatch_tenant(
             " EXISTS(SELECT 1 FROM crm_activity_task_receipts t",
             "  WHERE t.tenant=crm_activity_automation_runs.tenant",
             "   AND t.key=crm_activity_automation_runs.task_id)",
-            " OR (lease_until_unix_millis<=unixepoch('now')*1000",
-            " AND next_attempt_at_unix_millis<=unixepoch('now')*1000))",
+            " OR (attempt_count<? AND lease_until_unix_millis<=unixepoch('now')*1000",
+            " AND next_attempt_at_unix_millis<=unixepoch('now')*1000",
+            " AND EXISTS(SELECT 1 FROM crm_activity_automation_rules r",
+            "  WHERE r.tenant=crm_activity_automation_runs.tenant",
+            "   AND r.id=crm_activity_automation_runs.rule_id",
+            "   AND r.version=crm_activity_automation_runs.rule_version AND r.enabled=1",
+            "   AND EXISTS(SELECT 1 FROM crm_users u WHERE u.tenant_id=r.tenant",
+            "    AND u.email=r.assignee_email AND u.active=1))))",
             " ORDER BY seq LIMIT ?"
         ),
         &[
             JsValue::from_str(tenant),
+            JsValue::from_f64(MAX_ATTEMPTS as f64),
             JsValue::from_f64(MAX_SCHEDULED_BATCH as f64),
         ],
     )
@@ -1236,7 +1268,7 @@ async fn dispatch_tenant(
         {
             continue;
         }
-        let domain = check(&wire_input(&rule))?;
+        let domain = check(&wire_input(&rule), rule.version)?;
         let plan = domain
             .plan(
                 AutomationSource::DealCreated {
@@ -1343,7 +1375,7 @@ async fn dispatch_tenant(
             continue;
         }
         let task = activity_tasks::decode(&candidate.state).map_err(|_| storage())?;
-        let domain = check(&wire_input(&rule))?;
+        let domain = check(&wire_input(&rule), rule.version)?;
         let plan = domain
             .plan(
                 AutomationSource::TaskOverdue {
@@ -1462,6 +1494,7 @@ async fn release_attempt(
     tenant: &str,
     row: &RunRow,
     request_id: &str,
+    error_code: &str,
 ) -> Result<(), ConnectError> {
     // A failed release leaves the original expiration + backoff intact.
     // Never undo another attempt or mark a receipt-bearing run as failed.
@@ -1469,7 +1502,7 @@ async fn release_attempt(
         db,
         concat!(
             "UPDATE crm_activity_automation_runs SET lease_until_unix_millis=0,",
-            "next_attempt_at_unix_millis=unixepoch('now')*1000+(5000<<(attempt_count-1))",
+            "last_error_code=?,next_attempt_at_unix_millis=unixepoch('now')*1000+(5000<<(attempt_count-1))",
             " WHERE tenant=? AND rule_id=? AND source_event_id=? AND status='pending'",
             " AND lease_request_id=? AND cancel_request_id IS NULL",
             " AND NOT EXISTS(SELECT 1 FROM crm_activity_task_receipts t",
@@ -1477,6 +1510,7 @@ async fn release_attempt(
             " AND t.key=crm_activity_automation_runs.task_id)"
         ),
         &[
+            JsValue::from_str(error_code),
             JsValue::from_str(tenant),
             JsValue::from_str(&row.rule_id),
             JsValue::from_str(&row.source_event_id),
@@ -1487,6 +1521,18 @@ async fn release_attempt(
     .run()
     .await;
     Ok(())
+}
+
+fn task_failure_code(error: &activity_tasks::MutationFailure) -> String {
+    match error {
+        activity_tasks::MutationFailure::Domain { code, .. } => code.clone(),
+        activity_tasks::MutationFailure::Write(super::diagnostics::MutationFailure::Rejected(
+            error,
+        )) => error.code.to_string(),
+        activity_tasks::MutationFailure::Write(
+            super::diagnostics::MutationFailure::CommitUnconfirmed { code, .. },
+        ) => (*code).to_owned(),
+    }
 }
 
 pub(super) struct RunIdentity<'a> {

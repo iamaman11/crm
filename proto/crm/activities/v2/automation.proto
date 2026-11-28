@@ -116,6 +116,8 @@ message AutomationRun {
   AutomationTrigger source_type = 21;
   string source_id = 22;
   int64 source_version = 23;
+  // Last safe error code from an attempt; never contains raw provider text.
+  string last_error_code = 24;
 }
 message RunInteractionAutomationResponse {
   AutomationRun run = 1;

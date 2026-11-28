@@ -430,6 +430,7 @@ impl AutomationV2Service {
             source_type: source_type.into(),
             source_id: row.source_id.clone(),
             source_version: row.source_version,
+            last_error_code: row.last_error_code.clone().unwrap_or_default(),
             task_id: row.task_id.clone(),
             status: status.into(),
             requested_by: row.requested_by.clone(),
