@@ -186,6 +186,13 @@ export async function verifyBrowserAutomation({page,sql,tenantA,dealId,laterCall
    assert.equal((await sql(
      "SELECT COUNT(*) n FROM crm_activity_task_records WHERE tenant=? AND id=?",
      tenantA,string(cancelledSourceRun.task_id)))[0]?.n,0);
+   // Restore the UI after the autonomous Cron tick and verify cancellation
+   // remains visible after a fresh document load.
+   await page.goto(cancelReturnUrl.toString());
+   await page.getByRole("heading",{name:"Автоматизация",exact:true}).waitFor();
+   await page.getByText("Источник: Задача просрочена · ID: "+cancelSourceId+" · версия: 1",
+     {exact:true}).waitFor();
+   await page.getByText("Запуск отменён",{exact:true}).waitFor();
    checkpoint("SK-08A.3 operator cancellation fences an autonomous pending Task after browser unload");
 
 }
