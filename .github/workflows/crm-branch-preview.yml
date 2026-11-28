@@ -440,7 +440,7 @@ jobs:
               "a leaked Service Token must be rotated before preview use");
             assert.ok(token.expires_at && Date.parse(token.expires_at)>Date.now(),
               "both preview Service Tokens must have a future finite expiry");
-            assert.match(token.client_id??"",/^[0-9a-f]{32}\\.access$/);
+            assert.match(token.client_id??"",/^[0-9a-f]{32}\.access$/);
             return token;
           }));
           assert.deepEqual(tokenRecords.map(token=>token.name).sort(),expectedNames.sort(),
@@ -452,15 +452,15 @@ jobs:
           assert.equal(aToken.client_id,expectedAClientId,
             "the GitHub A credential pair must belong to this preview's exact A token");
           writeFileSync(process.env.GITHUB_OUTPUT,
-            "access_app_id="+appId+"\\n"+
-            "access_audience="+app.aud+"\\n"+
-            "preview_host="+app.domain+"\\n",
+            "access_app_id="+appId+"\n"+
+            "access_audience="+app.aud+"\n"+
+            "preview_host="+app.domain+"\n",
             {flag:"a"});
           writeFileSync(process.env.GITHUB_ENV,
-            "PREVIEW_ACCESS_AUD="+app.aud+"\\n"+
-            "PREVIEW_ACCESS_APP_ID="+appId+"\\n"+
-            "PREVIEW_HOST="+app.domain+"\\n"+
-            "PREVIEW_BROWSER_CLIENT_ID="+bToken.client_id+"\\n",
+            "PREVIEW_ACCESS_AUD="+app.aud+"\n"+
+            "PREVIEW_ACCESS_APP_ID="+appId+"\n"+
+            "PREVIEW_HOST="+app.domain+"\n"+
+            "PREVIEW_BROWSER_CLIENT_ID="+bToken.client_id+"\n",
             {flag:"a"});
           console.log("Validated isolated Access app, exact enabled A/B tokens, unique audience and fixed host.");
           NODE
@@ -578,7 +578,7 @@ jobs:
           import assert from "node:assert/strict";
           const account="5bd5e1e1e813f061afc259e91334262d";
           const clientId=process.env.PREVIEW_BROWSER_CLIENT_ID;
-          assert.match(clientId??"",/^[0-9a-f]{32}\\.access$/,
+          assert.match(clientId??"",/^[0-9a-f]{32}\.access$/,
             "the Browser MCP B client ID must come from the exact enabled Access Service Token");
           const tenantId="crm-preview-"+process.env.PREVIEW_SLOT+"-"+process.env.SOURCE_RUN_ID+"-"+process.env.SOURCE_RUN_ATTEMPT;
           const tenantName="CRM Preview "+process.env.PREVIEW_SLOT+" test";
