@@ -121,7 +121,7 @@ export async function verifyBrowserAutomation({page,sql,tenantA,dealId,laterCall
    const returnUrl=new URL(page.url());
    returnUrl.hash="#automation";
    await page.goto("about:blank");
-   const scheduled=await runScheduled({cron:"*/5 * * * *",scheduledTime:new Date()});
+   const scheduled=await runScheduled({cron:"*/5 * * * *",scheduledTime:new Date(Date.now()+60_000)});
    assert.equal(scheduled.outcome,"ok");
    await page.goto(returnUrl.toString());
    await page.getByRole("heading",{name:"Автоматизация",exact:true}).waitFor();

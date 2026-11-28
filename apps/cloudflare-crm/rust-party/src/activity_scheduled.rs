@@ -5,10 +5,21 @@
 use worker::*;
 
 #[cfg(feature = "native")]
-pub(super) async fn scheduled(_event: ScheduledEvent, env: Env, _ctx: ScheduleContext) {
+pub(super) async fn scheduled(event: ScheduledEvent, env: Env, _ctx: ScheduleContext) {
+    // Cloudflare exposes scheduledTime in milliseconds since Unix epoch.
+    // Use the event's time for business due checks, not the Worker wall clock.
+    let scheduled_millis = event.schedule();
+    let scheduled_nanos = if scheduled_millis.is_finite() && scheduled_millis >= 0.0 {
+        (scheduled_millis as i64).checked_mul(1_000_000)
+    } else {
+        None
+    };
     let result = async {
         let db = env.d1("DB")?;
-        super::activity_automation::dispatch_scheduled(&db, super::now_nanos())
+        let now = scheduled_nanos.ok_or_else(|| {
+            worker::Error::RustError("CRM_AUTOMATION_INVALID_SCHEDULED_TIME".to_owned())
+        })?;
+        super::activity_automation::dispatch_scheduled(&db, now)
             .await
             .map_err(|error| worker::Error::RustError(format!("{error:?}")))
     }

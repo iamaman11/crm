@@ -446,7 +446,8 @@ export async function verifyAutomation({dispatch,sql,accountId,contactId,existin
    const overdueSourceId="automation-overdue-source-"+suffix;
    const overdueSource=await fixtureRpc(dispatch,tasks.createTask,admin,{
      taskId:overdueSourceId,accountId,subject:"Original overdue task "+suffix,priority:2,
-     dueAt:{seconds:1700000000n,nanos:0},precondition:key("overdue-source")
+     dueAt:{seconds:BigInt(Math.floor((Date.now()+30_000)/1000)),nanos:0},
+     precondition:key("overdue-source")
    });
    assert.equal(overdueSource.status,200,formatRpcFailure(overdueSource));
    await tick();

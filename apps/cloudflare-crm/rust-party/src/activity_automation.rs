@@ -687,6 +687,7 @@ pub(super) async fn execute_interaction(
         row,
         &principal.identity,
         request_id,
+        super::now_nanos(),
         false,
         "RunInteractionAutomation",
     )
@@ -701,6 +702,7 @@ async fn execute_claimed(
     row: RunRow,
     actor: &str,
     request_id: &str,
+    now: i64,
     system_actor: bool,
     rpc_method: &str,
 ) -> Result<RunSaved, ConnectError> {
@@ -774,7 +776,7 @@ async fn execute_claimed(
                     JsValue::from_str(tenant),
                     JsValue::from_str(&row.source_id),
                     JsValue::from_f64(row.source_version as f64),
-                    JsValue::from_f64(now_nanos() as f64),
+                    JsValue::from_f64(now as f64),
                 ],
             )
             .map_err(|_| storage())?
@@ -1114,6 +1116,7 @@ async fn dispatch_tenant(
             row,
             principal.identity(),
             &request_id,
+            now,
             true,
             "ScheduledAutomation",
         )
@@ -1209,6 +1212,7 @@ async fn dispatch_tenant(
                 row,
                 principal.identity(),
                 &request_id,
+                now,
                 true,
                 "ScheduledAutomation",
             )
@@ -1309,6 +1313,7 @@ async fn dispatch_tenant(
                 row,
                 principal.identity(),
                 &request_id,
+                now,
                 true,
                 "ScheduledAutomation",
             )
