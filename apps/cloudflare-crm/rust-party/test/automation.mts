@@ -375,8 +375,8 @@ export async function verifyAutomation({dispatch,sql,accountId,contactId,dealId,
    assert.equal((await fixtureRpc(dispatch,member.provisionMember,admin,{
      email:person,role:1,precondition:key("member")
    })).status,200);
-   const tick=async()=>{
-     const result=await runScheduled({cron:"*/5 * * * *",scheduledTime:new Date()});
+   const tick=async(scheduledTime=new Date())=>{
+     const result=await runScheduled({cron:"*/5 * * * *",scheduledTime});
      assert.equal(result.outcome,"ok","native Cron callback must return without throwing");
      assert.equal(result.noRetry,false);
    };
@@ -386,22 +386,36 @@ export async function verifyAutomation({dispatch,sql,accountId,contactId,dealId,
    const oldDealRunCount=(await sql(
      "SELECT COUNT(*) n FROM crm_activity_automation_runs WHERE tenant=? AND source_type='deal_created' AND source_id=?",
      "tenant-a",dealId)).at(0)?.n;
+   const oldDealEvent=(await sql(
+     "SELECT rowid AS event_rowid,occurred_at_unix_nanos FROM crm_sales_deal_events "+
+     "WHERE tenant=? AND deal_id=? AND action='created'","tenant-a",dealId))[0];
+   assert.ok(oldDealEvent);
    const dealRuleId="automation-deal-rule-"+suffix;
    const dealRule=await fixtureRpc(dispatch,automation.putAutomationRule,admin,{
      ruleId:dealRuleId,trigger:3,enabled:true,taskSubject:"Deal-created follow-up "+suffix,
      assigneeEmail:person,dueAfterSeconds:3600n,precondition:key("deal-rule")
    });
    assert.equal(dealRule.status,200,formatRpcFailure(dealRule));
+   const publishedDealRule=(await sql(
+     "SELECT published_after_deal_event_rowid FROM crm_activity_automation_rules WHERE tenant=? AND id=?",
+     "tenant-a",dealRuleId))[0];
+   assert.ok(publishedDealRule);
+   assert.ok(Number(publishedDealRule.published_after_deal_event_rowid)>=Number(oldDealEvent.event_rowid));
+   // Simulate equal millisecond timestamps: the immutable event rowid, not a
+   // rounded wall-clock comparison, must keep this older Deal out of the rule.
+   await sql("UPDATE crm_activity_automation_rules SET published_at_unix_nanos=? WHERE tenant=? AND id=?",
+     Number(oldDealEvent.occurred_at_unix_nanos),"tenant-a",dealRuleId);
    const newDealId="automation-deal-source-"+suffix;
    const dealInput={...dealCreationInput(newDealId,accountId,contactId),
      name:"Automation source deal "+suffix,precondition:key("deal-create")};
    const createdDeal=await fixtureRpc(dispatch,DealService.method.createDeal,admin,dealInput);
    assert.equal(createdDeal.status,200,formatRpcFailure(createdDeal));
    const dealEvent=(await sql(
-     "SELECT deal_version,action FROM crm_sales_deal_events WHERE tenant=? AND deal_id=? AND action='created'",
+     "SELECT rowid AS event_rowid,deal_version,action FROM crm_sales_deal_events WHERE tenant=? AND deal_id=? AND action='created'",
      "tenant-a",newDealId))[0];
    assert.ok(dealEvent);
-   await tick();
+   assert.ok(Number(dealEvent.event_rowid)>Number(publishedDealRule.published_after_deal_event_rowid));
+   await Promise.all([tick(),tick()]);
    await tick();
    const dealRuns=await sql(
      "SELECT source_event_id,source_version,task_id,status,attempt_count FROM crm_activity_automation_runs WHERE tenant=? AND rule_id=? AND source_type='deal_created' AND source_id=?",
@@ -449,7 +463,7 @@ export async function verifyAutomation({dispatch,sql,accountId,contactId,dealId,
      dueAt:{seconds:1700000000n,nanos:0},precondition:key("overdue-source")
    });
    assert.equal(overdueSource.status,200,formatRpcFailure(overdueSource));
-   await tick();
+   await Promise.all([tick(),tick()]);
    await tick();
    const overdueRuns=await sql(
      "SELECT source_version,task_id,status,attempt_count FROM crm_activity_automation_runs WHERE tenant=? AND rule_id=? AND source_type='task_overdue' AND source_id=?",
@@ -466,6 +480,29 @@ export async function verifyAutomation({dispatch,sql,accountId,contactId,dealId,
    assert.equal((await sql(
      "SELECT COUNT(*) n FROM crm_activity_task_receipts WHERE tenant=? AND key=?",
      "tenant-a",overdueTaskId))[0]?.n,1);
+
+   // A delayed Cron invocation must use actual Worker time when it is later
+   // than scheduledTime; otherwise this Task would not yet be overdue.
+   const delayedSourceId="automation-overdue-delayed-" + suffix;
+   const delayedDueMillis=Date.now()-60_000;
+   const delayedDueAt={
+     seconds:BigInt(Math.floor(delayedDueMillis/1000)),
+     nanos:(delayedDueMillis%1000)*1_000_000
+   };
+   assert.equal((await fixtureRpc(dispatch,tasks.createTask,admin,{
+     taskId:delayedSourceId,accountId,subject:"Delayed Cron catch-up source",priority:2,
+     dueAt:delayedDueAt,precondition:key("delayed-source")
+   })).status,200);
+   await tick(new Date(Date.now()-120_000));
+   const delayedRun=(await sql(
+     "SELECT task_id,status,source_version FROM crm_activity_automation_runs WHERE tenant=? AND rule_id=? AND source_type='task_overdue' AND source_id=?",
+     "tenant-a",overdueRuleId,delayedSourceId))[0];
+   assert.ok(delayedRun);
+   assert.equal(delayedRun.status,"committed");
+   assert.equal(delayedRun.source_version,1);
+   assert.equal((await sql(
+     "SELECT COUNT(*) n FROM crm_activity_task_receipts WHERE tenant=? AND key=?",
+     "tenant-a",String(delayedRun.task_id)))[0]?.n,1);
 
    // A new published rule version is a distinct source identity. The same
    // still-overdue Task may be consumed once by that new version, but repeated
@@ -604,6 +641,7 @@ export async function verifyAutomation({dispatch,sql,accountId,contactId,dealId,
      real_worker_scheduled:true,deal_created:true,task_overdue:true,closed_browser_independent:true,
      bounded_catch_up:true,tenant_isolation:true,duplicate_source_fenced:true,
      original_task_owner:true,system_actor_audited:true,receipt_recovery:true,
+     concurrent_cron:true,late_scheduled_time_catch_up:true,
      operator_cancellation:true,stale_source_fenced:true,rescheduled_source_ignored:true}));
  }
 

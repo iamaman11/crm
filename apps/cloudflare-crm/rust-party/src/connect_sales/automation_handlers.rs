@@ -2,8 +2,8 @@
 //! Policy and tenant come only from the central signed-Access router.
 //! One typed rule service for Deal/Task scheduled sources and retained signed
 //! manual Interaction→Task execution.
-use super::*;
 use super::activity_automation as automation;
+use super::*;
 
 impl auto_wire::AutomationService for AutomationV2Service {
     #[worker::send]
@@ -20,11 +20,15 @@ impl auto_wire::AutomationService for AutomationV2Service {
             .is_none();
         let (key, expected) = wire_precondition(input.precondition.as_option(), create)?;
         let trigger = match input.trigger {
-            buffa::EnumValue::Known(auto_wire::AutomationTrigger::AUTOMATION_TRIGGER_INTERACTION_CREATED) => {
-                "interaction_created"
-            }
-            buffa::EnumValue::Known(auto_wire::AutomationTrigger::AUTOMATION_TRIGGER_TASK_OVERDUE) => "task_overdue",
-            buffa::EnumValue::Known(auto_wire::AutomationTrigger::AUTOMATION_TRIGGER_DEAL_CREATED) => "deal_created",
+            buffa::EnumValue::Known(
+                auto_wire::AutomationTrigger::AUTOMATION_TRIGGER_INTERACTION_CREATED,
+            ) => "interaction_created",
+            buffa::EnumValue::Known(
+                auto_wire::AutomationTrigger::AUTOMATION_TRIGGER_TASK_OVERDUE,
+            ) => "task_overdue",
+            buffa::EnumValue::Known(
+                auto_wire::AutomationTrigger::AUTOMATION_TRIGGER_DEAL_CREATED,
+            ) => "deal_created",
             _ => {
                 return Err(ConnectError::invalid_argument(
                     "ACTIVITIES_AUTOMATION_TRIGGER_NOT_ENABLED",
@@ -319,11 +323,15 @@ impl AutomationV2Service {
             ));
         }
         let kind = match source_type {
-            buffa::EnumValue::Known(auto_wire::AutomationTrigger::AUTOMATION_TRIGGER_INTERACTION_CREATED) => {
-                "interaction_created"
-            }
-            buffa::EnumValue::Known(auto_wire::AutomationTrigger::AUTOMATION_TRIGGER_TASK_OVERDUE) => "task_overdue",
-            buffa::EnumValue::Known(auto_wire::AutomationTrigger::AUTOMATION_TRIGGER_DEAL_CREATED) => "deal_created",
+            buffa::EnumValue::Known(
+                auto_wire::AutomationTrigger::AUTOMATION_TRIGGER_INTERACTION_CREATED,
+            ) => "interaction_created",
+            buffa::EnumValue::Known(
+                auto_wire::AutomationTrigger::AUTOMATION_TRIGGER_TASK_OVERDUE,
+            ) => "task_overdue",
+            buffa::EnumValue::Known(
+                auto_wire::AutomationTrigger::AUTOMATION_TRIGGER_DEAL_CREATED,
+            ) => "deal_created",
             _ => {
                 return Err(ConnectError::invalid_argument(
                     "ACTIVITIES_AUTOMATION_SOURCE_TYPE_REQUIRED",

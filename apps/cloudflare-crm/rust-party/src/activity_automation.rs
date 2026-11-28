@@ -29,6 +29,8 @@ pub(super) struct RuleRow {
     pub due_after_seconds: i64,
     #[serde(default)]
     pub published_at_unix_nanos: i64,
+    #[serde(default)]
+    pub published_after_deal_event_rowid: i64,
 }
 #[derive(Clone, Serialize)]
 pub(super) struct RuleInput {
@@ -148,14 +150,15 @@ pub(super) fn rule_id(value: &str) -> Result<RecordId, ConnectError> {
         .map_err(|_| invalid("ACTIVITIES_AUTOMATION_RULE_ID_INVALID"))
 }
 
-pub(super) fn check(input: &RuleInput) -> Result<AutomationRule, ConnectError> {
+pub(super) fn check(input: &RuleInput, version: i64) -> Result<AutomationRule, ConnectError> {
     let trigger = match input.trigger.as_str() {
         "interaction_created" => AutomationTrigger::InteractionCreated,
         "deal_created" => AutomationTrigger::DealCreated,
         "task_overdue" => AutomationTrigger::TaskOverdue,
         _ => return Err(invalid("ACTIVITIES_AUTOMATION_TRIGGER_NOT_ENABLED")),
     };
-    if input.due_after_seconds < 0
+    if version <= 0
+        || input.due_after_seconds < 0
         || input.due_after_seconds > 31_536_000
         || input.assignee_email.starts_with("service:")
         || input.assignee_email.trim() != input.assignee_email
@@ -168,7 +171,7 @@ pub(super) fn check(input: &RuleInput) -> Result<AutomationRule, ConnectError> {
     );
     let value = AutomationRule {
         rule_id: rule_id(&input.rule_id)?,
-        version: 1,
+        version,
         trigger,
         task_subject: input.task_subject.clone(),
         target: owner,
@@ -236,7 +239,7 @@ pub(super) async fn get(
         db,
         concat!(
             "SELECT id AS rule_id,version,trigger_kind AS trigger,enabled,task_subject,",
-            "assignee_email,due_after_seconds,published_at_unix_nanos FROM crm_activity_automation_rules",
+            "assignee_email,due_after_seconds,published_at_unix_nanos,published_after_deal_event_rowid FROM crm_activity_automation_rules",
             " WHERE tenant=? AND id=?"
         ),
         &[JsValue::from_str(tenant), JsValue::from_str(id)],
@@ -262,7 +265,13 @@ pub(super) async fn put(
     request_id: &str,
 ) -> Result<RuleSaved, ConnectError> {
     let tenant = &principal.tenant;
-    let _checked = check(&input)?;
+    let next_version = match expected {
+        Some(current) => current.checked_add(1),
+        None => Some(1),
+    }
+    .filter(|version| *version > 0)
+    .ok_or_else(|| invalid("ACTIVITIES_AUTOMATION_RULE_VERSION_INVALID"))?;
+    let _checked = check(&input, next_version)?;
     let hash = digest(&input, expected)?;
     if let Some(prior) = receipt(db, tenant, key).await.map_err(|_| storage())? {
         return saved_receipt(prior, &hash, &input.rule_id, true);
@@ -279,10 +288,11 @@ pub(super) async fn put(
         concat!(
             "INSERT INTO crm_activity_automation_rules",
             "(tenant,id,version,trigger,trigger_kind,enabled,task_subject,assignee_email,",
-            "due_after_seconds,published_at_unix_nanos,idem_key,idem_digest,request_id,actor)",
+            "due_after_seconds,published_at_unix_nanos,published_after_deal_event_rowid,idem_key,idem_digest,request_id,actor)",
             " VALUES(?,?,1,'interaction_created',?,?,?,?,?,",
             " CAST(strftime('%s','now') AS INTEGER)*1000000000+",
-            " CAST(substr(strftime('%f','now'),4,3) AS INTEGER)*1000000,?,?,?,?)",
+            " CAST(substr(strftime('%f','now'),4,3) AS INTEGER)*1000000,",
+            " COALESCE((SELECT MAX(rowid) FROM crm_sales_deal_events WHERE tenant=?),0),?,?,?,?)",
             " ON CONFLICT(tenant,id) DO NOTHING"
         )
     } else {
@@ -292,6 +302,7 @@ pub(super) async fn put(
             "due_after_seconds=?,published_at_unix_nanos=",
             "CAST(strftime('%s','now') AS INTEGER)*1000000000+",
             "CAST(substr(strftime('%f','now'),4,3) AS INTEGER)*1000000,",
+            "published_after_deal_event_rowid=COALESCE((SELECT MAX(rowid) FROM crm_sales_deal_events WHERE tenant=?),0),",
             "idem_key=?,idem_digest=?,request_id=?,actor=?",
             " WHERE tenant=? AND id=? AND version=?"
         )
@@ -305,6 +316,7 @@ pub(super) async fn put(
             JsValue::from_str(&input.task_subject),
             JsValue::from_str(&input.assignee_email),
             JsValue::from_f64(input.due_after_seconds as f64),
+            JsValue::from_str(tenant),
             JsValue::from_str(key),
             JsValue::from_str(&hash),
             JsValue::from_str(request_id),
@@ -317,6 +329,7 @@ pub(super) async fn put(
             JsValue::from_str(&input.task_subject),
             JsValue::from_str(&input.assignee_email),
             JsValue::from_f64(input.due_after_seconds as f64),
+            JsValue::from_str(tenant),
             JsValue::from_str(key),
             JsValue::from_str(&hash),
             JsValue::from_str(request_id),
@@ -360,7 +373,7 @@ pub(super) async fn list_rules(
         db,
         concat!(
             "SELECT id AS rule_id,version,trigger_kind AS trigger,enabled,task_subject,",
-            "assignee_email,due_after_seconds,published_at_unix_nanos FROM crm_activity_automation_rules",
+            "assignee_email,due_after_seconds,published_at_unix_nanos,published_after_deal_event_rowid FROM crm_activity_automation_rules",
             " WHERE tenant=? AND id>? ORDER BY id LIMIT ?"
         ),
         &[
@@ -556,7 +569,7 @@ pub(super) async fn execute_interaction(
                 "AUTOMATION_RULE_NOT_ENABLED_OR_STALE",
             ));
         }
-        let domain = check(&wire_input(&rule))?;
+        let domain = check(&wire_input(&rule), rule.version)?;
         let original = activity_interactions::get(db, tenant, interaction_id)
             .await
             .map_err(|_| storage())?
@@ -1160,7 +1173,7 @@ async fn dispatch_tenant(
             " JOIN crm_sales_deal_events e ON e.tenant=r.tenant",
             " JOIN crm_sales_deal_records d ON d.tenant=e.tenant AND d.id=e.deal_id",
             " WHERE r.tenant=? AND r.trigger_kind='deal_created' AND r.enabled=1",
-            " AND e.action='created' AND e.occurred_at_unix_nanos>=r.published_at_unix_nanos",
+            " AND e.action='created' AND e.rowid>r.published_after_deal_event_rowid",
             " AND NOT EXISTS(SELECT 1 FROM crm_activity_automation_runs a",
             "  WHERE a.tenant=r.tenant AND a.rule_id=r.id AND a.source_type='deal_created'",
             "   AND a.source_id=e.deal_id AND a.rule_version=r.version)",
@@ -1187,7 +1200,7 @@ async fn dispatch_tenant(
         {
             continue;
         }
-        let domain = check(&wire_input(&rule))?;
+        let domain = check(&wire_input(&rule), rule.version)?;
         let plan = domain
             .plan(
                 AutomationSource::DealCreated {
@@ -1288,7 +1301,7 @@ async fn dispatch_tenant(
             continue;
         }
         let task = activity_tasks::decode(&candidate.state).map_err(|_| storage())?;
-        let domain = check(&wire_input(&rule))?;
+        let domain = check(&wire_input(&rule), rule.version)?;
         let plan = domain
             .plan(
                 AutomationSource::TaskOverdue {

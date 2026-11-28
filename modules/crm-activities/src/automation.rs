@@ -382,20 +382,18 @@ mod tests {
         assert_eq!(first.source_id, "task-one");
         let mut revised = rule.clone();
         revised.version = 3;
-        assert_eq!(
-            first.idempotency_key,
-            revised
-                .plan(
-                    AutomationSource::TaskOverdue {
-                        task: &task(),
-                        generated_by_automation: false,
-                    },
-                    15
-                )
-                .unwrap()
-                .unwrap()
-                .idempotency_key
-        );
+        let revised_plan = revised
+            .plan(
+                AutomationSource::TaskOverdue {
+                    task: &task(),
+                    generated_by_automation: false,
+                },
+                15,
+            )
+            .unwrap()
+            .unwrap();
+        assert_ne!(first.task_id, revised_plan.task_id);
+        assert_ne!(first.idempotency_key, revised_plan.idempotency_key);
     }
 
     #[test]
