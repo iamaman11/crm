@@ -18,6 +18,11 @@ on:
         description: Enable the Automation five-minute Cron
         type: boolean
         default: false
+      lease_minutes:
+        description: Preview window in minutes (0 runs infrastructure checks and cleans up)
+        type: choice
+        options: ['30', '15', '0']
+        default: '30'
 
 permissions:
   actions: read
@@ -38,6 +43,7 @@ jobs:
     env:
       SOURCE_RUN_ID: ${{ inputs.gate_a_run_id }}
       PREVIEW_CRON: ${{ inputs.automation_cron }}
+      PREVIEW_LEASE_MINUTES: ${{ inputs.lease_minutes }}
       PREVIEW_WORKER: crm-writer-preview-${{ inputs.slot }}
       PREVIEW_HOST: crm-writer-preview-${{ inputs.slot }}.crm-5bd5e1e1.workers.dev
       CLOUDFLARE_ACCOUNT_ID: 5bd5e1e1e813f061afc259e91334262d
@@ -56,6 +62,7 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$SOURCE_RUN_ID" =~ ^[0-9]+$ ]]
+          [[ "$PREVIEW_LEASE_MINUTES" =~ ^(0|15|30)$ ]]
           run=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID")
           sha=$(jq -er '
             select(.workflow_id==410642125 and .event=="push" and .conclusion=="success"
@@ -309,7 +316,8 @@ jobs:
           }
           assert.ok(accepted,"Preview signed Access or anonymous denial could not be verified");
           const lease = {url,source_sha:env.SOURCE_SHA,base_sha:env.BASE_SHA,worker_version:version,
-            database_id:env.PREVIEW_DATABASE_ID,cron:env.PREVIEW_CRON === "true",lease_minutes:30};
+            database_id:env.PREVIEW_DATABASE_ID,cron:env.PREVIEW_CRON === "true",
+            lease_minutes:Number(env.PREVIEW_LEASE_MINUTES)};
           writeFileSync(env.RUNNER_TEMP + "/crm-preview-lease.json",JSON.stringify(lease,null,2));
           appendFileSync(env.GITHUB_STEP_SUMMARY,"### Writer preview ready\n\n" +
             "URL: " + url + "\n\nSource SHA: `" + env.SOURCE_SHA + "`\n\nWorker: `" + version + "`\n");
@@ -322,7 +330,8 @@ jobs:
           if-no-files-found: error
           retention-days: 1
       - name: Hold preview for independent Writer Gate B
-        run: sleep 1800
+        if: inputs.lease_minutes != '0'
+        run: sleep "$((PREVIEW_LEASE_MINUTES * 60))"
       - name: Record physical D1 audit and receipt evidence
         working-directory: apps/cloudflare-crm
         env:
