@@ -49,6 +49,7 @@ function runResource(ruleId:string,sourceType:AutomationTrigger,sourceId:string,
 function parseRunResource(resourceId:string) {
   const [ruleId,sourceType,sourceId,version]=resourceId.split("/");
   const parsedType=Number(sourceType);
+  if(!version)throw Error("Некорректная версия запуска");
   let expectedRuleVersion:bigint;
   try { expectedRuleVersion=BigInt(version); } catch { throw Error("Некорректная версия запуска"); }
   if(!ruleId||!sourceId||expectedRuleVersion<1n||![AutomationTrigger.INTERACTION_CREATED,
@@ -133,7 +134,7 @@ export function AutomationScreen({initialInteractionId=""}:{initialInteractionId
     runMutation.runIntent(()=>prepareMutation(api.automations.runInteractionAutomation,{
       ruleId,interactionId:sourceId,expectedRuleVersion:version,
       precondition:{idempotencyKey:runMutation.key}
-    },runResource(ruleId,AutomationTrigger.INTERACTION_CREATED,sourceId,ruleVersion)),async()=>{
+    },runResource(ruleId,AutomationTrigger.INTERACTION_CREATED,sourceId,version)),async()=>{
       if(runFilter===ruleId&&runCursor==="")await runs.reload();
       else {setRunFilter(ruleId);setRunCursor("");}
     });
