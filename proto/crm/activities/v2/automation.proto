@@ -5,12 +5,13 @@ package crm.activities.v2;
 import "crm/core/v2/operation.proto";
 
 // A bounded Activities-owned rule, not an arbitrary script/graph/ACL policy.
-// Only the Interaction-created action is executable in this first vertical
-// slice. Task-overdue remains a typed future trigger, not a silent capability.
+// Supported sources are immutable Deal-created events, overdue original Tasks,
+// and the retained manual Interaction workflow.
 enum AutomationTrigger {
   AUTOMATION_TRIGGER_UNSPECIFIED = 0;
   AUTOMATION_TRIGGER_INTERACTION_CREATED = 1;
   AUTOMATION_TRIGGER_TASK_OVERDUE = 2;
+  AUTOMATION_TRIGGER_DEAL_CREATED = 3;
 }
 
 message AutomationRule {
@@ -87,6 +88,7 @@ enum AutomationRunDisposition {
   AUTOMATION_RUN_DISPOSITION_BACKOFF = 7;
   AUTOMATION_RUN_DISPOSITION_ATTEMPTS_EXHAUSTED = 8;
   AUTOMATION_RUN_DISPOSITION_CANCELLED = 9;
+  AUTOMATION_RUN_DISPOSITION_SOURCE_STALE = 10;
 }
 message AutomationRun {
   string rule_id = 1;
@@ -109,6 +111,11 @@ message AutomationRun {
   string cancel_request_id = 18;
   int64 cancelled_at_unix_millis = 19;
   int64 attempt_limit = 20;
+  // Canonical source identity for all triggers. interaction_id remains the
+  // historical alias and is populated only for Interaction-created runs.
+  AutomationTrigger source_type = 21;
+  string source_id = 22;
+  int64 source_version = 23;
 }
 message RunInteractionAutomationResponse {
   AutomationRun run = 1;
@@ -121,6 +128,8 @@ message CancelAutomationRunRequest {
   string interaction_id = 2;
   int64 expected_rule_version = 3;
   crm.core.v2.MutationPrecondition precondition = 4;
+  AutomationTrigger source_type = 5;
+  string source_id = 6;
 }
 message CancelAutomationRunResponse {
   AutomationRun run = 1;
@@ -131,6 +140,8 @@ message GetAutomationRunRequest {
   string interaction_id = 2;
   // Only this exact original caller intent can prove its pending mutation.
   optional string receipt_idempotency_key = 3;
+  AutomationTrigger source_type = 4;
+  string source_id = 5;
 }
 message GetAutomationRunResponse {
   AutomationRun run = 1;

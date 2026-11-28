@@ -11,6 +11,7 @@ use sha2::{Digest, Sha256};
 pub enum AutomationTrigger {
     InteractionCreated,
     TaskOverdue,
+    DealCreated,
 }
 
 impl AutomationTrigger {
@@ -18,6 +19,7 @@ impl AutomationTrigger {
         match self {
             Self::InteractionCreated => "interaction_created",
             Self::TaskOverdue => "task_overdue",
+            Self::DealCreated => "deal_created",
         }
     }
 }
@@ -41,6 +43,11 @@ pub enum AutomationSource<'a> {
     TaskOverdue {
         task: &'a Task,
         generated_by_automation: bool,
+    },
+    DealCreated {
+        deal_id: &'a str,
+        account_id: &'a str,
+        source_version: i64,
     },
 }
 
@@ -108,6 +115,26 @@ impl AutomationRule {
                     interaction.version,
                     interaction.account_id.clone(),
                     interaction.deal_id.clone(),
+                )
+            }
+            AutomationSource::DealCreated {
+                deal_id,
+                account_id,
+                source_version,
+            } => {
+                if self.trigger != AutomationTrigger::DealCreated || source_version < 1 {
+                    return Ok(None);
+                }
+                RecordId::try_new(deal_id.to_owned())
+                    .map_err(|_| invalid("ACTIVITIES_AUTOMATION_SOURCE_ID_INVALID"))?;
+                RecordId::try_new(account_id.to_owned())
+                    .map_err(|_| invalid("ACTIVITIES_AUTOMATION_SOURCE_ACCOUNT_REQUIRED"))?;
+                (
+                    AutomationTrigger::DealCreated,
+                    deal_id,
+                    source_version,
+                    account_id.to_owned(),
+                    Some(deal_id.to_owned()),
                 )
             }
             AutomationSource::TaskOverdue {
@@ -248,6 +275,48 @@ mod tests {
         assert_eq!(plan.task_id, next.task_id);
         assert_eq!(plan.idempotency_key, next.idempotency_key);
         assert_ne!(plan.subject, next.subject);
+    }
+
+    #[test]
+    fn created_deal_uses_immutable_event_identity_and_original_account() {
+        let rule = rule(AutomationTrigger::DealCreated);
+        let first = rule
+            .plan(
+                AutomationSource::DealCreated {
+                    deal_id: "deal-created-1",
+                    account_id: "account-1",
+                    source_version: 1,
+                },
+                20,
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(first.source_id, "deal-created-1");
+        assert_eq!(first.source_version, 1);
+        assert_eq!(first.account_id, "account-1");
+        assert_eq!(first.deal_id.as_deref(), Some("deal-created-1"));
+        assert!(rule
+            .plan(
+                AutomationSource::DealCreated {
+                    deal_id: "deal-created-1",
+                    account_id: "account-1",
+                    source_version: 1,
+                },
+                25,
+            )
+            .unwrap()
+            .is_some_and(|next| next.task_id == first.task_id));
+        assert!(rule
+            .plan(
+                AutomationSource::DealCreated {
+                    deal_id: "deal-created-1",
+                    account_id: "account-1",
+                    source_version: 0,
+                },
+                25,
+            )
+            .unwrap()
+            .is_none());
     }
 
     #[test]
