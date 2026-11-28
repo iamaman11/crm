@@ -3,6 +3,11 @@ name: CRM Branch Preview
 # Coordinator-only control plane. A human dispatches one exact successful
 # Writer Gate A run from main; this workflow never executes branch scripts.
 on:
+  push:
+    branches:
+      - 'ops/preview-control-plane-20261128'
+    paths:
+      - '.github/workflows/crm-branch-preview.yml'
   workflow_dispatch:
     inputs:
       source_branch:
@@ -30,6 +35,27 @@ permissions:
   contents: read
 
 jobs:
+  workflow_lint:
+    if: ${{ github.event_name == 'push' }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+      - name: Validate trusted preview workflow with pinned actionlint
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/actionlint"
+          curl -fsSLo "$RUNNER_TEMP/actionlint.tar.gz" https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP/actionlint" actionlint
+          "$RUNNER_TEMP/actionlint/actionlint" -color .github/workflows/crm-branch-preview.yml
+
   preflight:
     if: ${{ github.ref == 'refs/heads/main' && github.actor == 'iamaman11' }}
     runs-on: ubuntu-26.04
@@ -438,8 +464,8 @@ jobs:
             assert.equal(token.enabled,true,"both exact preview Service Tokens must be enabled");
             assert.equal(token.leak_reported_at,undefined,
               "a leaked Service Token must be rotated before preview use");
-            assert.ok(token.expires_at && Date.parse(token.expires_at)>Date.now(),
-              "both preview Service Tokens must have a future finite expiry");
+            assert.ok(token.expires_at && Date.parse(token.expires_at)>Date.now()+60*60*1000,
+              "both preview Service Tokens must remain valid for the complete bounded preview lease");
             assert.match(token.client_id??"",/^[0-9a-f]{32}\.access$/);
             return token;
           }));
