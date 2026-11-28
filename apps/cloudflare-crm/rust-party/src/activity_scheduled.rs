@@ -24,4 +24,5 @@ pub(super) async fn scheduled(
     _event: worker::ScheduledEvent,
     _env: worker::Env,
     _ctx: worker::ScheduleContext,
-) {}
+) {
+}

@@ -210,7 +210,7 @@ pub(super) async fn create_typed(
     actor: &str,
     trace: &str,
 ) -> Result<std::result::Result<MutationOutcome, MutationFailure>> {
-    create_typed_inner(input,key,db,tenant,actor,trace,false).await
+    create_typed_inner(input, key, db, tenant, actor, trace, false).await
 }
 pub(super) async fn create_automation_typed(
     input: CreateInput,
@@ -221,9 +221,11 @@ pub(super) async fn create_automation_typed(
     trace: &str,
 ) -> Result<std::result::Result<MutationOutcome, MutationFailure>> {
     if actor != super::activity_automation::AUTOMATION_ACTOR {
-        return Err(worker::Error::RustError("Invalid Automation system actor".into()));
+        return Err(worker::Error::RustError(
+            "Invalid Automation system actor".into(),
+        ));
     }
-    create_typed_inner(input,key,db,tenant,actor,trace,true).await
+    create_typed_inner(input, key, db, tenant, actor, trace, true).await
 }
 async fn create_typed_inner(
     input: CreateInput,

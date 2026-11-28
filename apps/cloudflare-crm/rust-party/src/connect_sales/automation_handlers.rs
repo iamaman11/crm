@@ -20,10 +20,16 @@ impl auto_wire::AutomationService for AutomationV2Service {
             .is_none();
         let (key, expected) = wire_precondition(input.precondition.as_option(), create)?;
         let trigger = match input.trigger {
-            auto_wire::AutomationTrigger::AUTOMATION_TRIGGER_INTERACTION_CREATED => "interaction_created",
+            auto_wire::AutomationTrigger::AUTOMATION_TRIGGER_INTERACTION_CREATED => {
+                "interaction_created"
+            }
             auto_wire::AutomationTrigger::AUTOMATION_TRIGGER_TASK_OVERDUE => "task_overdue",
             auto_wire::AutomationTrigger::AUTOMATION_TRIGGER_DEAL_CREATED => "deal_created",
-            _ => return Err(ConnectError::invalid_argument("ACTIVITIES_AUTOMATION_TRIGGER_NOT_ENABLED")),
+            _ => {
+                return Err(ConnectError::invalid_argument(
+                    "ACTIVITIES_AUTOMATION_TRIGGER_NOT_ENABLED",
+                ));
+            }
         };
         let row = automation::RuleInput {
             rule_id: input.rule_id,
@@ -170,9 +176,8 @@ impl auto_wire::AutomationService for AutomationV2Service {
     ) -> ServiceResult<auto_wire::CancelAutomationRunResponse> {
         let input = req.to_owned_message();
         let (key, _) = wire_precondition(input.precondition.as_option(), true)?;
-        let (source_type, source_id) = Self::source_identity(
-            input.source_type, &input.source_id, &input.interaction_id
-        )?;
+        let (source_type, source_id) =
+            Self::source_identity(input.source_type, &input.source_id, &input.interaction_id)?;
         let saved = automation::cancel(
             &self.d1()?,
             &self.actor,
@@ -205,9 +210,8 @@ impl auto_wire::AutomationService for AutomationV2Service {
     ) -> ServiceResult<auto_wire::GetAutomationRunResponse> {
         let input = req.to_owned_message();
         let db = self.d1()?;
-        let (source_type, source_id) = Self::source_identity(
-            input.source_type, &input.source_id, &input.interaction_id
-        )?;
+        let (source_type, source_id) =
+            Self::source_identity(input.source_type, &input.source_id, &input.interaction_id)?;
         let run = automation::get_run(
             &db,
             &self.actor.tenant,
@@ -305,15 +309,26 @@ impl AutomationV2Service {
     ) -> std::result::Result<(String, String), ConnectError> {
         if source_id.is_empty() {
             if legacy_interaction_id.is_empty() {
-                return Err(ConnectError::invalid_argument("ACTIVITIES_AUTOMATION_SOURCE_ID_REQUIRED"));
+                return Err(ConnectError::invalid_argument(
+                    "ACTIVITIES_AUTOMATION_SOURCE_ID_REQUIRED",
+                ));
             }
-            return Ok(("interaction_created".into(), legacy_interaction_id.to_owned()));
+            return Ok((
+                "interaction_created".into(),
+                legacy_interaction_id.to_owned(),
+            ));
         }
         let kind = match source_type {
-            auto_wire::AutomationTrigger::AUTOMATION_TRIGGER_INTERACTION_CREATED => "interaction_created",
+            auto_wire::AutomationTrigger::AUTOMATION_TRIGGER_INTERACTION_CREATED => {
+                "interaction_created"
+            }
             auto_wire::AutomationTrigger::AUTOMATION_TRIGGER_TASK_OVERDUE => "task_overdue",
             auto_wire::AutomationTrigger::AUTOMATION_TRIGGER_DEAL_CREATED => "deal_created",
-            _ => return Err(ConnectError::invalid_argument("ACTIVITIES_AUTOMATION_SOURCE_TYPE_REQUIRED")),
+            _ => {
+                return Err(ConnectError::invalid_argument(
+                    "ACTIVITIES_AUTOMATION_SOURCE_TYPE_REQUIRED",
+                ));
+            }
         };
         Ok((kind.into(), source_id.to_owned()))
     }
@@ -326,7 +341,9 @@ impl AutomationV2Service {
         row: &automation::RuleRow,
     ) -> std::result::Result<auto_wire::AutomationRule, ConnectError> {
         let trigger = match row.trigger.as_str() {
-            "interaction_created" => auto_wire::AutomationTrigger::AUTOMATION_TRIGGER_INTERACTION_CREATED,
+            "interaction_created" => {
+                auto_wire::AutomationTrigger::AUTOMATION_TRIGGER_INTERACTION_CREATED
+            }
             "task_overdue" => auto_wire::AutomationTrigger::AUTOMATION_TRIGGER_TASK_OVERDUE,
             "deal_created" => auto_wire::AutomationTrigger::AUTOMATION_TRIGGER_DEAL_CREATED,
             _ => {
@@ -384,10 +401,16 @@ impl AutomationV2Service {
             RunDisposition::SourceStale => WireDisposition::AUTOMATION_RUN_DISPOSITION_SOURCE_STALE,
         };
         let source_type = match row.source_type.as_str() {
-            "interaction_created" => auto_wire::AutomationTrigger::AUTOMATION_TRIGGER_INTERACTION_CREATED,
+            "interaction_created" => {
+                auto_wire::AutomationTrigger::AUTOMATION_TRIGGER_INTERACTION_CREATED
+            }
             "task_overdue" => auto_wire::AutomationTrigger::AUTOMATION_TRIGGER_TASK_OVERDUE,
             "deal_created" => auto_wire::AutomationTrigger::AUTOMATION_TRIGGER_DEAL_CREATED,
-            _ => return Err(ConnectError::internal("ACTIVITIES_AUTOMATION_TRIGGER_INVALID")),
+            _ => {
+                return Err(ConnectError::internal(
+                    "ACTIVITIES_AUTOMATION_TRIGGER_INVALID",
+                ));
+            }
         };
         Ok(auto_wire::AutomationRun {
             rule_id: row.rule_id.clone(),
