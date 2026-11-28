@@ -564,7 +564,7 @@ pub(super) async fn import_source_batch(
         )));
     }
 
-    let mut statements = Vec::with_capacity(rows.len() * 2 + 1);
+    let mut statements = Vec::with_capacity(rows.len() * 2 + 2);
     let mut party_ids = BTreeSet::new();
     let mut external_ids = BTreeSet::new();
     let mut created = 0;
@@ -687,6 +687,18 @@ pub(super) async fn import_source_batch(
             JsValue::from_str(trace),
             JsValue::from_str(source_id),
             JsValue::from_str(proof.preview_fingerprint),
+        ],
+    )?);
+    // The operation itself is auditable even when every external ID already
+    // maps to an unchanged Party and no identity-binding trigger fires.
+    statements.push(bind(
+        db,
+        "INSERT INTO crm_audit(id,tenant_id,action,subject_id,created_at,request_id,actor) VALUES(lower(hex(randomblob(16))),?,'customer_data.csv_import.apply',?,datetime('now'),?,?)",
+        &[
+            JsValue::from_str(tenant),
+            JsValue::from_str(source_id),
+            JsValue::from_str(trace),
+            JsValue::from_str(&actor.identity),
         ],
     )?);
     let statement_count = statements.len();
