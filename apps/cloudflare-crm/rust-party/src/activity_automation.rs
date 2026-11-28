@@ -770,13 +770,13 @@ async fn execute_claimed(
                     "SELECT id FROM crm_activity_task_records WHERE tenant=? AND id=? AND version=?",
                     " AND json_extract(state,'$.status')='open'",
                     " AND json_type(state,'$.due_at_unix_nanos')='integer'",
-                    " AND CAST(json_extract(state,'$.due_at_unix_nanos') AS INTEGER)<=?"
+                    " AND CAST(json_extract(state,'$.due_at_unix_nanos') AS INTEGER)<=CAST(? AS INTEGER)"
                 ),
                 &[
                     JsValue::from_str(tenant),
                     JsValue::from_str(&row.source_id),
                     JsValue::from_f64(row.source_version as f64),
-                    JsValue::from_f64(now as f64),
+                    JsValue::from_str(&now.to_string()),
                 ],
             )
             .map_err(|_| storage())?
@@ -804,7 +804,7 @@ async fn execute_claimed(
                         JsValue::from_str(tenant),
                         JsValue::from_str(&row.source_id),
                         JsValue::from_f64(row.source_version as f64),
-                        JsValue::from_f64(now as f64),
+                        JsValue::from_str(&now.to_string()),
                     ],
                 )
                 .map_err(|_| storage())?
@@ -993,7 +993,7 @@ async fn claim_scheduled_run(
             "(tenant,rule_id,rule_version,source_event_id,source_type,source_id,source_version,",
             "source_checked_at_unix_nanos,interaction_id,task_id,task_intent,run_request_key,run_request_digest,status,",
             "requested_by,original_request_id,created_at_unix_millis)",
-            " SELECT ?,r.id,r.version,?,?,?,?,?,NULL,?,?,?,?,'pending',?,?,?",
+            " SELECT ?,r.id,r.version,?,?,?,?,CAST(? AS INTEGER),NULL,?,?,?,?,'pending',?,?,?",
             " FROM crm_activity_automation_rules r WHERE r.tenant=? AND r.id=?",
             " AND r.version=? AND r.trigger_kind=? AND r.enabled=1 ON CONFLICT DO NOTHING"
         ),
@@ -1003,7 +1003,7 @@ async fn claim_scheduled_run(
             JsValue::from_str(source_type),
             JsValue::from_str(source_id),
             JsValue::from_f64(source_version as f64),
-            JsValue::from_f64(now as f64),
+            JsValue::from_str(&now.to_string()),
             JsValue::from_str(&input.id),
             JsValue::from_str(&snapshot),
             JsValue::from_str(&request_key),
@@ -1237,7 +1237,7 @@ async fn dispatch_tenant(
             " WHERE r.tenant=? AND r.trigger_kind='task_overdue' AND r.enabled=1",
             " AND json_extract(t.state,'$.status')='open'",
             " AND json_type(t.state,'$.due_at_unix_nanos')='integer'",
-            " AND CAST(json_extract(t.state,'$.due_at_unix_nanos') AS INTEGER)<=?",
+            " AND CAST(json_extract(t.state,'$.due_at_unix_nanos') AS INTEGER)<=CAST(? AS INTEGER)",
             " AND NOT EXISTS(SELECT 1 FROM crm_activity_automation_runs made",
             "  WHERE made.tenant=t.tenant AND made.task_id=t.id)",
             " AND NOT EXISTS(SELECT 1 FROM crm_activity_automation_runs a",
@@ -1247,7 +1247,7 @@ async fn dispatch_tenant(
         ),
         &[
             JsValue::from_str(tenant),
-            JsValue::from_f64(now as f64),
+            JsValue::from_str(&now.to_string()),
             JsValue::from_f64(MAX_SCHEDULED_BATCH as f64),
         ],
     )
