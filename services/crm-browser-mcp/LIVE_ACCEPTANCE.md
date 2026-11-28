@@ -1,6 +1,6 @@
 # Universal Browser MCP — single live acceptance procedure
 
-This is the **one** repeatable owner-run smoke procedure for the 21 existing tools.
+This is the **one** repeatable smoke procedure for the 21 existing tools and the two-controller isolation contract.
 Canonical branch: `mcp`, Issue [#357](https://github.com/iamaman11/crm/issues/357).
 No new Worker, browser runtime, CI, credentials, or HTTP-proxy is required.
 Run against **the released Worker**, not the PR preview. Existing `browser-mcp.yml`
@@ -13,11 +13,11 @@ still owns CI/release, including workerd Durable Object restart tests.
 - Browser Run has capacity for two short concurrent sessions.
 - CRM is a **test** tenant, and an existing service principal has `admin`.
 - **Never paste Access tokens or Live View signed URLs into reports.**
-- Use one fresh UUID `workspaceId` throughout; keep tests read-only in CRM.
+- Use a separate fresh UUID `workspaceId` for each controller; keep tests read-only in CRM.
 - Public file/popup/iframe fixture: `https://the-internet.herokuapp.com`.
   This fixture may change; report unavailable instead of claiming a product regression.
 
-## Ordered live smoke (one real Browser Run owner)
+## Ordered live smoke (one controller's real Browser Run)
 
 The table names the actual public MCP tool/operation, actual input and required
 **observable** receipt. An API being registered, TypeScript passing, or a 200
