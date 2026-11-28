@@ -861,15 +861,18 @@ async fn execute_claimed(
     Ok(RunSaved { run: completed, replayed: outcome.replayed, original_request_id: task_trace })
 }
 
+
+#[derive(Deserialize)]
+struct TenantRef {
+    id: String,
+}
 #[derive(Deserialize)]
 struct ScheduledRunRef {
-    tenant: String,
     rule_id: String,
     source_event_id: String,
 }
 #[derive(Deserialize)]
 struct ScheduledDealSource {
-    tenant: String,
     rule_id: String,
     rule_version: i64,
     source_id: String,
@@ -878,7 +881,6 @@ struct ScheduledDealSource {
 }
 #[derive(Deserialize)]
 struct ScheduledTaskSource {
-    tenant: String,
     rule_id: String,
     rule_version: i64,
     source_id: String,
@@ -891,6 +893,25 @@ pub(super) struct ScheduledSummary {
     pub deals_created: u32,
     pub tasks_overdue: u32,
     pub failed: u32,
+}
+
+// A scheduled invocation has no caller JWT. Instead it first reads only the
+// tenant directory, then creates one private system principal per tenant.
+// Every business-data query below is bound to that single tenant. This is
+// deliberately distinct from a user/Access Actor and cannot be supplied by RPC.
+struct AutomationSystemActor {
+    tenant: String,
+}
+impl AutomationSystemActor {
+    fn for_tenant(tenant: String) -> Self {
+        Self { tenant }
+    }
+    fn tenant(&self) -> &str {
+        &self.tenant
+    }
+    fn identity(&self) -> &'static str {
+        AUTOMATION_ACTOR
+    }
 }
 
 fn scheduled_event_id(
@@ -907,14 +928,17 @@ fn scheduled_event_id(
 
 async fn claim_scheduled_run(
     db: &D1Database,
-    tenant: &str,
+    principal: &AutomationSystemActor,
     rule: &RuleRow,
     source_type: &str,
     source_id: &str,
     source_version: i64,
     input: activity_tasks::CreateInput,
 ) -> Result<Option<RunRow>, ConnectError> {
-    let event_id = scheduled_event_id(tenant, &rule.rule_id, rule.version, source_type, source_id)?;
+    let tenant = principal.tenant();
+    let event_id = scheduled_event_id(
+        tenant, &rule.rule_id, rule.version, source_type, source_id
+    )?;
     let snapshot = serde_json::to_string(&input).map_err(|_| storage())?;
     let request_key_digest = format!("{:x}", Sha256::digest(event_id.as_bytes()));
     let request_key = format!("automation-scheduled-{}", &request_key_digest[..48]);
@@ -944,7 +968,7 @@ async fn claim_scheduled_run(
             JsValue::from_str(&snapshot),
             JsValue::from_str(&request_key),
             JsValue::from_str(&request_digest),
-            JsValue::from_str(AUTOMATION_ACTOR),
+            JsValue::from_str(principal.identity()),
             JsValue::from_str(&original_request_id),
             JsValue::from_f64(js_sys::Date::now()),
             JsValue::from_str(tenant),
@@ -974,13 +998,46 @@ pub(super) async fn dispatch_scheduled(
     db: &D1Database,
     now: i64,
 ) -> Result<ScheduledSummary, ConnectError> {
+    let tenants = bind(
+        db,
+        "SELECT id FROM crm_tenants ORDER BY id",
+        &[],
+    )
+    .map_err(|_| storage())?
+    .all().await.map_err(|_| storage())?
+    .results::<TenantRef>().map_err(|_| storage())?;
+    let mut total = ScheduledSummary::default();
+    for tenant in tenants {
+        let principal = AutomationSystemActor::for_tenant(tenant.id);
+        match dispatch_tenant(db, &principal, now).await {
+            Ok(summary) => {
+                total.recovered += summary.recovered;
+                total.deals_created += summary.deals_created;
+                total.tasks_overdue += summary.tasks_overdue;
+                total.failed += summary.failed;
+            }
+            Err(_) => total.failed += 1,
+        }
+    }
+    Ok(total)
+}
+
+async fn dispatch_tenant(
+    db: &D1Database,
+    principal: &AutomationSystemActor,
+    now: i64,
+) -> Result<ScheduledSummary, ConnectError> {
+    let tenant = principal.tenant();
     let mut summary = ScheduledSummary::default();
+    // Recover durable pending runs before discovering new sources. A Task
+    // receipt takes priority over lease expiry so a lost acknowledgement is
+    // reconciled immediately without incrementing attempts or making a Task.
     let pending = bind(
         db,
         concat!(
-            "SELECT tenant,rule_id,source_event_id FROM crm_activity_automation_runs",
-            " WHERE source_type IN ('deal_created','task_overdue') AND status='pending'",
-            " AND source_stale=0 AND cancel_request_id IS NULL AND (",
+            "SELECT rule_id,source_event_id FROM crm_activity_automation_runs",
+            " WHERE tenant=? AND source_type IN ('deal_created','task_overdue')",
+            " AND status='pending' AND source_stale=0 AND cancel_request_id IS NULL AND (",
             " EXISTS(SELECT 1 FROM crm_activity_task_receipts t",
             "  WHERE t.tenant=crm_activity_automation_runs.tenant",
             "   AND t.key=crm_activity_automation_runs.task_id)",
@@ -988,44 +1045,46 @@ pub(super) async fn dispatch_scheduled(
             " AND next_attempt_at_unix_millis<=unixepoch('now')*1000))",
             " ORDER BY seq LIMIT ?"
         ),
-        &[JsValue::from_f64(MAX_SCHEDULED_BATCH as f64)],
+        &[JsValue::from_str(tenant),JsValue::from_f64(MAX_SCHEDULED_BATCH as f64)],
     )
     .map_err(|_| storage())?
     .all().await.map_err(|_| storage())?
     .results::<ScheduledRunRef>().map_err(|_| storage())?;
     for pending_run in pending {
-        let Some(row) = read_run(db, &pending_run.tenant, &pending_run.rule_id,
+        let Some(row) = read_run(db, tenant, &pending_run.rule_id,
             &pending_run.source_event_id).await? else { continue; };
         let request_id = super::native_request_id().map_err(|_| storage())?;
-        match execute_claimed(db, &pending_run.tenant, row, AUTOMATION_ACTOR,
+        match execute_claimed(db, tenant, row, principal.identity(),
             &request_id, true, "ScheduledAutomation").await {
             Ok(_) => summary.recovered += 1,
             Err(_) => summary.failed += 1,
         }
     }
 
+    // Deal lifecycle events are immutable and transactionally coupled to the
+    // original Deal create. The rule publication boundary prevents backfill.
     let deals = bind(
         db,
         concat!(
-            "SELECT r.tenant,r.id AS rule_id,r.version AS rule_version,",
+            "SELECT r.id AS rule_id,r.version AS rule_version,",
             " e.deal_id AS source_id,e.deal_version AS source_version,d.account_id",
             " FROM crm_activity_automation_rules r",
             " JOIN crm_sales_deal_events e ON e.tenant=r.tenant",
             " JOIN crm_sales_deal_records d ON d.tenant=e.tenant AND d.id=e.deal_id",
-            " WHERE r.trigger_kind='deal_created' AND r.enabled=1 AND e.action='created'",
-            " AND e.occurred_at_unix_nanos>=r.published_at_unix_nanos",
+            " WHERE r.tenant=? AND r.trigger_kind='deal_created' AND r.enabled=1",
+            " AND e.action='created' AND e.occurred_at_unix_nanos>=r.published_at_unix_nanos",
             " AND NOT EXISTS(SELECT 1 FROM crm_activity_automation_runs a",
-            "  WHERE a.tenant=r.tenant AND a.rule_id=r.id",
-            "   AND a.source_type='deal_created' AND a.source_id=e.deal_id AND a.rule_version=r.version)",
-            " ORDER BY e.occurred_at_unix_nanos,e.tenant,e.deal_id LIMIT ?"
+            "  WHERE a.tenant=r.tenant AND a.rule_id=r.id AND a.source_type='deal_created'",
+            "   AND a.source_id=e.deal_id AND a.rule_version=r.version)",
+            " ORDER BY e.occurred_at_unix_nanos,e.deal_id LIMIT ?"
         ),
-        &[JsValue::from_f64(MAX_SCHEDULED_BATCH as f64)],
+        &[JsValue::from_str(tenant),JsValue::from_f64(MAX_SCHEDULED_BATCH as f64)],
     )
     .map_err(|_| storage())?
     .all().await.map_err(|_| storage())?
     .results::<ScheduledDealSource>().map_err(|_| storage())?;
     for candidate in deals {
-        let Some(rule) = get(db, &candidate.tenant, &candidate.rule_id).await? else { continue; };
+        let Some(rule) = get(db, tenant, &candidate.rule_id).await? else { continue; };
         if rule.version != candidate.rule_version || rule.trigger != "deal_created" || rule.enabled != 1 {
             continue;
         }
@@ -1048,10 +1107,10 @@ pub(super) async fn dispatch_scheduled(
             due_at_unix_nanos: plan.due_at_unix_nanos,
             reminder_at_unix_nanos: None,
         };
-        if let Some(row) = claim_scheduled_run(db, &candidate.tenant, &rule, "deal_created",
+        if let Some(row) = claim_scheduled_run(db, principal, &rule, "deal_created",
             &candidate.source_id, candidate.source_version, input).await? {
             let request_id = super::native_request_id().map_err(|_| storage())?;
-            match execute_claimed(db, &candidate.tenant, row, AUTOMATION_ACTOR,
+            match execute_claimed(db, tenant, row, principal.identity(),
                 &request_id, true, "ScheduledAutomation").await {
                 Ok(_) => summary.deals_created += 1,
                 Err(_) => summary.failed += 1,
@@ -1059,26 +1118,28 @@ pub(super) async fn dispatch_scheduled(
         }
     }
 
+    // A Task is a due timer only while the exact current version remains open
+    // and overdue. Generated Tasks are excluded by their original run receipt.
     let overdue = bind(
         db,
         concat!(
-            "SELECT r.tenant,r.id AS rule_id,r.version AS rule_version,",
+            "SELECT r.id AS rule_id,r.version AS rule_version,",
             " t.id AS source_id,t.version AS source_version,t.state",
             " FROM crm_activity_automation_rules r",
             " JOIN crm_activity_task_records t ON t.tenant=r.tenant",
-            " WHERE r.trigger_kind='task_overdue' AND r.enabled=1",
+            " WHERE r.tenant=? AND r.trigger_kind='task_overdue' AND r.enabled=1",
             " AND json_extract(t.state,'$.status')='open'",
             " AND json_type(t.state,'$.due_at_unix_nanos')='integer'",
             " AND CAST(json_extract(t.state,'$.due_at_unix_nanos') AS INTEGER)<=?",
             " AND NOT EXISTS(SELECT 1 FROM crm_activity_automation_runs made",
             "  WHERE made.tenant=t.tenant AND made.task_id=t.id)",
             " AND NOT EXISTS(SELECT 1 FROM crm_activity_automation_runs a",
-            "  WHERE a.tenant=r.tenant AND a.rule_id=r.id",
-            "   AND a.source_type='task_overdue' AND a.source_id=t.id AND a.rule_version=r.version)",
-            " ORDER BY CAST(json_extract(t.state,'$.due_at_unix_nanos') AS INTEGER),",
-            " t.tenant,t.id LIMIT ?"
+            "  WHERE a.tenant=r.tenant AND a.rule_id=r.id AND a.source_type='task_overdue'",
+            "   AND a.source_id=t.id AND a.rule_version=r.version)",
+            " ORDER BY CAST(json_extract(t.state,'$.due_at_unix_nanos') AS INTEGER),t.id LIMIT ?"
         ),
         &[
+            JsValue::from_str(tenant),
             JsValue::from_f64(now as f64),
             JsValue::from_f64(MAX_SCHEDULED_BATCH as f64),
         ],
@@ -1087,7 +1148,7 @@ pub(super) async fn dispatch_scheduled(
     .all().await.map_err(|_| storage())?
     .results::<ScheduledTaskSource>().map_err(|_| storage())?;
     for candidate in overdue {
-        let Some(rule) = get(db, &candidate.tenant, &candidate.rule_id).await? else { continue; };
+        let Some(rule) = get(db, tenant, &candidate.rule_id).await? else { continue; };
         if rule.version != candidate.rule_version || rule.trigger != "task_overdue" || rule.enabled != 1 {
             continue;
         }
@@ -1110,10 +1171,10 @@ pub(super) async fn dispatch_scheduled(
             due_at_unix_nanos: plan.due_at_unix_nanos,
             reminder_at_unix_nanos: None,
         };
-        if let Some(row) = claim_scheduled_run(db, &candidate.tenant, &rule, "task_overdue",
+        if let Some(row) = claim_scheduled_run(db, principal, &rule, "task_overdue",
             &candidate.source_id, candidate.source_version, input).await? {
             let request_id = super::native_request_id().map_err(|_| storage())?;
-            match execute_claimed(db, &candidate.tenant, row, AUTOMATION_ACTOR,
+            match execute_claimed(db, tenant, row, principal.identity(),
                 &request_id, true, "ScheduledAutomation").await {
                 Ok(_) => summary.tasks_overdue += 1,
                 Err(_) => summary.failed += 1,
