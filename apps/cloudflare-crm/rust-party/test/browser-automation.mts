@@ -123,7 +123,7 @@ export async function verifyBrowserAutomation({page,sql,tenantA,dealId,laterCall
    await mutation(page.getByRole("button",{name:"Сохранить сделку",exact:true}),
      DealService.method.createDeal);
    const createdDeal=(await sql(
-     "SELECT id,version FROM crm_sales_deal_records WHERE tenant=? AND name=?",
+     "SELECT id,version FROM crm_sales_deal_records WHERE tenant=? AND json_extract(state,'$.name')=?",
      tenantA,createdDealTitle))[0];
    assert.ok(createdDeal);
    const createdDealId=string(createdDeal.id);
