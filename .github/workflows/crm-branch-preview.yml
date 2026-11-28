@@ -9,6 +9,11 @@ on:
         description: Successful Writer Gate A run ID
         required: true
         type: string
+      slot:
+        description: Assigned writer preview
+        type: choice
+        options: ['1', '2']
+        default: '1'
       automation_cron:
         description: Enable the Automation five-minute Cron
         type: boolean
@@ -19,20 +24,22 @@ permissions:
   contents: read
 
 concurrency:
-  group: crm-writer-preview
+  group: crm-writer-preview-${{ inputs.slot }}
   cancel-in-progress: false
 
 jobs:
   preview:
-    if: github.ref == 'refs/heads/main' && vars.CRM_BRANCH_PREVIEW_ENABLED == 'true'
+    if: >-
+      github.ref == 'refs/heads/main' && vars.CRM_BRANCH_PREVIEW_ENABLED == 'true' &&
+      (inputs.slot == '1' || inputs.slot == '2')
     runs-on: ubuntu-26.04
     environment: crm-preview
     timeout-minutes: 45
     env:
       SOURCE_RUN_ID: ${{ inputs.gate_a_run_id }}
       PREVIEW_CRON: ${{ inputs.automation_cron }}
-      PREVIEW_WORKER: crm-writer-preview
-      PREVIEW_HOST: crm-writer-preview.crm-5bd5e1e1.workers.dev
+      PREVIEW_WORKER: crm-writer-preview-${{ inputs.slot }}
+      PREVIEW_HOST: crm-writer-preview-${{ inputs.slot }}.crm-5bd5e1e1.workers.dev
       CLOUDFLARE_ACCOUNT_ID: 5bd5e1e1e813f061afc259e91334262d
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -140,7 +147,7 @@ jobs:
         id: provision
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CRM_PREVIEW_CLOUDFLARE_API_TOKEN }}
-          ACCESS_APP_ID: ${{ vars.CRM_PREVIEW_ACCESS_APP_ID }}
+          ACCESS_APP_ID: ${{ vars[format('CRM_PREVIEW_{0}_ACCESS_APP_ID', inputs.slot)] }}
         run: |
           node --input-type=module <<'NODE'
           import assert from "node:assert/strict";
@@ -203,8 +210,8 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CRM_PREVIEW_CLOUDFLARE_API_TOKEN }}
           PREVIEW_DATABASE: ${{ steps.provision.outputs.database_name }}
           PREVIEW_DATABASE_ID: ${{ steps.provision.outputs.database_id }}
-          CLIENT_A: ${{ secrets.CRM_PREVIEW_A_CLIENT_ID }}
-          CLIENT_B: ${{ secrets.CRM_PREVIEW_B_CLIENT_ID }}
+          CLIENT_A: ${{ secrets[format('CRM_PREVIEW_{0}_A_CLIENT_ID', inputs.slot)] }}
+          CLIENT_B: ${{ secrets[format('CRM_PREVIEW_{0}_B_CLIENT_ID', inputs.slot)] }}
         run: |
           set -euo pipefail
           pnpm exec wrangler d1 migrations apply "$PREVIEW_DATABASE" --remote --config preview-wrangler.jsonc --force
@@ -240,8 +247,8 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CRM_PREVIEW_CLOUDFLARE_API_TOKEN }}
           PREVIEW_DATABASE_ID: ${{ steps.provision.outputs.database_id }}
-          CLIENT_A: ${{ secrets.CRM_PREVIEW_A_CLIENT_ID }}
-          SECRET_A: ${{ secrets.CRM_PREVIEW_A_CLIENT_SECRET }}
+          CLIENT_A: ${{ secrets[format('CRM_PREVIEW_{0}_A_CLIENT_ID', inputs.slot)] }}
+          SECRET_A: ${{ secrets[format('CRM_PREVIEW_{0}_A_CLIENT_SECRET', inputs.slot)] }}
         run: |
           node --input-type=module <<'NODE'
           import assert from "node:assert/strict";
