@@ -43,8 +43,8 @@ origin. The existing `SITE_ACCESS_ORIGIN` + `SITE_ACCESS_CLIENT_ID` /
 writer previews use independent `SITE_ACCESS_PREVIEW_1_*` and
 `SITE_ACCESS_PREVIEW_2_*` pairs; only their public origins are committed in
 this application's `wrangler.jsonc` `vars`. The four preview credentials are
-separate protected Worker secrets, never GitHub variables, source, logs, or
-browser tool parameters. Preview origins require their complete credential
+must be provisioned as separate protected Worker secrets, never GitHub
+variables, source, logs, or browser tool parameters. Preview origins require their complete credential
 pair before navigation; an absent pair fails closed for that preview without
 disabling ordinary public-site browsing.
 

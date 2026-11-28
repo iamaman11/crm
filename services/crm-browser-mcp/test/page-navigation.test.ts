@@ -27,7 +27,7 @@ test("controller navigation to CRM uses the real Page, then immediately releases
 
 test("universal public-site navigation never elevates a foreign origin", async () => {
   let actualUrl = CRM_ORIGIN + "/";
-  const trust: boolean[] = [];
+  const trust: (string | null)[] = [];
   const destination = "https://www.iana.org/domains/reserved?debug=hidden";
   const page: NavigablePage = {
     url: () => actualUrl,
@@ -38,7 +38,7 @@ test("universal public-site navigation never elevates a foreign origin", async (
       return { status: () => 200 };
     },
   };
-  const result = await navigatePage(page, destination, enabled => trust.push(enabled), undefined, CRM_ORIGIN);
+  const result = await navigatePage(page, destination, origin => trust.push(origin), undefined, CRM_ORIGIN);
   assert.deepEqual(result, {
     http_status: 200,
     path: "https://www.iana.org/domains/reserved",
@@ -48,14 +48,14 @@ test("universal public-site navigation never elevates a foreign origin", async (
 });
 
 test("navigation failure and redirect never leave persistent CRM trust", async () => {
-  const trust: boolean[] = [];
+  const trust: (string | null)[] = [];
   const blocked: NavigablePage = {
     url: () => "about:blank",
     title: async () => "Not reached",
     goto: async () => { throw new Error("navigation failed"); },
   };
   await assert.rejects(
-    navigatePage(blocked, CRM_ORIGIN + "/clients", enabled => trust.push(enabled), undefined, CRM_ORIGIN),
+    navigatePage(blocked, CRM_ORIGIN + "/clients", origin => trust.push(origin), undefined, CRM_ORIGIN),
     /navigation failed/,
   );
   assert.deepEqual(trust, [CRM_ORIGIN, null]);
