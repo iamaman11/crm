@@ -187,31 +187,39 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='te
  const {eventLater,eventEarlier,eventNote,failedId}=await verifyInteractions({
    dispatch:rpcFetch,sql,accountId,accountNextId,dealId,sourceSha,admin,viewer,tenantB,
    runScheduledProbe:async()=>{
- // Wrangler's documented native harness dispatches the compiled scheduled
- // entrypoint of THIS SAME Rust Worker. Neither cron nor a rule is enabled
- // in production: the boundary is read-only until complete run/lease acceptance.
+ // The actual scheduled entrypoint is invoked twice before any rule exists.
+ // It must be a true no-op: no Task, run, source consumption or audit write.
  const scheduledAuditBefore=(await sql(
    "SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id=?","tenant-a"))[0]?.n;
+ const scheduledTaskBefore=(await sql(
+   "SELECT COUNT(*) AS n FROM crm_activity_task_records WHERE tenant=?","tenant-a"))[0]?.n;
+ const scheduledRunBefore=(await sql(
+   "SELECT COUNT(*) AS n FROM crm_activity_automation_runs WHERE tenant=?","tenant-a"))[0]?.n;
  const logStart=testHarness.getLogs().length;
  for(let attempt=0;attempt<2;attempt++){
-   const result=await runScheduled({
-     cron:"*/5 * * * *",scheduledTime:new Date("2026-11-24T00:05:00.000Z")
-   });
+   const result=await runScheduled({cron:"*/5 * * * *",scheduledTime:new Date()});
    assert.equal(result.outcome,"ok","native scheduled Worker must dispatch without an exception");
    assert.equal(result.noRetry,false);
  }
- assert.ok(testHarness.getLogs().slice(logStart).some(entry=>
-   String(entry.message).includes("CRM_AUTOMATION_SCHEDULED_DISPATCH_DISABLED")),
-   "actual Rust scheduled callback must log its disabled-dispatch boundary");
+ const scheduledLogs=testHarness.getLogs().slice(logStart).map(entry=>String(entry.message));
+ assert.ok(scheduledLogs.some(message=>message.includes("CRM_AUTOMATION_SCHEDULED_DISPATCH:")),
+   "actual Rust scheduled callback must execute the durable dispatcher");
+ assert.equal(scheduledLogs.some(message=>message.includes("DISABLED")),false);
  assert.equal((await sql(
    "SELECT COUNT(*) AS n FROM crm_activity_automation_source_events WHERE tenant=?","tenant-a"))[0]?.n,3,
-   "two cron invocations cannot consume or duplicate source events");
+   "cron must not consume or duplicate Interaction source events");
+ assert.equal((await sql(
+   "SELECT COUNT(*) AS n FROM crm_activity_automation_runs WHERE tenant=?","tenant-a"))[0]?.n,
+   scheduledRunBefore,"no matching rules must not claim runs");
+ assert.equal((await sql(
+   "SELECT COUNT(*) AS n FROM crm_activity_task_records WHERE tenant=?","tenant-a"))[0]?.n,
+   scheduledTaskBefore,"no matching rules must not create Tasks");
  assert.equal((await sql(
    "SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id=?","tenant-a"))[0]?.n,
-   scheduledAuditBefore,"scheduled compatibility probe must not write audit");
+   scheduledAuditBefore,"no matching rules must not write audit");
  console.log(JSON.stringify({event:"crm.native-sk08a-scheduled-boundary",result:"PASS",
-   native_workerd_handler:true,repeat_count:2,no_cross_tenant_read:true,
-   no_task_creation:true,no_new_audit:true,production_cron_disabled:true}));
+   native_workerd_handler:true,repeat_count:2,no_matching_rule_no_effect:true,
+   no_task_creation:true,no_new_audit:true,production_cron_enabled:true}));
 
    },
    cleanupLongestInteraction:async(cleanupId,cleanupKey)=>{
@@ -257,7 +265,7 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='te
  await verifySalesCoverage({dispatch:rpcFetch,sql,accountId,admin,viewer,tenantB});
  await verifySalesCommercial({dispatch:rpcFetch,sql,statement,batch,accountId,admin,viewer,tenantB});
  await verifyLifecycle({dispatch:rpcFetch,sql,jwt,accountId,admin,viewer,tenantB});
- const automationFixture={dispatch:rpcFetch,sql,accountId,admin,viewer,tenantB,runScheduled};
+ const automationFixture={dispatch:rpcFetch,sql,accountId,contactId,admin,viewer,tenantB,runScheduled};
  await verifyAutomation(automationFixture);
  await verifySalesLeads({dispatch:rpcFetch,sql,admin,viewer,tenantB});
 
