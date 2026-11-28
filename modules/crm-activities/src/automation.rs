@@ -24,8 +24,8 @@ impl AutomationTrigger {
     }
 }
 
-/// Rule revisions are immutable once published. Identity excludes revision,
-/// preventing a new revision from repeating the same source occurrence.
+/// Rule revisions are immutable once published. Each revision has its own
+/// source identity, while retries of the same revision remain idempotent.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AutomationRule {
     pub rule_id: RecordId,
@@ -382,20 +382,18 @@ mod tests {
         assert_eq!(first.source_id, "task-one");
         let mut revised = rule.clone();
         revised.version = 3;
-        assert_eq!(
-            first.idempotency_key,
-            revised
-                .plan(
-                    AutomationSource::TaskOverdue {
-                        task: &task(),
-                        generated_by_automation: false,
-                    },
-                    15
-                )
-                .unwrap()
-                .unwrap()
-                .idempotency_key
-        );
+        let revised_plan = revised
+            .plan(
+                AutomationSource::TaskOverdue {
+                    task: &task(),
+                    generated_by_automation: false,
+                },
+                15,
+            )
+            .unwrap()
+            .unwrap();
+        assert_ne!(first.idempotency_key, revised_plan.idempotency_key);
+        assert_ne!(first.task_id, revised_plan.task_id);
     }
 
     #[test]
