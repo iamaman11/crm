@@ -39,12 +39,12 @@ test("MCP exposes stable iframe selectors and opt-in popup following in existing
   assert.match(code, /frameIndex, frameSelector/);
   assert.match(code, /followPopup: z\.boolean\(\)\.optional\(\)/);
   assert.match(code, /followPopup: params\.followPopup/);
-  assert.match(session, /this\.page\.frameLocator\(target\.frameSelector\)/);
+  assert.match(session, /this\.lifecycle\.page\.frameLocator\(target\.frameSelector\)/);
   assert.match(session, /page\.frameLocator\(command\.frameSelector\)/);
   assert.match(session, /page\.waitForEvent\("popup"/);
   assert.match(session, /await Promise\.all\(\[/);
-  assert.match(session, /this\.page = popup;/);
+  assert.match(session, /this\.lifecycle\.page = popup;/);
   assert.match(session, /await this\.rememberSelectedPageIdentity\(\)/);
-  assert.match(session, /followedPopup: true, tabId: this\.tabIds\.get\(followedPopup\)/);
+  assert.match(session, /followedPopup: true, tabId: this\.lifecycle\.tabIds\.get\(followedPopup\)/);
   assert.doesNotMatch(session, /puppeteer\.connect|agents\/browser/);
 });

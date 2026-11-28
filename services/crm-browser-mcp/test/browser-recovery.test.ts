@@ -280,18 +280,20 @@ test("closed, detached, blocked or uninspectable page cannot be recovered", asyn
 
 test("real DO saves CDP target+incognito identity before reporting Open and tab changes", async () => {
   const {readFileSync}=await import("node:fs");
-  const code=readFileSync(new URL("../src/session.ts",import.meta.url),"utf8");
-  assert.match(code,/newCDPSession\(page\)/,"read via official Playwright CDP session");
-  assert.match(code,/cdp\.send\("Target\.getTargetInfo"\)/);
-  assert.match(code,/this\.ctx\.storage\.put\("browser_page_identity", await this\.readPageIdentity\(page\)\)/);
-  assert.match(code,/const storedPageIdentity: unknown = await this\.ctx\.storage\.get\("browser_page_identity"\)/);
-  assert.match(code,/storedPageIdentity, page => this\.readPageIdentity\(page\)/);
-  assert.match(code,/await this\.rememberSelectedPageIdentity\(\);\s*return \{ state: "open"/);
-  assert.match(code,/if \(command\.tabAction !== "list"\) await this\.rememberSelectedPageIdentity\(\)/);
-  assert.match(code,/if \(this\.recoveredPageMissing\) throw new Error\("BROWSER_SESSION_PAGE_NOT_RESTORED"\)/);
-  assert.match(code,/if \(!restored\) \{\s*this\.recoveredPageMissing = true;\s*throw new Error\("BROWSER_SESSION_PAGE_NOT_RESTORED"\)/);
-  assert.match(code,/private async close\([\s\S]*?this\.ctx\.storage\.delete\("browser_page_identity"\)/);
-  assert.match(code,/private async close\([\s\S]*?this\.recoveredPageMissing = false/);
+  const lifecycle=readFileSync(new URL("../src/browser/lifecycle.ts",import.meta.url),"utf8");
+  const session=readFileSync(new URL("../src/session.ts",import.meta.url),"utf8");
+  assert.match(lifecycle,/newCDPSession\(page\)/,"read via official Playwright CDP session");
+  assert.match(lifecycle,/cdp\.send\("Target\.getTargetInfo"\)/);
+  assert.match(lifecycle,/storage\.put\("browser_page_identity", await readPageIdentity\(page\)\)/);
+  assert.match(lifecycle,/const storedPageIdentity: unknown = await storage\.get\("browser_page_identity"\)/);
+  assert.match(lifecycle,/storedPageIdentity, page => readPageIdentity\(page\)/);
+  assert.match(lifecycle,/await rememberSelectedPageIdentity\(state, storage\);\s*return \{ state: "open"/);
+  assert.match(session,/if \(command\.tabAction !== "list"\) await this\.rememberSelectedPageIdentity\(\)/);
+  assert.match(session,/await rememberSelectedPageIdentity\(this\.lifecycle, this\.ctx\.storage\)/);
+  assert.match(lifecycle,/if \(state\.recoveredPageMissing\) throw new Error\("BROWSER_SESSION_PAGE_NOT_RESTORED"\)/);
+  assert.match(lifecycle,/if \(!restored\) \{\s*state\.recoveredPageMissing = true;\s*throw new Error\("BROWSER_SESSION_PAGE_NOT_RESTORED"\)/);
+  assert.match(lifecycle,/function closeBrowser\([\s\S]*?storage\.delete\("browser_page_identity"\)/);
+  assert.match(lifecycle,/function closeBrowser\([\s\S]*?state\.recoveredPageMissing = false/);
 });
 
 test("explicit Open works normally when the original browser is healthy", async () => {
@@ -342,10 +344,11 @@ test("cloud outages and other failures must never trigger implicit Close or acqu
 test("real DO exposes recoverable Status and one-step explicit Open", async () => {
   const { readFileSync } = await import("node:fs");
   const code = readFileSync(new URL("../src/session.ts", import.meta.url), "utf8");
-  assert.match(code, /const restarted = await restoreForExplicitOpen\(/);
-  assert.match(code, /\(\) => this\.restore\(\), \(\) => this\.close\(\)/);
+  const lifecycle = readFileSync(new URL("../src/browser/lifecycle.ts", import.meta.url), "utf8");
+  assert.match(lifecycle, /const restarted = await restoreForExplicitOpen\(/);
+  assert.match(lifecycle, /\(\) => restoreBrowser\(deps\), \(\) => closeBrowser\(deps\)/);
   assert.match(code, /state: needsReopen \? "needs_reopen"/);
   assert.match(code, /if \(\(command\.op !== "status" &&\s*!\(command\.op === "handoff" && command\.handoffAction === "status"\)\) \|\|\s*!isOriginalPageMissing\(error\)\) throw error/,
     "only read-only status and handoff status may inspect a lost original page");
-  assert.match(code, /\(restarted \? \{ restarted: true \} : \{\}\)/);
+  assert.match(lifecycle, /\(restarted \? \{ restarted: true \} : \{\}\)/);
 });

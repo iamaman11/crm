@@ -34,3 +34,18 @@ test("the Durable Object remains the only browser-state owner", () => {
   assert.match(index, /export \{ CrmBrowserSession \} from "\.\/session"/);
   assert.equal((session.match(/extends DurableObject</g) ?? []).length, 1);
 });
+
+test("lifecycle has no independent browser owner and both tab and open share one context initializer", () => {
+  const session = source("../src/session.ts");
+  const lifecycle = source("../src/browser/lifecycle.ts");
+  assert.match(session, /private readonly lifecycle: BrowserLifecycleState =/);
+  assert.match(session, /state: this\.lifecycle,/);
+  assert.match(session, /openBrowser\(this\.lifecycleDependencies\(\)/);
+  assert.match(session, /restoreBrowser\(this\.lifecycleDependencies\(\)/);
+  assert.match(session, /closeBrowser\(this\.lifecycleDependencies\(\)/);
+  assert.match(session, /await ensureBrowserContext\(/);
+  assert.match(lifecycle, /await ensureBrowserContext\(deps, device\)/);
+  assert.equal((lifecycle.match(/\.newContext\(/g) ?? []).length, 1);
+  assert.doesNotMatch(session, /\.newContext\(/);
+  assert.doesNotMatch(lifecycle, /extends DurableObject|from ["'].*session|from ["'].*index/);
+});
