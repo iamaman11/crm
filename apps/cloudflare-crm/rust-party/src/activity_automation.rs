@@ -849,8 +849,13 @@ async fn execute_claimed(
         Err(_) => {
             if !has_receipt {
                 release_attempt(
-                    db, tenant, &row, request_id, "AUTOMATION_TASK_OWNER_UNAVAILABLE"
-                ).await?;
+                    db,
+                    tenant,
+                    &row,
+                    request_id,
+                    "AUTOMATION_TASK_OWNER_UNAVAILABLE",
+                )
+                .await?;
             }
             return Err(storage());
         }
