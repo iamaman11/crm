@@ -387,7 +387,7 @@ export async function verifyAutomation({dispatch,sql,accountId,contactId,dealId,
      "SELECT COUNT(*) n FROM crm_activity_automation_runs WHERE tenant=? AND source_type='deal_created' AND source_id=?",
      "tenant-a",dealId)).at(0)?.n;
    const oldDealEvent=(await sql(
-     "SELECT rowid AS event_rowid,occurred_at_unix_nanos FROM crm_sales_deal_events "+
+     "SELECT rowid AS event_rowid FROM crm_sales_deal_events "+
      "WHERE tenant=? AND deal_id=? AND action='created'","tenant-a",dealId))[0];
    assert.ok(oldDealEvent);
    const dealRuleId="automation-deal-rule-"+suffix;
@@ -404,9 +404,10 @@ export async function verifyAutomation({dispatch,sql,accountId,contactId,dealId,
    // Simulate equal millisecond timestamps: the immutable event rowid, not a
    // rounded wall-clock comparison, must keep this older Deal out of the rule.
    await sql(
-     "UPDATE crm_activity_automation_rules SET version=version+1,published_at_unix_nanos=?,"+
+     "UPDATE crm_activity_automation_rules SET version=version+1,published_at_unix_nanos=("+
+     "SELECT occurred_at_unix_nanos FROM crm_sales_deal_events WHERE tenant=? AND deal_id=? AND action='created'),"+
      "idem_key=?,idem_digest=?,request_id=?,actor=? WHERE tenant=? AND id=? AND version=1",
-     Number(oldDealEvent.occurred_at_unix_nanos),"automation-deal-rule-v2-"+suffix,"f".repeat(64),
+     "tenant-a",dealId,"automation-deal-rule-v2-"+suffix,"f".repeat(64),
      "automation-deal-rule-v2-request-"+suffix,"native-a@example.test","tenant-a",dealRuleId);
    const revisedDealRule=(await sql(
      "SELECT version FROM crm_activity_automation_rules WHERE tenant=? AND id=?",
