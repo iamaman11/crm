@@ -31,7 +31,7 @@ permissions:
 
 jobs:
   preflight:
-    if: ${{ github.ref == 'refs/heads/main' }}
+    if: ${{ github.ref == 'refs/heads/main' && github.actor == 'iamaman11' }}
     runs-on: ubuntu-26.04
     timeout-minutes: 15
     outputs:
@@ -213,7 +213,7 @@ jobs:
 
   preview:
     needs: preflight
-    if: ${{ github.ref == 'refs/heads/main' && needs.preflight.result == 'success' }}
+    if: ${{ github.ref == 'refs/heads/main' && github.actor == 'iamaman11' && needs.preflight.result == 'success' }}
     runs-on: ubuntu-26.04
     environment: crm-preview
     concurrency:
@@ -381,6 +381,8 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CRM_PREVIEW_CLOUDFLARE_API_TOKEN }}
           PREVIEW_1_ACCESS_APP_ID: ${{ vars.CRM_PREVIEW_1_ACCESS_APP_ID }}
           PREVIEW_2_ACCESS_APP_ID: ${{ vars.CRM_PREVIEW_2_ACCESS_APP_ID }}
+          PREVIEW_1_A_CLIENT_ID: ${{ secrets.CRM_PREVIEW_1_A_CLIENT_ID }}
+          PREVIEW_2_A_CLIENT_ID: ${{ secrets.CRM_PREVIEW_2_A_CLIENT_ID }}
           EXPECTED_PREVIEW_HOST: ${{ needs.preflight.outputs.preview_host }}
         shell: bash
         run: |
@@ -421,17 +423,46 @@ jobs:
           ),"the policy may include Service Tokens only, never Bypass/Everyone/identity rules");
           assert.deepEqual(policy.exclude??[],[]);
           assert.deepEqual(policy.require??[],[]);
+          const expectedNames=["crm-preview-"+slot+"-a","crm-preview-"+slot+"-b"];
+          const tokenRecords=await Promise.all(policy.include.map(async item=>{
+            const tokenId=item.service_token.token_id;
+            const tokenResponse=await fetch(
+              "https://api.cloudflare.com/client/v4/accounts/"+account+"/access/service_tokens/"+tokenId,
+              {headers:{authorization:"Bearer "+process.env.CLOUDFLARE_API_TOKEN}}
+            );
+            const tokenPayload=await tokenResponse.json();
+            assert.ok(tokenResponse.ok && tokenPayload.success===true,
+              "Cloudflare could not read one of the exact preview service tokens");
+            const token=tokenPayload.result;
+            assert.equal(token.id,tokenId);
+            assert.equal(token.enabled,true,"both exact preview Service Tokens must be enabled");
+            assert.equal(token.leak_reported_at,undefined,
+              "a leaked Service Token must be rotated before preview use");
+            assert.ok(token.expires_at && Date.parse(token.expires_at)>Date.now(),
+              "both preview Service Tokens must have a future finite expiry");
+            assert.match(token.client_id??"",/^[0-9a-f]{32}\\.access$/);
+            return token;
+          }));
+          assert.deepEqual(tokenRecords.map(token=>token.name).sort(),expectedNames.sort(),
+            "the Access policy must contain exactly the named A and B tokens for this preview slot");
+          const aToken=tokenRecords.find(token=>token.name==="crm-preview-"+slot+"-a");
+          const bToken=tokenRecords.find(token=>token.name==="crm-preview-"+slot+"-b");
+          assert.ok(aToken && bToken,"both named A and B tokens must exist");
+          const expectedAClientId=slot==="1"?process.env.PREVIEW_1_A_CLIENT_ID:process.env.PREVIEW_2_A_CLIENT_ID;
+          assert.equal(aToken.client_id,expectedAClientId,
+            "the GitHub A credential pair must belong to this preview's exact A token");
           writeFileSync(process.env.GITHUB_OUTPUT,
-            "access_app_id="+appId+"\n"+
-            "access_audience="+app.aud+"\n"+
-            "preview_host="+app.domain+"\n",
+            "access_app_id="+appId+"\\n"+
+            "access_audience="+app.aud+"\\n"+
+            "preview_host="+app.domain+"\\n",
             {flag:"a"});
           writeFileSync(process.env.GITHUB_ENV,
-            "PREVIEW_ACCESS_AUD="+app.aud+"\n"+
-            "PREVIEW_ACCESS_APP_ID="+appId+"\n"+
-            "PREVIEW_HOST="+app.domain+"\n",
+            "PREVIEW_ACCESS_AUD="+app.aud+"\\n"+
+            "PREVIEW_ACCESS_APP_ID="+appId+"\\n"+
+            "PREVIEW_HOST="+app.domain+"\\n"+
+            "PREVIEW_BROWSER_CLIENT_ID="+bToken.client_id+"\\n",
             {flag:"a"});
-          console.log("Validated isolated non_identity Access app, fixed host, unique audience and two-token allowlist.");
+          console.log("Validated isolated Access app, exact enabled A/B tokens, unique audience and fixed host.");
           NODE
 
       - name: Create one physical EU D1 for this preview lease
@@ -534,6 +565,57 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CRM_PREVIEW_CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: 5bd5e1e1e813f061afc259e91334262d
         run: pnpm exec wrangler d1 migrations apply "${{ steps.d1.outputs.database_name }}" --remote --config preview-wrangler.jsonc --force
+
+      - name: Enroll only the exact Browser MCP B service principal in isolated preview D1
+        if: ${{ steps.gate.outputs.enabled == 'true' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CRM_PREVIEW_CLOUDFLARE_API_TOKEN }}
+          PREVIEW_DATABASE_ID: ${{ steps.d1.outputs.database_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          const account="5bd5e1e1e813f061afc259e91334262d";
+          const clientId=process.env.PREVIEW_BROWSER_CLIENT_ID;
+          assert.match(clientId??"",/^[0-9a-f]{32}\\.access$/,
+            "the Browser MCP B client ID must come from the exact enabled Access Service Token");
+          const tenantId="crm-preview-"+process.env.PREVIEW_SLOT+"-"+process.env.SOURCE_RUN_ID+"-"+process.env.SOURCE_RUN_ATTEMPT;
+          const tenantName="CRM Preview "+process.env.PREVIEW_SLOT+" test";
+          const identity="service:"+clientId;
+          const endpoint="https://api.cloudflare.com/client/v4/accounts/"+account+"/d1/database/"+process.env.PREVIEW_DATABASE_ID+"/query";
+          async function query(sql,params){
+            const response=await fetch(endpoint,{
+              method:"POST",
+              headers:{
+                authorization:"Bearer "+process.env.CLOUDFLARE_API_TOKEN,
+                "content-type":"application/json"
+              },
+              body:JSON.stringify({sql,params})
+            });
+            const payload=await response.json();
+            assert.ok(response.ok && payload.success===true,"isolated D1 service-principal query failed");
+            assert.equal(payload.result?.length,1);
+            assert.equal(payload.result[0].success,true);
+            return payload.result[0];
+          }
+          await query(
+            "INSERT INTO crm_tenants(id,name) VALUES(?,?) ON CONFLICT(id) DO NOTHING",
+            [tenantId,tenantName]
+          );
+          await query(
+            "INSERT INTO crm_users(email,tenant_id,role,active) VALUES(?,?,?,1) ON CONFLICT(email) DO NOTHING",
+            [identity,tenantId,"admin"]
+          );
+          const rows=await query(
+            "SELECT email,tenant_id,role,active FROM crm_users WHERE email=?",
+            [identity]
+          );
+          assert.deepEqual(rows.results,[{
+            email:identity,tenant_id:tenantId,role:"admin",active:1
+          }],"the isolated B principal must be an active admin only in this preview's own test tenant");
+          console.log("Seeded and read back only the preview B service principal in its newly created physical D1; no production identity or tenant is copied.");
+          NODE
 
       - name: Deploy exact sealed Worker and React assets behind the pre-provisioned Access app
         id: deploy
