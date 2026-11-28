@@ -81,3 +81,6 @@ export type Command = {
   screenshotOnFailure?: boolean;
   screenshotSource?: "current" | "last_failure";
 };
+
+export type BrowserCommandResult = { data: unknown; image?: string };
+export type FailureScreenshot = { image: string; capturedPath: string };

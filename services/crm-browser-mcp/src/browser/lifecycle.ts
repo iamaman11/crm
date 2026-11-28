@@ -4,6 +4,7 @@ import { acquire, connect, type Browser, type BrowserContext, type Page } from "
 import { DEFAULT_BROWSER_URL, browserUrl, isPermittedBrowserRequest, safePagePath } from "./security.ts";
 import { chooseDevice, deviceOptions, type BrowserDevice } from "../browser-device.ts";
 import { WEB_VITALS_INIT } from "../browser-performance.ts";
+import type { Command, BrowserCommandResult } from "../contracts";
 import {
   classifyBrowserAcquireFailure, recoverExistingBrowserSession, selectRestoredPublicPage,
   parsePageTargetInfo, restoreForExplicitOpen, type BrowserPageIdentity,
@@ -264,4 +265,57 @@ export async function closeBrowser(deps: BrowserLifecycleDependencies) {
     deps.afterClose();
   }
   if (failure) throw failure;
+}
+
+export async function tabsBrowser(deps: BrowserLifecycleDependencies, command: Command): Promise<BrowserCommandResult> {
+  const { state, storage } = deps;
+  if (!state.browser) throw new Error("CRM_BROWSER_NOT_OPEN");
+  if (command.tabAction === "new") {
+    const context = state.context ?? await ensureBrowserContext(
+      deps,
+      await storage.get<BrowserDevice>("browser_device") ?? "desktop",
+    );
+    if (context.pages().filter(p => !p.isClosed()).length >= 12) {
+      throw new Error("BROWSER_TAB_LIMIT");
+    }
+    // A new tab uses the same site-neutral context and optional access policy.
+    const url = command.url ? browserUrl(command.url, state.page?.url() || DEFAULT_BROWSER_URL) : null;
+    const page = await context.newPage();
+    deps.attachPage(page);
+    state.page = page;
+    if (url) await deps.navigateTo(url);
+  } else if (command.tabAction === "select" || command.tabAction === "close") {
+    const matched = [...state.tabIds.entries()].find(([page, id]) =>
+      id === command.tabId && !page.isClosed(),
+    );
+    if (!matched) throw new Error("BROWSER_TAB_NOT_FOUND");
+    const [page] = matched;
+    if (command.tabAction === "select") {
+      state.page = page;
+      await page.bringToFront();
+    } else {
+      await page.close();
+      state.tabIds.delete(page);
+      if (state.page === page) {
+        state.page = state.context?.pages().find(p => !p.isClosed()) ?? null;
+      }
+    }
+  } else if (command.tabAction !== "list") {
+    throw new Error("BROWSER_UNKNOWN_TAB_ACTION");
+  }
+  // A tab switch/new/close changes the active CDP target. Persist the
+  // exact replacement identity before reporting a successful command.
+  if (command.tabAction !== "list") await rememberSelectedPageIdentity(state, storage);
+  const tabs = await Promise.all(
+    (state.context?.pages() ?? []).filter(p => !p.isClosed()).map(async (page) => {
+      deps.attachPage(page);
+      return {
+        tabId: state.tabIds.get(page),
+        active: page === state.page,
+        path: safePagePath(page.url()),
+        title: await page.title(),
+      };
+    }),
+  );
+  return { data: { tabs, count: tabs.length } };
 }

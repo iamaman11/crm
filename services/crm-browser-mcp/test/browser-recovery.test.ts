@@ -288,7 +288,7 @@ test("real DO saves CDP target+incognito identity before reporting Open and tab 
   assert.match(lifecycle,/const storedPageIdentity: unknown = await storage\.get\("browser_page_identity"\)/);
   assert.match(lifecycle,/storedPageIdentity, page => readPageIdentity\(page\)/);
   assert.match(lifecycle,/await rememberSelectedPageIdentity\(state, storage\);\s*return \{ state: "open"/);
-  assert.match(session,/if \(command\.tabAction !== "list"\) await this\.rememberSelectedPageIdentity\(\)/);
+  assert.match(lifecycle,/if \(command\.tabAction !== "list"\) await rememberSelectedPageIdentity\(state, storage\)/);
   assert.match(session,/await rememberSelectedPageIdentity\(this\.lifecycle, this\.ctx\.storage\)/);
   assert.match(lifecycle,/if \(state\.recoveredPageMissing\) throw new Error\("BROWSER_SESSION_PAGE_NOT_RESTORED"\)/);
   assert.match(lifecycle,/if \(!restored\) \{\s*state\.recoveredPageMissing = true;\s*throw new Error\("BROWSER_SESSION_PAGE_NOT_RESTORED"\)/);
