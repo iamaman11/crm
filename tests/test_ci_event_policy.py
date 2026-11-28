@@ -72,6 +72,7 @@ on:
   push:
     branches:
       - dev
+      - 'feat/parallel/**'
       - 'integration/parallel/**'
     paths-ignore:
       - '*.md'
@@ -97,7 +98,7 @@ jobs:
         )
         self.assertEqual(
             check_workflow(path).errors,
-            ("CRM push must be restricted to dev and integration/parallel/**",),
+            ("CRM push must be restricted to dev, feat/parallel/** and integration/parallel/**",),
         )
 
     def test_other_workflows_cannot_push_dev(self) -> None:
@@ -151,10 +152,11 @@ jobs:
              "CRM CI must not validate Markdown documentation"),
             (original.replace("concurrency:\n", "  pull_request:\n    branches:\n      - dev\nconcurrency:\n", 1), "CRM uses one dev pipeline, not duplicate pull_request builds"),
             (original.replace("concurrency:\n", "  workflow_dispatch:\nconcurrency:\n", 1), "CRM candidate preflight uses integration push, not workflow_dispatch"),
-            (original.replace("      - 'integration/parallel/**'\n", "", 1), "CRM push must be restricted to dev and integration/parallel/**"),
-            (original.replace("      - 'integration/parallel/**'", "      - '**'"), "CRM push must be restricted to dev and integration/parallel/**"),
+            (original.replace("      - 'feat/parallel/**'\n", "", 1), "CRM push must be restricted to dev, feat/parallel/** and integration/parallel/**"),
+            (original.replace("      - 'integration/parallel/**'\n", "", 1), "CRM push must be restricted to dev, feat/parallel/** and integration/parallel/**"),
+            (original.replace("      - 'integration/parallel/**'", "      - 'untrusted/**'"), "CRM push must be restricted to dev, feat/parallel/** and integration/parallel/**"),
             (original.replace("if: github.event_name == 'push' && github.ref == 'refs/heads/dev'", "if: always()", 1), "CRM deploy job must run only on push to dev"),
-            (original.replace("      - dev\n", "      - dev\n      - experimental\n", 1), "CRM push must be restricted to dev and integration/parallel/**"),
+            (original.replace("      - dev\n", "      - dev\n      - experimental\n", 1), "CRM push must be restricted to dev, feat/parallel/** and integration/parallel/**"),
         )
         for contents, expected_error in cases:
             with self.subTest(expected_error=expected_error):
