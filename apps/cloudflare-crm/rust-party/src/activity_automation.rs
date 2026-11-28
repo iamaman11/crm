@@ -875,7 +875,7 @@ async fn execute_claimed(
             "task_request_id=?,completed_at_unix_millis=?,lease_until_unix_millis=0,",
             "next_attempt_at_unix_millis=0,last_error_code=NULL WHERE tenant=?",
             " AND rule_id=? AND source_event_id=? AND status='pending'",
-            " AND cancel_request_id IS NULL AND source_stale=0 AND lease_request_id=?"
+            " AND cancel_request_id IS NULL AND source_stale=0 AND (?=1 OR lease_request_id=?)"
         ),
         &[
             task_trace
@@ -886,6 +886,7 @@ async fn execute_claimed(
             JsValue::from_str(tenant),
             JsValue::from_str(&row.rule_id),
             JsValue::from_str(&row.source_event_id),
+            JsValue::from_f64(if has_receipt { 1.0 } else { 0.0 }),
             JsValue::from_str(request_id),
         ],
     )
