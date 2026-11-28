@@ -183,6 +183,7 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='te
  await verifyCustomerReadParity({dispatch:rpcFetch,sql,admin,viewer,tenantB,id,accountId,contactId,rMid,dealId,linkedTaskId});
  // SK-05: the SAME binary Connect + signed worker + original Activities D1
  // validates completed calls/meetings/notes independently of Sales stage audit.
+ const runScheduled=worker.scheduled.bind(worker);
  const {eventLater,eventEarlier,eventNote,failedId}=await verifyInteractions({
    dispatch:rpcFetch,sql,accountId,accountNextId,dealId,sourceSha,admin,viewer,tenantB,
    runScheduledProbe:async()=>{
@@ -193,7 +194,7 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='te
    "SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id=?","tenant-a"))[0]?.n;
  const logStart=testHarness.getLogs().length;
  for(let attempt=0;attempt<2;attempt++){
-   const result=await worker.scheduled({
+   const result=await runScheduled({
      cron:"*/5 * * * *",scheduledTime:new Date("2026-11-24T00:05:00.000Z")
    });
    assert.equal(result.outcome,"ok","native scheduled Worker must dispatch without an exception");
@@ -232,7 +233,7 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='te
  await verifyRecentInteractions({dispatch:rpcFetch,sql,accountId,accountNextId,dealId,eventLater,eventEarlier,eventNote,failedId,sourceSha,admin,viewer,tenantB});
 
  await verifyWorkforce({dispatch:rpcFetch,sql,jwt,accountId,admin,viewer,tenantB,knownService});
- await typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,adminIdentity:"native-a@example.test"});
+ await typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,runScheduled,adminIdentity:"native-a@example.test"});
  const salesAuditBeforeFilter=number((await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0]?.n);
  const collectDeals=(pageSize:number,filter:{accountId?:string}={})=>collectFixturePages(async pageToken=>{
    const {body}=await fixtureRpc(rpcFetch,sales.listDeals,viewer,{...filter,page:{pageSize,pageToken}});
@@ -256,7 +257,8 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='te
  await verifySalesCoverage({dispatch:rpcFetch,sql,accountId,admin,viewer,tenantB});
  await verifySalesCommercial({dispatch:rpcFetch,sql,statement,batch,accountId,admin,viewer,tenantB});
  await verifyLifecycle({dispatch:rpcFetch,sql,jwt,accountId,admin,viewer,tenantB});
- await verifyAutomation({dispatch:rpcFetch,sql,accountId,admin,viewer,tenantB});
+ const automationFixture={dispatch:rpcFetch,sql,accountId,admin,viewer,tenantB,runScheduled};
+ await verifyAutomation(automationFixture);
  await verifySalesLeads({dispatch:rpcFetch,sql,admin,viewer,tenantB});
 
 });
