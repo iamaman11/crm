@@ -277,7 +277,7 @@ jobs:
           SOURCE_SHA="$SOURCE_SHA" BASE_SHA="$BASE_SHA" EXPECTED_MIGRATION="$EXPECTED_MIGRATION" node --input-type=module <<'NODE'
           import assert from "node:assert/strict";
           import {execFileSync} from "node:child_process";
-          import {lstatSync} from "node:fs";
+          import {lstatSync,writeFileSync} from "node:fs";
           const cwd=".preview-source";
           const base=process.env.BASE_SHA;
           const sha=process.env.SOURCE_SHA;
@@ -290,7 +290,19 @@ jobs:
           const stat=lstatSync(cwd+"/"+expected);
           assert.ok(stat.isFile() && !stat.isSymbolicLink(),"approved migration must be a regular file");
           assert.ok(stat.size>0,"approved migration cannot be empty");
-          console.log("Frozen-base migration scope is exactly one approved additive SQL file.");
+          const accessSource=execFileSync("git",["show",sha+":apps/cloudflare-crm/rust-party/src/access.rs"],{cwd,encoding:"utf8"});
+          assert.ok(accessSource.includes('env.var("CRM_ACCESS_AUDIENCE")'),
+            "the exact preview artifact source must use the runtime-configured Access audience");
+          assert.ok(!accessSource.includes('const AUDIENCE: &str'),
+            "the compile-time production audience must not remain in preview code");
+          const productionConfigText=execFileSync("git",[
+            "show","refs/remotes/origin/dev:apps/cloudflare-crm/wrangler.jsonc"
+          ],{cwd,encoding:"utf8"});
+          const productionAudience=JSON.parse(productionConfigText).vars?.CRM_ACCESS_AUDIENCE;
+          assert.match(productionAudience??"",/^[0-9a-f]{64}$/,
+            "dev must pin its existing production Access audience before any preview can run");
+          writeFileSync(process.env.GITHUB_ENV,"PRODUCTION_ACCESS_AUDIENCE="+productionAudience+"\n",{flag:"a"});
+          console.log("Frozen-base migration scope and runtime Access audience are valid.");
           NODE
 
       - name: Read and validate the dedicated Access application
@@ -306,7 +318,7 @@ jobs:
           set -euo pipefail
           node --input-type=module <<'NODE'
           import assert from "node:assert/strict";
-          import {readFileSync,writeFileSync} from "node:fs";
+          import {writeFileSync} from "node:fs";
           const account="5bd5e1e1e813f061afc259e91334262d";
           const slot=process.env.PREVIEW_SLOT;
           const appId=slot==="1"?process.env.PREVIEW_1_ACCESS_APP_ID:process.env.PREVIEW_2_ACCESS_APP_ID;
@@ -324,8 +336,9 @@ jobs:
             "the Access app must protect the fixed hostname assigned to this writer");
           assert.equal(app.session_duration,"1h");
           assert.match(app.aud??"",/^[0-9a-f]{64}$/);
-          const production=JSON.parse(readFileSync("apps/cloudflare-crm/wrangler.jsonc","utf8"));
-          assert.notEqual(app.aud,production.vars?.CRM_ACCESS_AUDIENCE,
+          assert.match(process.env.PRODUCTION_ACCESS_AUDIENCE??"",/^[0-9a-f]{64}$/,
+            "the canonical dev production audience must be present");
+          assert.notEqual(app.aud,process.env.PRODUCTION_ACCESS_AUDIENCE,
             "a preview must never reuse the production Access audience");
           assert.equal(app.policies?.length,1,"preview Access app must have exactly one policy");
           const policy=app.policies[0];
@@ -346,6 +359,7 @@ jobs:
             {flag:"a"});
           writeFileSync(process.env.GITHUB_ENV,
             "PREVIEW_ACCESS_AUD="+app.aud+"\n"+
+            "PREVIEW_ACCESS_APP_ID="+appId+"\n"+
             "PREVIEW_HOST="+app.domain+"\n",
             {flag:"a"});
           console.log("Validated isolated non_identity Access app, fixed host, unique audience and two-token allowlist.");
