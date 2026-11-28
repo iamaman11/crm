@@ -43,17 +43,18 @@ function triggerLabel(trigger:AutomationTrigger) {
     default: return "Неизвестный источник";
   }
 }
-function runResource(ruleId:string,sourceType:AutomationTrigger,sourceId:string) {
-  return ruleId+"/"+sourceType+"/"+sourceId;
+function runResource(ruleId:string,sourceType:AutomationTrigger,sourceId:string,ruleVersion:bigint) {
+  return ruleId+"/"+sourceType+"/"+sourceId+"/"+ruleVersion.toString();
 }
 function parseRunResource(resourceId:string) {
-  const [ruleId,sourceType,...sourceParts]=resourceId.split("/");
-  const sourceId=sourceParts.join("/");
+  const [ruleId,sourceType,sourceId,version]=resourceId.split("/");
   const parsedType=Number(sourceType);
-  if(!ruleId||!sourceId||![AutomationTrigger.INTERACTION_CREATED,
+  let expectedRuleVersion:bigint;
+  try { expectedRuleVersion=BigInt(version); } catch { throw Error("Некорректная версия запуска"); }
+  if(!ruleId||!sourceId||expectedRuleVersion<1n||![AutomationTrigger.INTERACTION_CREATED,
     AutomationTrigger.DEAL_CREATED,AutomationTrigger.TASK_OVERDUE].includes(parsedType as AutomationTrigger))
     throw Error("Некорректный исходный запуск");
-  return {ruleId,sourceType:parsedType as AutomationTrigger,sourceId};
+  return {ruleId,sourceType:parsedType as AutomationTrigger,sourceId,expectedRuleVersion};
 }
 
 // The screen is ONLY a generated Connect/Rust projection. No browser rule
@@ -132,7 +133,7 @@ export function AutomationScreen({initialInteractionId=""}:{initialInteractionId
     runMutation.runIntent(()=>prepareMutation(api.automations.runInteractionAutomation,{
       ruleId,interactionId:sourceId,expectedRuleVersion:version,
       precondition:{idempotencyKey:runMutation.key}
-    },runResource(ruleId,AutomationTrigger.INTERACTION_CREATED,sourceId)),async()=>{
+    },runResource(ruleId,AutomationTrigger.INTERACTION_CREATED,sourceId,ruleVersion)),async()=>{
       if(runFilter===ruleId&&runCursor==="")await runs.reload();
       else {setRunFilter(ruleId);setRunCursor("");}
     });
@@ -263,7 +264,7 @@ export function AutomationScreen({initialInteractionId=""}:{initialInteractionId
                   ruleId:run.ruleId,sourceType:run.sourceType,sourceId:run.sourceId,
                   expectedRuleVersion:run.ruleVersion,
                   precondition:{idempotencyKey:cancelMutation.key}
-                },runResource(run.ruleId,run.sourceType,run.sourceId)
+                },runResource(run.ruleId,run.sourceType,run.sourceId,run.ruleVersion)
               ),async()=>{await runs.reload();})}>
               Отменить исходный запуск
             </Button>}</>}
