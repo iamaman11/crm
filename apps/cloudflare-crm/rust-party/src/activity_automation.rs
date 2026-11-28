@@ -1478,13 +1478,25 @@ pub(super) async fn cancel(
         request_id,
     } = input;
     let tenant = &principal.tenant;
-    let row = get_run(db, tenant, rule_id, source_type, source_id, expected_version)
-        .await?
-        .ok_or_else(|| ConnectError::not_found("ACTIVITIES_AUTOMATION_RUN_NOT_FOUND"))?;
+    let row = get_run(
+        db,
+        tenant,
+        rule_id,
+        source_type,
+        source_id,
+        expected_version,
+    )
+    .await?
+    .ok_or_else(|| ConnectError::not_found("ACTIVITIES_AUTOMATION_RUN_NOT_FOUND"))?;
     // Preserve the historical Interaction idempotency digest exactly;
     // new autonomous source kinds bind both their type and source id.
     let identity = if source_type == "interaction_created" {
-        json!(["cancel_automation_run", rule_id, source_id, expected_version])
+        json!([
+            "cancel_automation_run",
+            rule_id,
+            source_id,
+            expected_version
+        ])
     } else {
         json!([
             "cancel_automation_run",
