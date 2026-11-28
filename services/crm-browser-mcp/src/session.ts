@@ -18,6 +18,13 @@ import { recordingTargets, recordingHar } from "./browser-recordings";
 import { completedHandoff, handoffIdentifier, handoffLiveViewUrl, isProviderHandoffActive,
   validateHandoffRequest, type HumanHandoffRecord } from "./browser-handoff";
 
+/** The pinned SDK implementation recognizes persistent:true at runtime, while
+ * WorkersConnectOptions.d.ts omits it. Keep the structural subtype local to the
+ * one Durable Object that owns Browser Run connections; do not weaken typing. */
+function persistentConnectOptions(sessionId: string): { sessionId: string; persistent: true } {
+  return { sessionId, persistent: true };
+}
+
 type Result = { ok: true; data: unknown; image?: string } | { ok: false; error: string };
 
 // One DO = one authenticated operator's browser session. The MCP transport stays stateless.
