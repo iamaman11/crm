@@ -504,7 +504,7 @@ export async function verifyPartyCsv({dispatch,rpcFetch,sql,partySnapshot,admin,
    "SELECT version FROM crm_party_records WHERE tenant=? AND id=?","tenant-a",versionGuardPartyId
  );
  assert.ok(typeof initialVersionRow?.version==="number");
- const temporaryPartyName="Temporary source version "+runId;
+ const temporaryPartyName="Temporary source version";
  const temporaryPartyUpdate=await fixtureRpc(dispatch,parties.updateParty,admin,{
    partyId:versionGuardPartyId,displayName:temporaryPartyName,
    precondition:{idempotencyKey:"csv-source-version-change-a",expectedVersion:BigInt(initialVersionRow.version)}
