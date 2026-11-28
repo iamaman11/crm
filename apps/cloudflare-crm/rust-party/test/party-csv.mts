@@ -343,6 +343,32 @@ export async function verifyPartyCsv({dispatch,rpcFetch,sql,partySnapshot,admin,
  assert.equal(sourceApply2.body.receipt?.replayed,false);
  assert.equal(await count("SELECT COUNT(*) AS n FROM crm_party_source_identities WHERE tenant='tenant-a' AND source_id='"+sourceId+"'"),3);
 
+ // A matched-only reimport still commits an auditable operation receipt; replay adds no second audit.
+ const matchedOnlyPreview=await fixtureRpc(dispatch,methods.previewPartyImport,admin,{csv:sourceCsv2,sourceId});
+ assert.equal(matchedOnlyPreview.body.newCount,0);
+ assert.equal(matchedOnlyPreview.body.matchedCount,3);
+ const applyAuditBefore=await count("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant='tenant-a' AND action='customer_data.csv_import.apply'");
+ const matchedOnlyInput={csv:sourceCsv2,sourceId,
+   expectedSha256Hex:matchedOnlyPreview.body.csvSha256Hex,
+   expectedPreviewFingerprint:matchedOnlyPreview.body.previewFingerprint,
+   precondition:{idempotencyKey:"csv-source-matched-only"}};
+ const matchedOnlyApply=await fixtureRpc(dispatch,methods.applyPartyImport,admin,matchedOnlyInput);
+ assert.equal(matchedOnlyApply.status,200,formatRpcFailure(matchedOnlyApply));
+ assert.equal(matchedOnlyApply.body.createdCount,0);
+ assert.equal(matchedOnlyApply.body.replayedCount,3);
+ assert.equal(matchedOnlyApply.body.receipt?.replayed,false);
+ const matchedOnlyRequestId=matchedOnlyApply.headers.get("x-request-id");
+ assert.ok(matchedOnlyRequestId);
+ assert.deepEqual(await sql("SELECT action,subject_id,actor,request_id FROM crm_audit WHERE tenant=? AND request_id=?",
+   "tenant-a",matchedOnlyRequestId),[{
+     action:"customer_data.csv_import.apply",subject_id:sourceId,
+     actor:"native-a@example.test",request_id:matchedOnlyRequestId
+   }]);
+ const matchedOnlyReplay=await fixtureRpc(dispatch,methods.applyPartyImport,knownService,matchedOnlyInput);
+ assert.equal(matchedOnlyReplay.body.receipt?.replayed,true);
+ assert.equal(await count("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant='tenant-a' AND action='customer_data.csv_import.apply'"),
+   applyAuditBefore+1);
+
  // A changed known ID is a visible, non-committable preview; it never silently updates Party.
  const sourceConflictBytes=new TextEncoder().encode(
    "party_id,kind,display_name,resource_version\r\nsource-ext-1,person,Changed Source Person,3\r\n");
