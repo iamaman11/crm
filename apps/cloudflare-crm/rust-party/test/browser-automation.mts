@@ -176,6 +176,7 @@ export async function verifyBrowserAutomation({page,sql,tenantA,dealId,laterCall
    await page.getByLabel("Активировать правило",{exact:true}).check();
    await mutation(page.getByRole("button",{name:"Опубликовать правило",exact:true}),
      AutomationService.method.putAutomationRule);
+   await page.getByText(overdueTitle,{exact:true}).waitFor();
    const overdueRuleRow=(await sql(
      "SELECT id FROM crm_activity_automation_rules WHERE tenant=? AND task_subject=?",
      tenantA,overdueTitle))[0];
