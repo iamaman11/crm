@@ -1498,7 +1498,15 @@ pub(super) async fn cancel(
         "{:x}",
         Sha256::digest(serde_json::to_vec(&identity).map_err(|_| storage())?)
     );
-    let replayed = verify_run_request(db, tenant, idempotency_key, rule_id, &row.source_event_id, &digest).await?;
+    let replayed = verify_run_request(
+        db,
+        tenant,
+        idempotency_key,
+        rule_id,
+        &row.source_event_id,
+        &digest,
+    )
+    .await?;
     if replayed && row.cancel_key.as_deref() == Some(idempotency_key) {
         return Ok(RunSaved {
             original_request_id: row.cancel_request_id.clone(),
@@ -1524,7 +1532,7 @@ pub(super) async fn cancel(
             " AND t.id=crm_activity_automation_runs.task_id)",
             " AND NOT EXISTS(SELECT 1 FROM crm_activity_task_receipts t",
             " WHERE t.tenant=crm_activity_automation_runs.tenant",
-            " AND t.idempotency_key=crm_activity_automation_runs.task_id)"
+            " AND t.key=crm_activity_automation_runs.task_id)"
         ),
         &[
             JsValue::from_str(idempotency_key),
@@ -1543,7 +1551,15 @@ pub(super) async fn cancel(
     let fresh = read_run(db, tenant, rule_id, &row.source_event_id)
         .await?
         .ok_or_else(storage)?;
-    let bound = verify_run_request(db, tenant, idempotency_key, rule_id, &row.source_event_id, &digest).await?;
+    let bound = verify_run_request(
+        db,
+        tenant,
+        idempotency_key,
+        rule_id,
+        &row.source_event_id,
+        &digest,
+    )
+    .await?;
     if bound && fresh.cancel_key.as_deref() == Some(idempotency_key) {
         let original = fresh.cancel_request_id.clone().ok_or_else(storage)?;
         return Ok(RunSaved {
