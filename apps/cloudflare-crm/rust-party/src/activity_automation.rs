@@ -704,7 +704,7 @@ async fn execute_claimed(
     request_id: &str,
     now: i64,
     system_actor: bool,
-    rpc_method: &str,
+    rpc_method: &'static str,
 ) -> Result<RunSaved, ConnectError> {
     match row.disposition()? {
         RunDisposition::Committed => {

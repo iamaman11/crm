@@ -20,11 +20,11 @@ impl auto_wire::AutomationService for AutomationV2Service {
             .is_none();
         let (key, expected) = wire_precondition(input.precondition.as_option(), create)?;
         let trigger = match input.trigger {
-            auto_wire::AutomationTrigger::AUTOMATION_TRIGGER_INTERACTION_CREATED => {
+            buffa::EnumValue::Known(auto_wire::AutomationTrigger::AUTOMATION_TRIGGER_INTERACTION_CREATED) => {
                 "interaction_created"
             }
-            auto_wire::AutomationTrigger::AUTOMATION_TRIGGER_TASK_OVERDUE => "task_overdue",
-            auto_wire::AutomationTrigger::AUTOMATION_TRIGGER_DEAL_CREATED => "deal_created",
+            buffa::EnumValue::Known(auto_wire::AutomationTrigger::AUTOMATION_TRIGGER_TASK_OVERDUE) => "task_overdue",
+            buffa::EnumValue::Known(auto_wire::AutomationTrigger::AUTOMATION_TRIGGER_DEAL_CREATED) => "deal_created",
             _ => {
                 return Err(ConnectError::invalid_argument(
                     "ACTIVITIES_AUTOMATION_TRIGGER_NOT_ENABLED",
@@ -303,7 +303,7 @@ impl auto_wire::AutomationService for AutomationV2Service {
 
 impl AutomationV2Service {
     fn source_identity(
-        source_type: auto_wire::AutomationTrigger,
+        source_type: buffa::EnumValue<auto_wire::AutomationTrigger>,
         source_id: &str,
         legacy_interaction_id: &str,
     ) -> std::result::Result<(String, String), ConnectError> {
@@ -319,11 +319,11 @@ impl AutomationV2Service {
             ));
         }
         let kind = match source_type {
-            auto_wire::AutomationTrigger::AUTOMATION_TRIGGER_INTERACTION_CREATED => {
+            buffa::EnumValue::Known(auto_wire::AutomationTrigger::AUTOMATION_TRIGGER_INTERACTION_CREATED) => {
                 "interaction_created"
             }
-            auto_wire::AutomationTrigger::AUTOMATION_TRIGGER_TASK_OVERDUE => "task_overdue",
-            auto_wire::AutomationTrigger::AUTOMATION_TRIGGER_DEAL_CREATED => "deal_created",
+            buffa::EnumValue::Known(auto_wire::AutomationTrigger::AUTOMATION_TRIGGER_TASK_OVERDUE) => "task_overdue",
+            buffa::EnumValue::Known(auto_wire::AutomationTrigger::AUTOMATION_TRIGGER_DEAL_CREATED) => "deal_created",
             _ => {
                 return Err(ConnectError::invalid_argument(
                     "ACTIVITIES_AUTOMATION_SOURCE_TYPE_REQUIRED",
