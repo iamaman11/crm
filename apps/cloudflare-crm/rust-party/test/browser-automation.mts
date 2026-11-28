@@ -98,6 +98,9 @@ export async function verifyBrowserAutomation({page,sql,tenantA,dealId,laterCall
      tenantA,overdueTitle))[0];
    assert.ok(overdueRuleRow);
    const overdueRuleId=string(overdueRuleRow.id);
+   // Do not unmount Automation while its post-publication list query is pending.
+   await page.getByRole("region",{name:"Правила автоматизации"})
+     .getByText(overdueTitle,{exact:true}).waitFor();
 
    await navigate("sales/"+dealId,"Карточка сделки");
    await page.getByRole("link",{name:"Задачи этой сделки",exact:true}).click();
